@@ -1086,14 +1086,11 @@ const engineers=["林川閔","陳昱存","陳義強","鄧長益"];
 const times=["09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 
 // 固定 key，從舊版 key 遷移資料
-const JOBS_KEY = "paigong_jobs_v1";
+const JOBS_KEY = "paigong_jobs_v2_clean"; // 乾淨版：不讀取舊版本機派工資料
 const CUSTOMERS_KEY = "paigong_customers_v1";
 (function migrateOldData(){
-  const oldJobsKey = "dispatchJobsCompleteV8_engineers";
+  // 乾淨版：不再從舊版 key 自動帶入派工資料，避免原始 HTML 一打開就有舊派工。
   const oldCustKey = "dispatchCustomersCompleteV8_engineers";
-  if(!localStorage.getItem(JOBS_KEY) && localStorage.getItem(oldJobsKey)){
-    localStorage.setItem(JOBS_KEY, localStorage.getItem(oldJobsKey));
-  }
   if(!localStorage.getItem(CUSTOMERS_KEY) && localStorage.getItem(oldCustKey)){
     localStorage.setItem(CUSTOMERS_KEY, localStorage.getItem(oldCustKey));
   }
@@ -1120,6 +1117,7 @@ let currentUser=null;
 let cloudUnsubscribe=null;
 let isApplyingRemote=false;
 let cloudSaveTimer=null;
+let ignoreRemoteUntil=0; // 匯入後短時間內避免雲端舊資料覆蓋本機新匯入資料
 
 try{
   firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
@@ -1182,8 +1180,14 @@ function queueCloudSave(){
 }
 
 function applyRemoteData(data){
+  const remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
+  // 剛匯入 Excel 後，若雲端舊快照比較少筆，先不要讓它覆蓋本機剛匯入的資料。
+  if(Date.now() < ignoreRemoteUntil && remoteJobs && remoteJobs.length < (jobs || []).length){
+    console.warn("略過雲端舊資料覆蓋：remote", remoteJobs.length, "local", (jobs||[]).length);
+    return;
+  }
   isApplyingRemote=true;
-  if(Array.isArray(data.jobs)) jobs=data.jobs;
+  if(remoteJobs) jobs=remoteJobs;
   if(Array.isArray(data.customers)) customers=data.customers;
   localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || []));
   localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || []));
@@ -2470,7 +2474,10 @@ function importJobsExcel(event){
         jobs.push(j);
         count++;
       }
+      // 匯入大量資料時，立即上傳雲端，並暫時避免 Firestore 舊快照把畫面洗回空白。
+      ignoreRemoteUntil = Date.now() + 8000;
       saveJobs();
+      saveCloudNow();
       renderSchedule();
       renderJobList();
       showToast(`✅ 已匯入 ${count} 筆派工資料`);
