@@ -1068,7 +1068,10 @@ body{
   </div>
 
   <div class="search-box">
-    <input id="customerSearch" placeholder="搜尋客戶編號 / 人員姓名 / 客戶全稱 / 客戶簡稱 / 電話 / 地址" oninput="renderCustomers()" style="flex:1;min-width:260px">
+    <input id="customerSearch" placeholder="搜尋客戶編號 / 人員姓名 / 客戶全稱 / 客戶簡稱 / 電話 / 地址" onkeydown="if(event.key==='Enter')renderCustomers()" style="flex:1;min-width:260px">
+    <button onclick="renderCustomers()">查詢客戶</button>
+    <button onclick="clearCustomerSearch()" style="background:#888;">清除搜尋</button>
+    <span id="customerSearchCount" style="align-self:center;font-size:13px;color:#555;font-weight:bold;"></span>
   </div>
 
   <div class="import-status" id="importStatus">尚未匯入資料。</div>
@@ -2347,12 +2350,29 @@ function addCustomer(){
 }
 
 function renderCustomers(){
-  const kw=document.getElementById("customerSearch").value.trim().toLowerCase();
-  const list=customers.filter(c=>`${c.customerNo} ${c.personName} ${c.fullName} ${c.shortName} ${c.mobile} ${c.deliveryAddress}`.toLowerCase().includes(kw));
+  const searchEl=document.getElementById("customerSearch");
+  const kw=(searchEl ? searchEl.value.trim().toLowerCase() : "");
+  const terms=kw.split(/\s+/).filter(Boolean);
+  const list=customers.filter(c=>{
+    const text=`${c.customerNo||""} ${c.personName||""} ${c.fullName||""} ${c.shortName||""} ${c.mobile||""} ${c.deliveryAddress||""}`.toLowerCase();
+    return terms.length===0 || terms.every(t=>text.includes(t));
+  });
+
+  const countEl=document.getElementById("customerSearchCount");
+  if(countEl){
+    countEl.textContent = kw ? `查詢結果：${list.length} / ${customers.length} 筆` : `共 ${customers.length} 筆客戶資料`;
+  }
+
   let html="<tr><th>操作</th><th>客戶編號</th><th>人員姓名</th><th>客戶全稱</th><th>客戶簡稱</th><th>行動電話</th><th>送貨地址</th></tr>";
+  if(list.length===0){
+    html += `<tr><td colspan="7" style="text-align:center;color:#888;padding:24px;">查無客戶資料</td></tr>`;
+  }
   list.forEach(c=>{
+    const actionHtml = canEdit()
+      ? `<button class="edit" onclick="editCustomer(${c.id})">改</button> <button class="delete" onclick="deleteCustomer(${c.id})">X</button>`
+      : `<span style="color:#888;font-size:12px;">僅查看</span>`;
     html+=`<tr>
-      <td><button class="edit" onclick="editCustomer(${c.id})">改</button> <button class="delete" onclick="deleteCustomer(${c.id})">X</button></td>
+      <td>${actionHtml}</td>
       <td>${escapeHtml(c.customerNo)}</td>
       <td>${escapeHtml(c.personName)}</td>
       <td>${escapeHtml(c.fullName)}</td>
@@ -2362,6 +2382,12 @@ function renderCustomers(){
     </tr>`;
   });
   document.getElementById("customerTable").innerHTML=html;
+}
+
+function clearCustomerSearch(){
+  const el=document.getElementById("customerSearch");
+  if(el) el.value="";
+  renderCustomers();
 }
 
 function editCustomer(id){
