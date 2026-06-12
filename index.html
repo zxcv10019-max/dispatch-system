@@ -1184,33 +1184,33 @@ function queueCloudSave(){
 
 function applyRemoteData(data){
   const remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
+  const remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
   const remoteToken = data.clientImportToken || "";
+  const now = Date.now();
 
-  // 匯入 Excel 後，等待 Firestore 回傳「同一批匯入 token」前，全部略過舊雲端快照。
-  // 這樣就不會出現：匯入成功 → 切回派工表 → 被雲端舊空資料洗掉。
-  if(importProtectActive && Date.now() < ignoreRemoteUntil && importProtectToken && remoteToken !== importProtectToken){
-    console.warn("略過匯入前的舊雲端快照，避免覆蓋本機匯入資料", {remoteToken, importProtectToken, remoteJobs: remoteJobs ? remoteJobs.length : null, localJobs:(jobs||[]).length});
-    setSyncStatus("匯入資料同步中，暫不讀取舊雲端資料…", "wait");
+  // 保護期內：略過所有不帶本次 token 的舊雲端快照
+  if(importProtectActive && now < ignoreRemoteUntil){
+    if(remoteToken !== importProtectToken){
+      console.warn("保護期：略過舊雲端快照，避免蓋掉本機匯入資料", {remoteToken, importProtectToken});
+      setSyncStatus("匯入資料上傳中，等待雲端確認…", "wait");
+      return;
+    }
+    // 雲端已收到本次匯入 token，解除保護
+    importProtectActive = false;
+    ignoreRemoteUntil = 0;
+    importProtectToken = "";
+  }
+
+  // 額外保護：雲端資料筆數遠少於本機（超過 3 筆差距），且仍在保護期延伸期，不覆蓋
+  if(now < ignoreRemoteUntil + 5000 && remoteJobs && remoteJobs.length + 3 < (jobs || []).length){
+    console.warn("略過偏少的雲端資料：remote", remoteJobs.length, "local", (jobs||[]).length);
+    setSyncStatus("同步中，保留本機資料…", "wait");
     return;
   }
 
-  // 如果雲端回傳的 token 已經是本次匯入，代表雲端已更新，可以恢復正常同步。
-  if(importProtectActive && remoteToken === importProtectToken){
-    importProtectActive=false;
-    ignoreRemoteUntil=0;
-    importProtectToken="";
-  }
-
-  // 額外保護：匯入後短時間內，若雲端資料筆數比本機少，也不要覆蓋。
-  if(Date.now() < ignoreRemoteUntil && remoteJobs && remoteJobs.length < (jobs || []).length){
-    console.warn("略過雲端舊資料覆蓋：remote", remoteJobs.length, "local", (jobs||[]).length);
-    setSyncStatus("匯入資料同步中，保留本機資料…", "wait");
-    return;
-  }
-
-  isApplyingRemote=true;
-  if(remoteJobs) jobs=remoteJobs;
-  if(Array.isArray(data.customers)) customers=data.customers;
+  isApplyingRemote = true;
+  if(remoteJobs) jobs = remoteJobs;
+  if(remoteCustomers) customers = remoteCustomers;
   localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || []));
   localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || []));
   updateCustomerCodeList();
@@ -1218,17 +1218,26 @@ function applyRemoteData(data){
   renderCustomers();
   renderJobList();
   renderAvailableSlots();
-  isApplyingRemote=false;
+  isApplyingRemote = false;
 }
 
 function startCloudSync(){
   if(!currentUser || !firebaseDb) return;
   if(cloudUnsubscribe) cloudUnsubscribe();
-  const ref=cloudDocRef();
+  const ref = cloudDocRef();
   setSyncStatus("讀取雲端資料…", "wait");
+  let firstSnapshot = true;
   cloudUnsubscribe = ref.onSnapshot(doc=>{
+    // 保護期內的第一個快照幾乎必然是匯入/還原前的舊資料，直接跳過
+    if(firstSnapshot && importProtectActive){
+      firstSnapshot = false;
+      setSyncStatus("匯入資料上傳中…", "wait");
+      return;
+    }
+    firstSnapshot = false;
+
     if(doc.exists){
-      const data=doc.data() || {};
+      const data = doc.data() || {};
       applyRemoteData(data);
       setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
     }else{
@@ -2238,22 +2247,30 @@ function restoreBackup(event){
     try{
       const data = JSON.parse(e.target.result);
       if(!data.customers && !data.jobs){ alert("備份檔格式不正確"); return; }
+      let restoredAny = false;
       if(data.customers && data.customers.length > 0){
         if(confirm(`還原 ${data.customers.length} 筆客戶資料？（會覆蓋現有客戶資料）`)){
           customers = data.customers;
           saveCustomers();
           renderCustomers();
+          restoredAny = true;
         }
       }
       if(data.jobs && data.jobs.length > 0){
         if(confirm(`還原 ${data.jobs.length} 筆派工資料？（會覆蓋現有派工資料）`)){
           jobs = data.jobs;
+          // 還原後啟動保護，防止 onSnapshot 把舊雲端資料洗掉
+          importProtectToken = "restore_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+          importProtectActive = true;
+          ignoreRemoteUntil = Date.now() + 30000;
           saveJobs();
+          saveCloudNow();
           renderSchedule();
           renderJobList();
+          restoredAny = true;
         }
       }
-      alert("還原完成！");
+      if(restoredAny) alert("還原完成！");
     }catch(err){
       alert("讀取備份失敗：" + err.message);
     }
@@ -2802,8 +2819,12 @@ async function writeLog(action, detail = {}){
         name: currentUser.displayName || ""
       }
     };
+    // 用單獨的 adminLogs collection，若 Firestore 規則沒開放就靜默失敗不影響主系統
     await firebaseDb.collection("adminLogs").add(logEntry);
-  }catch(e){ console.warn("寫入日誌失敗", e); }
+  }catch(e){
+    // 規則未設定時靜默忽略，不影響主系統同步
+    console.warn("寫入日誌失敗（請確認 Firestore 規則已允許 adminLogs 寫入）", e.code || e.message);
+  }
 }
 
 // 讀取所有日誌（僅管理員）
