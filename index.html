@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>派工表系統</title>
+<!-- nojump sync fix: shared table + dirty local protection -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-auth-compat.js"></script>
@@ -1136,6 +1137,10 @@ let cloudSaveTimer=null;
 let ignoreRemoteUntil=0; // 匯入後短時間內避免雲端舊資料覆蓋本機新匯入資料
 let importProtectToken=""; // 匯入後用來辨識雲端是否已收到最新資料
 let importProtectActive=false;
+let localDirty=false; // 本機有尚未確認寫入雲端的變更，避免被舊雲端資料覆蓋
+let savingCloud=false;
+let lastLocalJobsCount=0;
+let lastLocalCustomersCount=0;
 
 try{
   firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
@@ -1238,6 +1243,7 @@ async function saveCloudNow(){
   const chunks=chunksColRef();
   if(!root || !chunks) return;
   setSyncStatus("同步中…", "wait");
+  savingCloud = true;
   const token = importProtectToken || ("save_" + Date.now());
   try{
     const oldSnap = await chunks.get();
@@ -1270,8 +1276,11 @@ async function saveCloudNow(){
       clientImportToken: token
     }, {merge:true}); writes++;
     await commitIfNeeded(true);
+    localDirty = false;
+    savingCloud = false;
     setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
   }catch(err){
+    savingCloud = false;
     console.error("Firestore 同步失敗", err);
     setSyncStatus("同步失敗，請檢查 Firestore 規則/權限", "err");
   }
@@ -1299,10 +1308,19 @@ async function loadCloudChunks(meta){
 async function applyRemoteData(data){
   const remoteToken = data.clientImportToken || "";
   const now = Date.now();
+
+  // 本機正在寫入雲端時，不接受舊快照覆蓋畫面
+  if(savingCloud){
+    setSyncStatus("同步中，保留本機資料…", "wait");
+    return;
+  }
+
+  // 匯入保護期內：只接受同一個 token 的雲端回傳
   if(importProtectActive && now < ignoreRemoteUntil && remoteToken !== importProtectToken){
     setSyncStatus("匯入資料上傳中，等待雲端確認…", "wait");
     return;
   }
+
   let remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
   let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
   if(data.chunked){
@@ -1310,11 +1328,30 @@ async function applyRemoteData(data){
     remoteJobs = loaded.jobs;
     remoteCustomers = loaded.customers;
   }
+
+  const localJobsCount = (jobs||[]).length;
+  const localCustomersCount = (customers||[]).length;
+  const remoteJobsCount = remoteJobs ? remoteJobs.length : 0;
+  const remoteCustomersCount = remoteCustomers ? remoteCustomers.length : 0;
+
+  // 只要本機有尚未確認的變更，且遠端資料比較少，就不覆蓋。
+  // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
+  if(localDirty){
+    const remoteLooksOlder = (remoteJobs && remoteJobsCount + 3 < localJobsCount) ||
+                             (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount);
+    if(remoteLooksOlder){
+      setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
+      return;
+    }
+  }
+
   if(importProtectActive && remoteToken === importProtectToken){
     importProtectActive = false;
     ignoreRemoteUntil = 0;
     importProtectToken = "";
+    localDirty = false;
   }
+
   isApplyingRemote = true;
   if(remoteJobs) jobs = remoteJobs;
   if(remoteCustomers) customers = remoteCustomers;
@@ -1339,6 +1376,13 @@ function startCloudSync(){
     try{
       if(doc.exists){
         const data = doc.data() || {};
+        // 如果共用雲端還是空的，而本機有資料且有編輯權，優先把本機資料補上雲端
+        const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0);
+        const localCount = (jobs||[]).length + (customers||[]).length;
+        if(remoteCount === 0 && localCount > 0 && canEdit() && localDirty){
+          await saveCloudNow();
+          return;
+        }
         await applyRemoteData(data);
         setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
       }else{
@@ -1520,10 +1564,14 @@ function showPage(pageId){
 }
 
 function saveJobs(){
+  localDirty = true;
+  lastLocalJobsCount = (jobs||[]).length;
   localStorage.setItem(JOBS_KEY,JSON.stringify(jobs));
   queueCloudSave();
 }
 function saveCustomers(){
+  localDirty = true;
+  lastLocalCustomersCount = (customers||[]).length;
   localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));
   updateCustomerCodeList();
   queueCloudSave();
@@ -2672,7 +2720,7 @@ function importJobsExcel(event){
     return;
   }
   const reader=new FileReader();
-  reader.onload=function(e){
+  reader.onload=async function(e){
     try{
       const data=new Uint8Array(e.target.result);
       const wb=XLSX.read(data,{type:"array",cellDates:false});
@@ -2707,8 +2755,10 @@ function importJobsExcel(event){
       importProtectToken = "import_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
       importProtectActive = true;
       ignoreRemoteUntil = Date.now() + 30000;
+      localDirty = true;
+      lastLocalJobsCount = (jobs||[]).length;
       saveJobs();
-      saveCloudNow();
+      await saveCloudNow();
       renderSchedule();
       renderJobList();
       showToast(`✅ 已匯入 ${count} 筆派工資料`);
