@@ -1,0 +1,2260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>派工表系統</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f3f3f3;color:#222}
+.header{background:#2f3542;color:#fff;padding:14px 18px;font-size:24px;font-weight:bold}
+.tabs{display:flex;background:#fff;border-bottom:1px solid #ccc;flex-wrap:wrap}
+.tabs button{padding:12px 18px;border:0;background:#e9e9e9;cursor:pointer;color:#222;font-weight:bold}
+.tabs button.active{background:#2f3542;color:#fff}
+.page{display:none}.page.active{display:block}
+button{background:#2f3542;color:#fff;border:none;border-radius:4px;padding:8px 12px;cursor:pointer}
+button:hover{background:#57606f}
+input,select,textarea{padding:8px;border:1px solid #aaa;border-radius:4px;font-size:14px}
+.clear-btn{background:#b33939}.clear-btn:hover{background:#cc3f3f}
+.import-btn{background:#218c74}.import-btn:hover{background:#33a38a}
+.map-btn{background:#40739e}.map-btn:hover{background:#487eb0}
+.export-btn{background:#8e44ad}.export-btn:hover{background:#9b59b6}
+.toolbar{background:#fff;padding:12px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #ccc;position:sticky;top:0;z-index:5}
+.summary{margin:12px;background:#fff;border:1px solid #ccc;padding:10px;font-size:14px}
+.badge{display:inline-block;background:#eee;border:1px solid #ccc;border-radius:999px;padding:4px 10px;margin:3px}
+.table-wrap{
+  margin:12px;
+  background:#fff;
+  border:1px solid #aaa;
+  overflow-y:auto;overflow-x:hidden;
+  max-height:calc(100vh - 185px);
+  width:calc(100vw - 24px);
+}
+
+table{
+  border-collapse:collapse;
+  table-layout:fixed;
+  width:100%;
+  min-width:980px;
+}
+th,td{border:1px solid #aaa;overflow:hidden}
+th{background:#e9e9e9;padding:8px;text-align:center;position:sticky;top:0;z-index:2}
+td{padding:5px;font-size:13px}
+.time-col{width:76px;min-width:76px;max-width:76px;background:#f6d6d6;text-align:center;font-weight:bold;position:sticky;left:0;z-index:4}
+th.time-col{z-index:3}
+.slot{
+  height:1px;
+  min-height:0;
+  width:calc((100vw - 100px) / 7);
+  min-width:120px;
+  vertical-align:top;
+  background:#fff;
+  padding:4px;
+  overflow:visible;
+}
+.date-head{
+  background:#f4cccc!important;
+  font-weight:bold;
+  font-size:13px;
+  width:calc((100vw - 100px) / 7);
+}
+.weekend-head{background:#cfe2f3!important}
+.today-head{background:#ffd966!important}
+.engineer-tag{
+  display:inline-block;
+  background:#2f3542;
+  color:white;
+  border-radius:4px;
+  padding:1px 4px;
+  font-size:10px;
+  margin-right:3px;
+}
+.job{
+  font-size:11px!important;
+  padding:4px!important;
+  width:100%;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  white-space:normal;
+}
+.slot:hover{background:#f7fbff}.drop-hover{background:#dff1ff!important}
+.job{background:#fff4bf;border:1px solid #caa72c;border-radius:6px;padding:6px;margin-bottom:5px;cursor:move;font-size:13px;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.job-top{display:flex;justify-content:space-between;gap:4px;align-items:flex-start;min-width:0}
+.job-code{color:#0066cc;font-weight:bold;text-decoration:underline}.job-name{font-weight:bold}
+.job small{display:block;color:#333}.job a{color:#0066cc;text-decoration:underline}
+.actions{display:flex;gap:3px;flex-shrink:0}
+.edit{background:#487eb0;padding:2px 5px;font-size:11px}.delete{background:#d63031;padding:2px 5px;font-size:11px}
+.form-card{margin:12px;background:#fff;border:1px solid #ccc;padding:14px}
+.form-grid{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:10px}
+.field label{display:block;font-size:13px;font-weight:bold;margin-bottom:4px;color:#333}
+.field input,.field select,.field textarea{width:100%}
+.field-wide{grid-column:span 2}.field-full{grid-column:1/-1}
+textarea{min-height:70px;resize:vertical}
+.help{margin:12px;background:#fffbe6;border:1px solid #e1c542;padding:10px;font-size:14px;line-height:1.6}
+.customer-form{background:#fff;margin:12px;padding:12px;border:1px solid #ccc;display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px}
+.customer-form .field-full{grid-column:1/-1}
+.search-box{margin:12px;background:#fff;padding:10px;border:1px solid #ccc;display:flex;gap:8px;flex-wrap:wrap}
+.customer-table{margin:12px;background:#fff;border:1px solid #aaa;overflow:auto;max-height:calc(100vh - 300px)}
+.customer-table table{min-width:1050px}
+.required{color:#d63031}
+.readonly{background:#f1f1f1}
+.import-status{margin:12px;background:#fff;border:1px solid #ccc;padding:10px;font-size:14px;line-height:1.6}
+@media(max-width:900px){.form-grid,.customer-form{grid-template-columns:1fr}.field-wide{grid-column:auto}.header{font-size:20px}.toolbar input,.toolbar select,.toolbar button{width:100%}.tabs button{flex:1}.search-box input,.search-box button{width:100%}}
+
+
+
+
+.week-schedule-table{
+  border-collapse:collapse;
+  table-layout:fixed;
+  width:max-content!important;
+  min-width:100%;
+}
+.week-schedule-table th,
+.week-schedule-table td{
+  overflow:hidden;
+}
+.date-head{
+  background:#f4cccc!important;
+  font-weight:bold;
+  font-size:13px;
+  min-width:560px;
+}
+.weekend-head{background:#cfe2f3!important}
+.today-head{background:#ffd966!important}
+.engineer-head{
+  background:#e9e9e9!important;
+  font-weight:bold;
+  font-size:13px;
+  width:140px;
+  min-width:140px;
+  max-width:140px;
+}
+.slot{
+  height:1px;
+  min-height:0;
+  width:140px;
+  min-width:140px;
+  max-width:140px;
+  vertical-align:top;
+  background:#fff;
+  padding:3px;
+  overflow:visible;
+}
+.job{
+  font-size:11px!important;
+  padding:4px!important;
+  width:100%;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  white-space:normal;
+}
+.job small{line-height:1.3}
+.table-wrap{
+  overflow:auto!important;
+  width:calc(100vw - 24px);
+}.engineer-code-note{
+  margin:0 12px 8px;
+  color:#555;
+  font-size:13px;
+}
+
+
+#scheduleWrap{
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  width:100%!important;
+  max-width:100%!important;
+  cursor:grab;
+}
+#scheduleWrap:active{cursor:grabbing}
+.week-schedule-table{
+  border-collapse:collapse!important;
+  table-layout:auto!important;
+  width:100%!important;
+  min-width:0!important;
+}
+.week-schedule-table .date-head,
+.week-schedule-table .weekend-head,
+.week-schedule-table .today-head{
+  min-width:0!important;
+  width:auto!important;
+}
+.week-schedule-table .engineer-head,
+.week-schedule-table .slot{
+  min-width:120px!important;
+  width:auto!important;
+}
+.week-schedule-table .time-col{
+  min-width:60px!important;
+  width:60px!important;
+  max-width:60px!important;
+}
+
+
+.job{
+  font-size:12px!important;
+  line-height:1.35!important;
+}
+.job .card-main{
+  font-weight:bold;
+  color:#0066cc;
+  text-decoration:underline;
+  margin-bottom:4px;
+}
+.job .card-line{
+  margin:2px 0;
+}
+.job .card-address a{
+  color:#0066cc;
+  text-decoration:underline;
+}
+.job .card-work{
+  margin-top:4px;
+}
+.job small{
+  display:block;
+}
+
+
+.table-wrap{
+  max-height:70vh!important;
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  width:calc(100vw - 24px)!important;
+  max-width:calc(100vw - 24px)!important;
+}
+.week-schedule-table{
+  width:100%!important;
+  min-width:0!important;
+  table-layout:auto!important;
+}
+.week-schedule-table .date-head,
+.week-schedule-table .weekend-head,
+.week-schedule-table .today-head{
+  min-width:0!important;
+  width:auto!important;
+}
+.week-schedule-table .engineer-head,
+.week-schedule-table .slot{
+  min-width:120px!important;
+  width:auto!important;
+}
+.week-schedule-table .time-col{
+  min-width:60px!important;
+  width:60px!important;
+  max-width:60px!important;
+}
+.card-time{
+  font-weight:bold;
+  background:#fff8dc;
+  border:1px solid #e0c35a;
+  border-radius:4px;
+  padding:2px 4px;
+  margin:3px 0;
+}
+
+
+html, body{
+  overflow-x:hidden!important;
+}
+
+.table-wrap{
+  overflow-x:auto!important;
+  overflow-y:auto!important;
+  width:calc(100vw - 24px)!important;
+  max-width:calc(100vw - 24px)!important;
+  max-height:70vh!important;
+  margin-bottom:18px!important;
+}
+
+.week-schedule-table{
+  width:max-content!important;
+  min-width:4000px!important;
+}
+
+.week-schedule-table th{
+  position:sticky;
+  top:0;
+  z-index:5;
+}
+
+.week-schedule-table .time-col{
+  position:sticky;
+  left:0;
+  z-index:6;
+}
+
+
+/* 固定日期列與工程列 */
+.week-schedule-table .date-head,
+.week-schedule-table .weekend-head,
+.week-schedule-table .today-head{
+  position:sticky!important;
+  top:0!important;
+  z-index:20!important;
+}
+
+.week-schedule-table .engineer-head{
+  position:sticky!important;
+  top:36px!important;
+  z-index:19!important;
+}
+
+.week-schedule-table th.time-col{
+  position:sticky!important;
+  top:0!important;
+  left:0!important;
+  z-index:30!important;
+}
+
+.week-schedule-table td.time-col{
+  position:sticky!important;
+  left:0!important;
+  z-index:10!important;
+}
+
+/* 讓跨時間的卡片撐滿整個時間區間 */
+.job{
+  min-height:var(--job-height, auto)!important;
+  height:auto!important;
+}
+
+.slot{
+  vertical-align:top!important;
+}
+
+
+.job-slot-active{
+  background:#f3e8b3 !important;
+  vertical-align:top !important;
+}
+.job{
+  height:auto !important;
+  min-height:auto !important;
+}
+
+
+/* Excel 合併儲存格效果：整格都是黃色 */
+.job-slot-active{
+  background:#fff3bd !important;
+  vertical-align:top !important;
+  padding:4px !important;
+}
+
+/* 卡片本身取消獨立框感，讓文字像直接寫在黃色合併儲存格裡 */
+.job-slot-active .job{
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  margin:0 !important;
+  padding:2px !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+}
+
+/* 內容可以自然跨列顯示，不裁切 */
+.job-slot-active,
+.job-slot-active .job{
+  overflow:visible !important;
+}
+
+/* 時間小框保留一點辨識，但不影響整格黃色 */
+.job-slot-active .card-time{
+  background:#fff8dc !important;
+}
+
+/* 按鈕不要把格子撐壞 */
+.job-slot-active .actions{
+  float:right;
+}
+
+/* 讓整格從 09:30 到結束時間那列都是同色 */
+.slot{
+  background:#fff !important;
+}
+
+
+.job{
+    background:#FFF2CC !important;
+    border:1px solid #D6B656 !important;
+    border-radius:4px !important;
+    padding:6px !important;
+    box-sizing:border-box !important;
+    margin:0 !important;
+}
+
+.job-top{
+    margin-bottom:4px;
+}
+
+.job-slot-active{
+    background:#FFF2CC !important;
+}
+
+
+/* 穩定版：不固定表頭，避免版面錯位 */
+html, body{
+  overflow-x:hidden !important;
+}
+
+.table-wrap,
+#scheduleWrap{
+  overflow-x:hidden !important;
+  overflow-y:visible !important;
+  max-height:none !important;
+  height:auto !important;
+  width:100vw !important;
+  max-width:100vw !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+}
+
+.table-wrap::-webkit-scrollbar,
+#scheduleWrap::-webkit-scrollbar{
+  /* show scrollbar */
+}
+
+.table-wrap,
+#scheduleWrap{
+  scrollbar-width:auto !important;
+}
+
+.week-schedule-table{
+  width:100% !important;
+  min-width:0 !important;
+  table-layout:auto !important;
+}
+
+/* 固定在畫面最底部的橫向滑動桿 — 已停用 */
+#fixedBottomScroll{
+  display:none !important;
+}
+
+#fixedBottomScrollInner{
+  display:none !important;
+}
+
+body{
+  padding-bottom:0 !important;
+}
+
+/* 整格黃色 */
+.job-slot-active{
+  background:#FFF2CC !important;
+  vertical-align:top !important;
+}
+
+.job{
+  background:#FFF2CC !important;
+  border:1px solid #D6B656 !important;
+  border-radius:4px !important;
+  padding:6px !important;
+  box-sizing:border-box !important;
+  margin:0 !important;
+}
+
+
+/* 只有表格區上下滑動，不讓整個頁面跟著下滑 */
+html, body{
+  height:100%;
+  overflow:hidden !important;
+}
+
+body{
+  display:flex;
+  flex-direction:column;
+  padding-bottom:0 !important;
+}
+
+/* 上方區塊保留在畫面上，不跟著表格捲動 */
+.header,
+.tabs,
+#schedulePage > .toolbar,
+#schedulePage > .summary,
+.engineer-code-note{
+  flex-shrink:0;
+}
+
+/* 派工頁本身填滿剩餘高度 */
+#schedulePage.page.active{
+  display:flex !important;
+  flex-direction:column;
+  min-height:0;
+  height:calc(100vh - 32px);
+}
+
+/* 表格區：上下 + 左右都可滑動 */
+.table-wrap,
+#scheduleWrap{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto !important;
+  max-height:none !important;
+  overflow-y:auto !important;
+  overflow-x:auto !important;
+  width:100% !important;
+  max-width:100% !important;
+  margin:0 !important;
+  border-top:1px solid #aaa;
+}
+
+/* 日期列與 M/C/Y/E 在表格內上下滑時固定 */
+.week-schedule-table tr:nth-child(1) th{
+  position:sticky !important;
+  top:0 !important;
+  z-index:50 !important;
+}
+
+.week-schedule-table tr:nth-child(2) th{
+  position:sticky !important;
+  top:36px !important;
+  z-index:49 !important;
+}
+
+.week-schedule-table th.time-col{
+  position:sticky !important;
+  top:0 !important;
+  left:0 !important;
+  z-index:80 !important;
+}
+
+.week-schedule-table td.time-col{
+  position:sticky !important;
+  left:0 !important;
+  z-index:40 !important;
+}
+
+/* 隱藏表格原生縱向捲軸重複樣式，使用固定底部橫向滑桿 */
+.table-wrap::-webkit-scrollbar:vertical,
+#scheduleWrap::-webkit-scrollbar:vertical{
+  /* keep vertical scrollbar visible */
+}
+
+.table-wrap,
+#scheduleWrap{
+  scrollbar-width:auto;
+}
+
+/* 固定底部橫向滑桿 — 停用 */
+
+
+
+
+/* 修正固定底部橫向滑桿可控制表格 */
+#scheduleWrap{
+  overflow-x:auto !important;
+  overflow-y:auto !important;
+  position:relative !important;
+}
+
+#schedule{
+  width:100% !important;
+  min-width:0 !important;
+  table-layout:auto !important;
+}
+
+/* 底部滑桿停用 */
+
+/* 空格子樣式 */
+.week-schedule-table td.slot:not(.job-slot-active){
+  background:#fff !important;
+}
+
+
+
+/* 每列固定高度，rowspan 才能正確合併 */
+.week-schedule-table tr{
+  height:48px !important;
+}
+.week-schedule-table td.slot{
+  height:48px !important;
+  min-height:48px !important;
+  padding:4px !important;
+  vertical-align:top !important;
+  background:#fff !important;
+  overflow:visible !important;
+}
+.week-schedule-table td.slot.job-slot-active{
+  background:#FFF2CC !important;
+  height:auto !important;
+  min-height:48px !important;
+}
+.week-schedule-table td.time-col{
+  height:48px !important;
+  min-height:48px !important;
+  padding:4px 2px !important;
+  line-height:1.2 !important;
+  vertical-align:middle !important;
+}
+.job .card-main{
+  cursor:pointer !important;
+}
+.eng-place{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+  line-height:1.25;
+  color:#555;
+  font-weight:normal;
+  white-space:normal;
+}
+.status-checks{
+  display:flex;
+  flex-wrap:wrap;
+  gap:4px;
+  margin-top:5px;
+}
+.status-checks label{
+  display:inline-flex;
+  align-items:center;
+  gap:2px;
+  font-size:11px;
+  line-height:1;
+  padding:3px 5px;
+  border:1px solid #caa72c;
+  border-radius:4px;
+  background:#fffbe6;
+  cursor:pointer;
+}
+.status-checks input{
+  width:auto !important;
+  margin:0;
+}
+.city-checks{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  padding:8px;
+  border:1px solid #ddd;
+  background:#fafafa;
+  border-radius:6px;
+}
+.city-checks label{
+  display:inline-flex !important;
+  align-items:center;
+  gap:4px;
+  font-weight:normal !important;
+  font-size:13px !important;
+  padding:4px 8px;
+  border:1px solid #ccc;
+  border-radius:999px;
+  background:#fff;
+  margin:0 !important;
+}
+.city-checks input{
+  width:auto !important;
+}
+
+
+/* 非派工表頁面可上下滑動：新增派工資料 / 客戶資料 / 派工明細 */
+#dispatchPage.page.active,
+#customerPage.page.active,
+#listPage.page.active{
+  display:block !important;
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  height:auto !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding-bottom:80px !important;
+}
+
+/* 新增派工頁內容太長時，表單區本身可以滑動到底 */
+#dispatchPage{
+  min-height:0 !important;
+}
+
+
+.export-range-label{font-size:12px;align-self:center;color:#333;font-weight:bold}
+.export-date{min-width:138px!important}
+.travel-link{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f4fd;border:1px solid #9ed0f5;color:#155a8a!important;text-decoration:none;font-size:11px}
+.travel-note{color:#666;font-size:11px;margin-left:4px}
+
+
+/* === 派工表格格式：套用「派工表-完整版(2)」的寬版表格版型 === */
+#scheduleWrap{
+  overflow-x:auto !important;
+  overflow-y:auto !important;
+  width:100vw !important;
+  max-width:100vw !important;
+  position:relative !important;
+  cursor:grab;
+}
+#scheduleWrap:active{cursor:grabbing}
+#schedule,
+.week-schedule-table{
+  border-collapse:collapse !important;
+  table-layout:fixed !important;
+  width:max-content !important;
+  min-width:6800px !important;
+}
+.week-schedule-table .date-head,
+.week-schedule-table .weekend-head,
+.week-schedule-table .today-head{
+  min-width:960px !important;
+  width:960px !important;
+  max-width:960px !important;
+}
+.week-schedule-table .engineer-head,
+.week-schedule-table .slot{
+  min-width:240px !important;
+  width:240px !important;
+  max-width:240px !important;
+}
+.week-schedule-table .time-col{
+  min-width:76px !important;
+  width:76px !important;
+  max-width:76px !important;
+}
+.table-wrap,
+#scheduleWrap{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto !important;
+  max-height:none !important;
+  overflow-y:auto !important;
+  overflow-x:auto !important;
+  margin:0 !important;
+  border-top:1px solid #aaa;
+}
+.week-schedule-table tr:nth-child(1) th{
+  position:sticky !important;
+  top:0 !important;
+  z-index:50 !important;
+}
+.week-schedule-table tr:nth-child(2) th{
+  position:sticky !important;
+  top:36px !important;
+  z-index:49 !important;
+}
+.week-schedule-table th.time-col{
+  position:sticky !important;
+  top:0 !important;
+  left:0 !important;
+  z-index:80 !important;
+}
+.week-schedule-table td.time-col{
+  position:sticky !important;
+  left:0 !important;
+  z-index:40 !important;
+}
+.week-schedule-table td.slot:empty,
+.week-schedule-table td.slot:not(.job-slot-active){
+  height:1px !important;
+  min-height:0 !important;
+  padding:2px !important;
+  background:#fff !important;
+}
+.week-schedule-table td.slot.job-slot-active{
+  background:#FFF2CC !important;
+  height:auto !important;
+  min-height:0 !important;
+  vertical-align:top !important;
+}
+.week-schedule-table td.time-col{
+  height:1px !important;
+  min-height:0 !important;
+  padding:4px 2px !important;
+  line-height:1.2 !important;
+}
+.job-slot-active .job{
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  margin:0 !important;
+  padding:2px !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+}
+.status-checks{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.status-checks label{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:2px 6px;border:1px solid #caa72c;border-radius:4px;background:#fffbe6;cursor:pointer;white-space:nowrap}
+.status-checks input[type="checkbox"]{width:auto;min-width:auto;padding:0;margin:0;cursor:pointer}
+
+/* 卡片底部拖拉把手 */
+.job-resize-handle{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  margin-top:4px;
+  height:14px;
+  cursor:ns-resize;
+  color:#b8970a;
+  font-size:14px;
+  letter-spacing:2px;
+  opacity:0.5;
+  border-top:1px dashed #d4b53a;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.job-resize-handle:hover{
+  opacity:1;
+  background:rgba(210,181,58,.15);
+  border-radius:0 0 4px 4px;
+}
+
+
+</style>
+</head>
+
+<body>
+<div class="header">派工表系統</div>
+
+<div class="tabs">
+  <button id="tabSchedule" class="active" onclick="showPage('schedulePage')">派工表</button>
+  <button id="tabDispatch" onclick="showPage('dispatchPage')">新增派工資料</button>
+  <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
+  <button id="tabList" onclick="showPage('listPage')">派工明細</button>
+</div>
+
+<div id="schedulePage" class="page active">
+  <div class="toolbar">
+    <input type="date" id="viewDate">
+    <button onclick="moveSchedule(-1)">← 前7天</button>
+    <button onclick="moveSchedule(1)">後7天 →</button>
+    <button onclick="scrollSchedule(-900)">← 左移</button>
+    <button onclick="scrollSchedule(900)">右移 →</button>
+    <button onclick="showPage('dispatchPage')">新增派工</button>
+    <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入舊派工 Excel</button>
+    <input type="file" id="jobExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importJobsExcel(event)">
+    <label class="export-range-label">匯出起</label><input type="date" id="exportStartDate" class="export-date">
+    <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDate" class="export-date">
+    <label class="export-range-label">匯出起</label><input type="date" id="exportStartDateList" class="export-date">
+    <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDateList" class="export-date">
+    <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
+    <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
+    <button class="clear-btn" onclick="clearAllJobs()">清空派工</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div class="engineer-code-note">工程代號：M＝林川閔、C＝陳昱存、Y＝陳義強、E＝鄧長益。</div>
+  <div class="table-wrap" id="scheduleWrap"><table id="schedule"></table></div>
+</div>
+
+<div id="dispatchPage" class="page">
+  <div class="form-card">
+    <h3>新增 / 填寫派工資料</h3>
+    <div class="help">
+      輸入「客編」後會自動連結客戶資料，帶入客名、客人電話、縣市、區域、地址。地址可直接開 Google Maps。
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>工程人員 <span class="required">*</span></label>
+        <select id="fEngineer">
+          <option value="">— 請選擇 —</option>
+          <option value="林川閔">M 林川閔</option>
+          <option value="陳昱存">C 陳昱存</option>
+          <option value="陳義強">Y 陳義強</option>
+          <option value="鄧長益">E 鄧長益</option>
+        </select>
+      </div>
+      <div class="field"><label>排工日期 <span class="required">*</span></label><input type="date" id="fDate"></div>
+      <div class="field"><label>排工時間 <span class="required">*</span></label><select id="fStartTime"></select></div>
+      <div class="field"><label>結束時間</label><select id="fEndTime"></select></div>
+      <div class="field"><label>訂單單號</label><input id="fOrderNo"></div>
+      <div class="field"><label>客編 <span class="required">*</span></label><input id="fCustomerCode" list="customerCodeList"><datalist id="customerCodeList"></datalist></div>
+      <div class="field"><label>客名</label><input id="fCustomerName"></div>
+      <div class="field"><label>客編&客名</label><input id="fCodeName" class="readonly" readonly></div>
+      <div class="field"><label>客人電話</label><input id="fPhone"></div>
+      <div class="field"><label>縣市</label><input id="fCity" class="readonly" readonly></div>
+      <div class="field"><label>區域</label><input id="fDistrict" class="readonly" readonly></div>
+      <div class="field-wide field"><label>在哪個城市（可直接勾選）</label><div id="cityCheckList" class="city-checks"></div></div>
+      <div class="field-wide field"><label>地址</label><input id="fAddress"></div>
+
+      <div class="field">
+        <label>施工項目</label>
+        <select id="fWorkItem">
+          <option value=""></option>
+          <option>安裝新機</option>
+          <option>巡檢設備</option>
+          <option>更換GD濾芯</option>
+          <option>更換其他濾芯</option>
+          <option>更換氣瓶</option>
+          <option>大保養拆機</option>
+          <option>大保養復機</option>
+          <option>安裝全戶</option>
+          <option>更換全戶濾芯</option>
+          <option>移機</option>
+          <option>抓漏</option>
+          <option>更換主機</option>
+          <option>更換龍頭</option>
+        </select>
+      </div>
+
+      <div class="field-wide field"><label>施工內容</label><input id="fWorkContent"></div>
+      <div class="field"><label>銷售金額</label><input id="fAmount" type="number"></div>
+      <div class="field">
+        <label>付款方式</label>
+        <select id="fPayment">
+          <option value=""></option>
+          <option>現金</option>
+          <option>刷卡</option>
+          <option>電匯</option>
+          <option>支票</option>
+          <option>支票回郵</option>
+        </select>
+      </div>
+      <div class="field-full">
+        <button onclick="fillCustomerByCode()">用客編帶入客戶資料</button>
+        <button class="map-btn" onclick="openFormMap()">開啟地址地圖</button>
+        <button id="saveJobBtn" onclick="addJobFromForm()">儲存派工</button>
+        <button class="clear-btn" onclick="clearDispatchForm()">清空表單</button>
+      </div>
+    </div>
+
+    <!-- 可用時間段提示 -->
+    <div id="availableSlotPanel" style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #b3d1f0;border-radius:8px;font-size:13px;display:none;">
+      <div style="font-weight:bold;margin-bottom:10px;color:#2f3542;font-size:14px;">📅 <span id="availableSlotTitle"></span> 各工程師可安排時間段</div>
+      <div id="availableSlotList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="customerPage" class="page">
+  <div class="help">
+    客戶資料只顯示這 6 欄：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址。<br>
+    匯入 Excel 時，只會抓這些欄位；「行動電話」會合併抓 Excel 的「行動電話」與「聯絡電話一」。其他欄位不顯示。
+  </div>
+
+  <div class="customer-form">
+    <div class="field"><label>客戶編號</label><input id="cCustomerNo"></div>
+    <div class="field"><label>人員姓名</label><input id="cPersonName"></div>
+    <div class="field"><label>客戶全稱</label><input id="cFullName"></div>
+    <div class="field"><label>客戶簡稱</label><input id="cShortName"></div>
+    <div class="field"><label>行動電話</label><input id="cMobile"></div>
+    <div class="field"><label>送貨地址</label><input id="cDeliveryAddress"></div>
+    <div class="field-full">
+      <button onclick="addCustomer()">新增 / 更新客戶</button>
+      <button class="map-btn" onclick="openCustomerFormMap()">開啟地址地圖</button>
+      <button class="import-btn" onclick="document.getElementById('excelFile').click()">匯入 Excel</button>
+      <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(event)">
+      <button class="export-btn" onclick="exportCustomers()">匯出客戶 Excel</button>
+      <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
+      <button class="import-btn" onclick="document.getElementById('backupFile').click()">📂 還原備份</button>
+      <input type="file" id="backupFile" accept=".json" style="display:none" onchange="restoreBackup(event)">
+      <button class="clear-btn" onclick="clearCustomers()">清空客戶</button>
+    </div>
+  </div>
+
+  <div class="search-box">
+    <input id="customerSearch" placeholder="搜尋客戶編號 / 人員姓名 / 客戶全稱 / 客戶簡稱 / 電話 / 地址" oninput="renderCustomers()" style="flex:1;min-width:260px">
+  </div>
+
+  <div class="import-status" id="importStatus">尚未匯入資料。</div>
+  <div class="customer-table"><table id="customerTable"></table></div>
+</div>
+
+<div id="listPage" class="page">
+  <div class="toolbar">
+    <input type="month" id="listMonth">
+    <input type="text" id="listCustomerFilter" placeholder="🔍 搜尋客編 / 客名" style="min-width:180px;" oninput="renderJobList()">
+    <button onclick="renderJobList()">查詢</button>
+    <button onclick="clearListFilter()" style="background:#888;">清除篩選</button>
+    <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
+  </div>
+  <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
+  <div class="customer-table"><table id="jobListTable"></table></div>
+</div>
+
+<script>
+const engineers=["林川閔","陳昱存","陳義強","鄧長益"];
+const times=["09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+
+// 固定 key，從舊版 key 遷移資料
+const JOBS_KEY = "paigong_jobs_v1";
+const CUSTOMERS_KEY = "paigong_customers_v1";
+(function migrateOldData(){
+  const oldJobsKey = "dispatchJobsCompleteV8_engineers";
+  const oldCustKey = "dispatchCustomersCompleteV8_engineers";
+  if(!localStorage.getItem(JOBS_KEY) && localStorage.getItem(oldJobsKey)){
+    localStorage.setItem(JOBS_KEY, localStorage.getItem(oldJobsKey));
+  }
+  if(!localStorage.getItem(CUSTOMERS_KEY) && localStorage.getItem(oldCustKey)){
+    localStorage.setItem(CUSTOMERS_KEY, localStorage.getItem(oldCustKey));
+  }
+})();
+let jobs=JSON.parse(localStorage.getItem(JOBS_KEY)||"[]");
+let customers=JSON.parse(localStorage.getItem(CUSTOMERS_KEY)||"[]");
+let dragId=null;
+let editingJobId=null;
+
+document.getElementById("viewDate").valueAsDate=new Date();
+document.getElementById("fDate").valueAsDate=new Date();
+const nowForList = new Date();
+document.getElementById("listMonth").value = `${nowForList.getFullYear()}-${String(nowForList.getMonth()+1).padStart(2,"0")}`;
+
+times.forEach(t=>{
+  ["fStartTime","fEndTime"].forEach(id=>{
+    const op=document.createElement("option"); op.value=t; op.textContent=t; document.getElementById(id).appendChild(op);
+  });
+});
+document.getElementById("fEndTime").value="10:30";
+
+document.getElementById("viewDate").addEventListener("change",renderSchedule);
+document.getElementById("fCustomerCode").addEventListener("change",fillCustomerByCode);
+document.getElementById("fCustomerCode").addEventListener("input",updateCodeName);
+document.getElementById("fCustomerName").addEventListener("input",updateCodeName);
+let addrDebounce = null;
+document.getElementById("fAddress").addEventListener("input",()=>{
+  const p=parseTaiwanAddress(document.getElementById("fAddress").value);
+  document.getElementById("fCity").value=p.city;
+  document.getElementById("fDistrict").value=p.district;
+  syncCityChecks();
+  clearTimeout(addrDebounce);
+  addrDebounce = setTimeout(()=>{ renderAvailableSlots(); }, 800);
+});document.getElementById("fEngineer").addEventListener("change", renderAvailableSlots);
+document.getElementById("fDate").addEventListener("change", renderAvailableSlots);
+document.getElementById("fStartTime").addEventListener("change", syncEndTimeByStart);
+document.getElementById("fEndTime").addEventListener("change", renderAvailableSlots);
+
+const taiwanCities=["台北市","新北市","桃園市","台中市","台南市","高雄市","基隆市","新竹市","嘉義市","新竹縣","苗栗縣","彰化縣","南投縣","雲林縣","嘉義縣","屏東縣","宜蘭縣","花蓮縣","台東縣","澎湖縣","金門縣","連江縣"];
+function renderCityChecks(){
+  const box=document.getElementById("cityCheckList");
+  if(!box) return;
+  box.innerHTML=taiwanCities.map(c=>`<label><input type="radio" name="cityPick" value="${c}" onchange="setCityFromCheck(this.value)">${c}</label>`).join("");
+}
+function setCityFromCheck(city){
+  document.getElementById("fCity").value=city;
+  renderAvailableSlots();
+}
+function syncCityChecks(){
+  const city=document.getElementById("fCity").value;
+  document.querySelectorAll('input[name="cityPick"]').forEach(x=>x.checked=(x.value===city));
+}
+function syncEndTimeByStart(){
+  const s=timeIndex(document.getElementById("fStartTime").value);
+  const e=timeIndex(document.getElementById("fEndTime").value);
+  if(s<0) return;
+  if(e<0 || e<s){
+    document.getElementById("fEndTime").value=times[Math.min(s+1,times.length-1)];
+  }
+}
+
+
+function showPage(pageId){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.getElementById(pageId).classList.add("active");
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+  if(pageId==="schedulePage")document.getElementById("tabSchedule").classList.add("active");
+  if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
+  if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
+  if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+}
+
+function saveJobs(){localStorage.setItem(JOBS_KEY,JSON.stringify(jobs))}
+function saveCustomers(){localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));updateCustomerCodeList()}
+
+function escapeHtml(text){
+  return String(text||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+}
+function mapUrl(address){return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(address||"")}
+function directionUrl(origin,destination){
+  return "https://www.google.com/maps/dir/?api=1&origin="+encodeURIComponent(origin||"")+"&destination="+encodeURIComponent(destination||"")+"&travelmode=driving";
+}
+function cleanCityDistrict(city,district){
+  city=String(city||"").trim();
+  district=String(district||"").trim();
+  if(district && city && district.startsWith(city)) return district;
+  if(city && district) return city + district;
+  return district || city || "";
+}
+function getCurrentFormPlace(){
+  const city=document.getElementById("fCity") ? document.getElementById("fCity").value.trim() : "";
+  const district=document.getElementById("fDistrict") ? document.getElementById("fDistrict").value.trim() : "";
+  return cleanCityDistrict(city,district);
+}
+
+function parseTaiwanAddress(address){
+  address=String(address||"").trim();
+  let city="", district="";
+  const cityMatch=address.match(/^(台北市|臺北市|新北市|桃園市|台中市|臺中市|台南市|臺南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣|澎湖縣|金門縣|連江縣)/);
+  if(cityMatch){
+    city=cityMatch[1].replace("臺","台");
+    const rest=address.slice(cityMatch[1].length);
+    const districtMatch=rest.match(/^(.{1,5}?(區|鄉|鎮|市))/);
+    if(districtMatch) district=districtMatch[1];
+  }
+  return {city,district};
+}
+
+function updateCodeName(){
+  const code=document.getElementById("fCustomerCode").value.trim();
+  const name=document.getElementById("fCustomerName").value.trim();
+  document.getElementById("fCodeName").value=(code&&name)?`${code} ${name}`:(code||name);
+}
+
+function fillCustomerByCode(){
+  const code=document.getElementById("fCustomerCode").value.trim();
+  if(!code)return;
+  const c=customers.find(x=>String(x.customerNo).trim()===code);
+  if(!c)return;
+  const customerName=c.fullName || c.shortName || c.personName || "";
+  document.getElementById("fCustomerName").value=customerName;
+  document.getElementById("fPhone").value=c.mobile||"";
+  document.getElementById("fAddress").value=c.deliveryAddress||"";
+  const p=parseTaiwanAddress(c.deliveryAddress||"");
+  document.getElementById("fCity").value=p.city||"";
+  document.getElementById("fDistrict").value=p.district||"";
+  syncCityChecks();
+  updateCodeName();
+  renderAvailableSlots();
+}
+
+function openFormMap(){
+  const address=document.getElementById("fAddress").value.trim();
+  if(!address){alert("請先輸入或帶入地址");return}
+  window.open(mapUrl(address),"_blank");
+}
+
+function openCustomerFormMap(){
+  const address=document.getElementById("cDeliveryAddress").value.trim();
+  if(!address){alert("請先輸入送貨地址");return}
+  window.open(mapUrl(address),"_blank");
+}
+
+function getFormJob(){
+  const code=document.getElementById("fCustomerCode").value.trim();
+  const name=document.getElementById("fCustomerName").value.trim();
+  updateCodeName();
+  const p=parseTaiwanAddress(document.getElementById("fAddress").value.trim());
+  return {
+    id:Date.now(),
+    engineer:document.getElementById("fEngineer").value,
+    date:document.getElementById("fDate").value,
+    startTime:document.getElementById("fStartTime").value,
+    time:document.getElementById("fStartTime").value,
+    endTime:document.getElementById("fEndTime").value,
+    orderNo:document.getElementById("fOrderNo").value.trim(),
+    customerCode:code,
+    customerName:name,
+    codeName:document.getElementById("fCodeName").value.trim(),
+    phone:document.getElementById("fPhone").value.trim(),
+    city:document.getElementById("fCity").value.trim() || p.city,
+    district:document.getElementById("fDistrict").value.trim() || p.district,
+    address:document.getElementById("fAddress").value.trim(),
+    workItem:document.getElementById("fWorkItem").value,
+    workContent:document.getElementById("fWorkContent").value.trim(),
+    amount:document.getElementById("fAmount").value.trim(),
+    payment:document.getElementById("fPayment").value
+  };
+}
+
+function addJobFromForm(){
+  const job=getFormJob();
+  if(!job.engineer||!job.date||!job.startTime){alert("請填工程人員、排工日期、排工時間");return}
+  if(!job.customerCode&&!job.customerName){alert("請至少輸入客編或客名");return}
+
+  const wasEditing = !!editingJobId;
+  if(editingJobId){
+    const idx=jobs.findIndex(x=>x.id===editingJobId);
+    if(idx>=0){
+      jobs[idx]={...jobs[idx], ...job, id:editingJobId};
+      saveJobs();
+      editingJobId=null;
+      document.getElementById("saveJobBtn").textContent="儲存派工";
+    }
+  }else{
+    jobs.push(job);
+    saveJobs();
+  }
+
+  enableScheduleDrag();
+  renderSchedule();
+  setTimeout(setupFixedBottomScrollbar, 100);
+  setupFixedBottomScrollbar();
+  renderJobList();
+  clearDispatchForm();
+  showPage("schedulePage");
+
+  // 顯示短暫 toast 提示，不用 alert
+  showToast(wasEditing ? "✅ 已更新派工" : "✅ 已新增派工");
+}
+
+function clearDispatchForm(){
+  ["fOrderNo","fCustomerCode","fCustomerName","fCodeName","fPhone","fCity","fDistrict","fAddress","fWorkContent","fAmount"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("fEngineer").value="";
+  document.getElementById("fWorkItem").value="";
+  document.getElementById("fPayment").value="";
+  editingJobId=null;
+  const btn=document.getElementById("saveJobBtn"); if(btn) btn.textContent="儲存派工";
+  syncCityChecks();
+  renderAvailableSlots();
+}
+
+function getEngineerFreeRanges(engineer, date){
+  const dayJobs = jobs.filter(j => j.date === date && j.engineer === engineer);
+  const busyIndices = new Set();
+  dayJobs.forEach(j => {
+    const s = timeIndex(j.startTime || j.time);
+    const span = calcSpan(j);
+    for(let i = s; i < s + span && i < times.length; i++){
+      if(i >= 0) busyIndices.add(i);
+    }
+  });
+  const freeRanges = [];
+  let rangeStart = null;
+  for(let i = 0; i < times.length; i++){
+    if(!busyIndices.has(i)){
+      if(rangeStart === null) rangeStart = i;
+    } else {
+      if(rangeStart !== null){ freeRanges.push({from: rangeStart, to: i - 1}); rangeStart = null; }
+    }
+  }
+  if(rangeStart !== null) freeRanges.push({from: rangeStart, to: times.length - 1});
+  return { freeRanges, dayJobs };
+}
+
+// ===== 車程自動計算（Nominatim geocoding + OSRM routing，免費不需 API Key）=====
+const geoCache = {};   // address -> {lat,lon} or null
+const travelCache = {}; // "lat1,lon1|lat2,lon2" -> "XX 分鐘" or null
+
+async function geocodeAddress(addr){
+  if(!addr) return null;
+  const key = addr.trim();
+  if(key in geoCache) return geoCache[key];
+  try{
+    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(key);
+    const res = await fetch(url, {headers:{"Accept-Language":"zh-TW,zh","User-Agent":"dispatch-system"}});
+    const data = await res.json();
+    const result = data && data[0] ? {lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon)} : null;
+    geoCache[key] = result;
+    return result;
+  }catch(e){ geoCache[key]=null; return null; }
+}
+
+async function fetchDrivingMinutes(addrA, addrB){
+  if(!addrA || !addrB) return null;
+  const cacheKey = addrA + "|" + addrB;
+  if(cacheKey in travelCache) return travelCache[cacheKey];
+  const [gA, gB] = await Promise.all([geocodeAddress(addrA), geocodeAddress(addrB)]);
+  if(!gA || !gB){ travelCache[cacheKey]=null; return null; }
+  try{
+    const url = `https://router.project-osrm.org/route/v1/driving/${gA.lon},${gA.lat};${gB.lon},${gB.lat}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(data.code==="Ok" && data.routes && data.routes[0]){
+      const mins = Math.round(data.routes[0].duration / 60);
+      const label = mins < 60 ? `約 ${mins} 分鐘` : `約 ${Math.floor(mins/60)} 時 ${mins%60} 分`;
+      travelCache[cacheKey] = label;
+      return label;
+    }
+    travelCache[cacheKey]=null; return null;
+  }catch(e){ travelCache[cacheKey]=null; return null; }
+}
+
+async function updateTravelTags(currentAddr){
+  // 找所有 .travel-tag span，依 data-from / data-to 非同步填入
+  const tags = document.querySelectorAll(".travel-tag[data-from][data-to]");
+  for(const tag of tags){
+    const from = tag.dataset.from;
+    const to = tag.dataset.to;
+    if(!from || !to){ continue; }
+    tag.textContent = "計算中…";
+    const mins = await fetchDrivingMinutes(from, to);
+    tag.textContent = mins ? `🚗 ${mins}` : "無法計算";
+    tag.style.background = mins ? "#e8f7ee" : "#f1f1f1";
+    tag.style.borderColor = mins ? "#7ec89a" : "#ccc";
+    tag.style.color = mins ? "#1a5c2a" : "#888";
+  }
+}
+
+function renderAvailableSlots(){
+  const selEngineer = document.getElementById("fEngineer").value;
+  const date = document.getElementById("fDate").value;
+  const panel = document.getElementById("availableSlotPanel");
+  const titleEl = document.getElementById("availableSlotTitle");
+  const listEl = document.getElementById("availableSlotList");
+
+  if(!date){ panel.style.display="none"; return; }
+
+  const formPlace = getCurrentFormPlace();
+  const currentAddr = document.getElementById("fAddress") ? document.getElementById("fAddress").value.trim() : "";
+  titleEl.textContent = date + (formPlace ? `（${formPlace}）` : "");
+
+  const targetEngineers = engineers;
+  let html = "";
+
+  targetEngineers.forEach(eng => {
+    const code = engineerCodes[eng] || eng;
+    const { freeRanges, dayJobs } = getEngineerFreeRanges(eng, date);
+    const isSelected = (selEngineer === eng);
+
+    const rowBg = isSelected ? "#e8f4fd" : "#fff";
+    const rowBorder = isSelected ? "2px solid #3498db" : "1px solid #dce8f7";
+
+    html += `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;padding:8px 10px;background:${rowBg};border:${rowBorder};border-radius:6px;">`;
+    html += `<div style="min-width:52px;font-weight:bold;padding-top:2px;">
+      <span style="display:inline-block;background:#2f3542;color:#fff;border-radius:4px;padding:3px 8px;font-size:13px;cursor:pointer;"
+        onclick="document.getElementById('fEngineer').value='${eng}';renderAvailableSlots();"
+        title="點擊選擇此工程師">${code}</span>
+    </div>`;
+    html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">`;
+
+    if(freeRanges.length === 0){
+      html += `<span style="color:#c0392b;font-size:12px;">當天已排滿</span>`;
+    } else {
+      freeRanges.forEach(r => {
+        const fromT = times[r.from];
+        const toT = times[r.to];
+        const slots = r.to - r.from;
+        const color = slots >= 3 ? "#1a7a2e" : slots >= 1 ? "#7a5a00" : "#555";
+        const bg    = slots >= 3 ? "#d4edda" : slots >= 1 ? "#fff3cd" : "#f1f1f1";
+        const bdr   = slots >= 3 ? "#a3d6b0" : slots >= 1 ? "#ffc107" : "#ccc";
+        const label = fromT === toT ? fromT : `${fromT}～${toT}`;
+        html += `<span style="display:inline-block;padding:3px 9px;border-radius:14px;border:1px solid ${bdr};background:${bg};color:${color};font-weight:bold;cursor:pointer;font-size:12px;"
+          onclick="document.getElementById('fEngineer').value='${eng}';document.getElementById('fStartTime').value='${fromT}';document.getElementById('fEndTime').value='${toT}';renderAvailableSlots();"
+          title="點擊選擇此工程師與時間段">${label}</span>`;
+      });
+    }
+
+    // 已排時段 + 車程
+    if(dayJobs.length > 0){
+      dayJobs.forEach(j => {
+        const s = j.startTime||j.time;
+        const e = j.endTime;
+        const place = cleanCityDistrict(j.city,j.district) || "";
+        const codename = escapeHtml(j.codeName || j.customerName || j.customerCode || "");
+        const hasAddrs = currentAddr && j.address;
+        const travelSpan = hasAddrs
+          ? `<span class="travel-tag" data-from="${escapeHtml(currentAddr)}" data-to="${escapeHtml(j.address)}"
+              style="display:inline-block;padding:1px 6px;border-radius:10px;background:#f1f1f1;border:1px solid #ccc;color:#888;font-size:11px;margin-left:3px;">計算中…</span>`
+          : `<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>`;
+        html += `<span style="display:inline-block;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">
+          ${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}${travelSpan}</span>`;
+      });
+    }
+
+    html += `</div></div>`;
+  });
+
+  listEl.innerHTML = html;
+  panel.style.display = "block";
+
+  // 非同步填入車程
+  if(currentAddr){
+    updateTravelTags(currentAddr);
+  }
+}
+
+
+
+
+function timeIndex(t){
+  return times.indexOf(t);
+}
+
+const engineerCodes={
+  "林川閔":"M",
+  "陳昱存":"C",
+  "陳義強":"Y",
+  "鄧長益":"E"
+};
+
+const engineerNameByCode={
+  "M":"林川閔",
+  "C":"陳昱存",
+  "Y":"陳義強",
+  "E":"鄧長益",
+  "Yi":"陳義強"
+};
+
+function displayEngineer(name){
+  return engineerCodes[name] || name;
+}
+
+function normalizeEngineerName(name){
+  name=String(name||"").trim();
+  return engineerNameByCode[name] || name;
+}
+
+function parseDateLocal(str){
+  const [y,m,d]=String(str).split("-").map(Number);
+  return new Date(y, (m||1)-1, d||1);
+}
+
+function formatDateLocal(date){
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,"0");
+  const d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date,days){
+  const d=new Date(date);
+  d.setDate(d.getDate()+days);
+  return d;
+}
+
+function getMonday(date){
+  const d=new Date(date);
+  const day=d.getDay();
+  const diff=(day===0 ? -6 : 1-day);
+  d.setDate(d.getDate()+diff);
+  return d;
+}
+
+function getScheduleDates(){
+  const base=parseDateLocal(document.getElementById("viewDate").value);
+  return Array.from({length:7},(_,i)=>formatDateLocal(addDays(base,i)));
+}
+
+function moveSchedule(step){
+  const d=parseDateLocal(document.getElementById("viewDate").value);
+  d.setDate(d.getDate()+step*7);
+  document.getElementById("viewDate").value=formatDateLocal(d);
+  renderSchedule();
+}
+
+function getWeekdayName(dateStr){
+  const names=["日","一","二","三","四","五","六"];
+  const d=parseDateLocal(dateStr);
+  return "週"+names[d.getDay()];
+}
+
+// ===== Toast 提示 =====
+function showToast(msg, duration=2200){
+  let toast = document.getElementById("_toast");
+  if(!toast){
+    toast = document.createElement("div");
+    toast.id = "_toast";
+    toast.style.cssText = `
+      position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:#2f3542;color:#fff;padding:10px 24px;border-radius:24px;
+      font-size:15px;font-weight:bold;z-index:9999;opacity:0;
+      transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;
+      box-shadow:0 4px 16px rgba(0,0,0,.25);
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = "1";
+  toast.style.transform = "translateX(-50%) translateY(0)";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(-50%) translateY(20px)";
+  }, duration);
+}
+
+// ===== 卡片底部拖拉調整時間 =====
+let resizingJobId = null;
+let resizeStartY = 0;
+let resizeStartEnd = "";
+let resizeRowHeight = 48; // px per 30min slot
+
+function startResizeJob(e, jobId){
+  e.preventDefault();
+  e.stopPropagation();
+  resizingJobId = jobId;
+  resizeStartY = e.clientY;
+  const j = jobs.find(x=>x.id===jobId);
+  resizeStartEnd = j ? (j.endTime||j.startTime||j.time) : "";
+  document.body.style.userSelect = "none";
+  document.body.style.cursor = "ns-resize";
+  document.addEventListener("mousemove", onResizeMove);
+  document.addEventListener("mouseup", onResizeUp);
+  // touch
+  document.addEventListener("touchmove", onResizeTouchMove, {passive:false});
+  document.addEventListener("touchend", onResizeTouchUp);
+}
+
+function onResizeTouchMove(e){
+  e.preventDefault();
+  const touch = e.touches[0];
+  doResizeMove(touch.clientY);
+}
+function onResizeTouchUp(e){
+  doResizeUp();
+}
+function onResizeMove(e){ doResizeMove(e.clientY); }
+function onResizeUp(e){ doResizeUp(); }
+
+function doResizeMove(clientY){
+  if(!resizingJobId) return;
+  const j = jobs.find(x=>x.id===resizingJobId);
+  if(!j) return;
+  const dy = clientY - resizeStartY;
+  const slotsDelta = Math.round(dy / resizeRowHeight);
+  const endIdx = timeIndex(resizeStartEnd);
+  if(endIdx < 0) return;
+  const startIdx = timeIndex(j.startTime||j.time);
+  // 最少佔 1 格（含 start 和 end 同一列）
+  const newEndIdx = Math.max(startIdx, Math.min(endIdx + slotsDelta, times.length - 1));
+  const newEnd = times[newEndIdx];
+  if(newEnd !== j.endTime){
+    j.endTime = newEnd;
+    renderSchedule();
+  }
+}
+
+function doResizeUp(){
+  if(!resizingJobId) return;
+  saveJobs();
+  renderJobList();
+  resizingJobId = null;
+  document.body.style.userSelect = "";
+  document.body.style.cursor = "";
+  document.removeEventListener("mousemove", onResizeMove);
+  document.removeEventListener("mouseup", onResizeUp);
+  document.removeEventListener("touchmove", onResizeTouchMove);
+  document.removeEventListener("touchend", onResizeTouchUp);
+  showToast("✅ 時間已調整");
+}
+
+function calcSpan(job){
+  const s=timeIndex(job.startTime||job.time);
+  const e=timeIndex(job.endTime);
+  if(s<0) return 1;
+  if(e<s) return 1;
+  // 顯示方式改回「含結束時間」：
+  // 09:30~10:00 佔 09:30、10:00 兩列
+  // 09:30~10:30 佔 09:30、10:00、10:30 三列
+  return e - s + 1;
+}
+
+function isCoveredByPreviousJob(dateStr, engineer, timeIndexNow){
+  return jobs.some(j=>{
+    if(j.date!==dateStr || j.engineer!==engineer) return false;
+    const s=timeIndex(j.startTime||j.time);
+    const span=calcSpan(j);
+    // 被前面的工作蓋住：timeIndexNow 在 s 之後，且在 s+span 範圍內
+    return s>=0 && timeIndexNow>s && timeIndexNow<s+span;
+  });
+}
+
+function getEngineerDayPlaceLabel(dateStr, engineer){
+  // 工程師標題下方只顯示當天會去的「縣市」，不要把區域全部列出來
+  const cities=[];
+  jobs.filter(j=>j.date===dateStr && j.engineer===engineer).forEach(j=>{
+    const city=String(j.city||"").trim();
+    if(city && !cities.includes(city)) cities.push(city);
+  });
+  return cities.length ? cities.join("、") : "";
+}
+
+function renderSchedule(){
+  // normalize old imported engineer names/codes
+  jobs.forEach(j=>{ j.engineer=normalizeEngineerName(j.engineer); });
+
+  const dates=getScheduleDates();
+  const table=document.getElementById("schedule");
+  table.className="week-schedule-table";
+  const today=formatDateLocal(new Date());
+
+  let html="<tr><th class='time-col' rowspan='2'>時間</th>";
+  dates.forEach(dateStr=>{
+    const d=parseDateLocal(dateStr);
+    const weekend=d.getDay()===0 || d.getDay()===6;
+    const cls=dateStr===today ? "today-head" : (weekend ? "weekend-head" : "date-head");
+    html+=`<th class="${cls}" colspan="${engineers.length}">${dateStr}　${getWeekdayName(dateStr)}</th>`;
+  });
+  html+="</tr><tr>";
+  dates.forEach(dateStr=>{
+    engineers.forEach(e=>{
+      const placeLabel=getEngineerDayPlaceLabel(dateStr,e);
+      html+=`<th class="engineer-head">${displayEngineer(e)}${placeLabel?`<span class="eng-place">${escapeHtml(placeLabel)}</span>`:""}</th>`;
+    });
+  });
+  html+="</tr>";
+
+  times.forEach((time,idx)=>{
+    // 使用完整版格式：沒有派工起始的時間列自動壓縮高度
+    const rowHasNewJob = dates.some(dateStr=>
+      engineers.some(engineer=>
+        jobs.some(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time))
+      )
+    );
+    const trH = rowHasNewJob ? '' : ' style="height:24px;"';
+    const tdStyle = rowHasNewJob ? '' : ' style="font-size:11px;padding:1px 4px;"';
+
+    html+=`<tr${trH}><td class="time-col"${tdStyle}>${time}</td>`;
+
+    dates.forEach(dateStr=>{
+      engineers.forEach(engineer=>{
+        if(isCoveredByPreviousJob(dateStr, engineer, idx)){
+          return;
+        }
+
+        const cellJobs=jobs.filter(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time));
+        let span=1;
+        if(cellJobs.length>0){
+          span=Math.max(...cellJobs.map(j=>calcSpan(j)));
+        }
+
+        html+=`<td class="slot ${cellJobs.length?`job-slot-active`:``}" rowspan="${span}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
+        cellJobs.forEach(j=>html+=jobCard(j));
+        html+="</td>";
+      });
+    });
+
+    html+="</tr>";
+  });
+
+  table.innerHTML=html;
+  table.style.minWidth = "6800px";
+  renderSummary();
+}
+
+function jobCard(j){
+  const address = j.address
+    ? `<div class="card-line card-address">地址：<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`
+    : "";
+
+  const codeName = j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim();
+  const timeText = `${j.startTime || j.time || ""}${j.endTime ? " ~ " + j.endTime : ""}`;
+
+  const span = calcSpan(j);
+  // 每半小時一格約 74px，減掉一點內距，讓 09:30~10:30 剛好撐滿 09:30 與 10:00 兩格，到 10:30 邊界
+  const jobHeight = 0;
+
+  const statusList = Array.isArray(j.statusList) ? j.statusList : (j.status ? [j.status] : []);
+  const statusOptions = ["已印單","已確認","已提醒"];
+  const statusHtml = `<div class="status-checks" onclick="event.stopPropagation()">
+    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
+  </div>`;
+
+  return `<div class="job" style="" draggable="true" ondragstart="dragStart(${j.id})">
+    <div class="job-top">
+      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料">${escapeHtml(codeName)}</div>
+      <div class="actions">
+        <button class="edit" onclick="editJobForm(${j.id},event)">改</button>
+        <button class="delete" onclick="deleteJob(${j.id})">X</button>
+      </div>
+    </div>
+
+    ${timeText.trim() ? `<div class="card-time">時間：${escapeHtml(timeText)}</div>` : ""}
+    ${j.phone ? `<div class="card-line">電話：${escapeHtml(j.phone)}</div>` : ""}
+    ${address}
+    ${j.workItem ? `<div class="card-line card-work">施工項目：${escapeHtml(j.workItem)}</div>` : ""}
+    ${j.workContent ? `<div class="card-line">施工內容：${escapeHtml(j.workContent)}</div>` : ""}
+    ${statusHtml}
+    <div class="job-resize-handle"
+      onmousedown="startResizeJob(event,${j.id})"
+      ontouchstart="startResizeJob(event,${j.id})"
+      onclick="event.stopPropagation()"
+      title="拖拉調整結束時間">
+      <span>⠿</span>
+    </div>
+  </div>`;
+}
+
+// 無效件關鍵字（施工項目或施工內容含這些字的不列入統計）
+const INVALID_KEYWORDS = ["請假","車程","出差","補休","休假","公假"];
+
+function isValidJob(j){
+  const item = String(j.workItem||"");
+  const content = String(j.workContent||"");
+  return !INVALID_KEYWORDS.some(kw => item.includes(kw) || content.includes(kw));
+}
+
+function updateJobStatus(id, status){
+  const j = jobs.find(x=>x.id===id);
+  if(!j) return;
+  j.status = status;
+  saveJobs();
+  renderSchedule();
+  renderJobList();
+}
+
+function toggleJobStatusFlag(id, flag, checked){
+  const j = jobs.find(x=>x.id===id);
+  if(!j) return;
+  let arr = Array.isArray(j.statusList) ? [...j.statusList] : (j.status ? [j.status] : []);
+  if(checked && !arr.includes(flag)) arr.push(flag);
+  if(!checked) arr = arr.filter(x=>x!==flag);
+  j.statusList = arr;
+  j.status = arr.join("、");
+  saveJobs();
+  renderJobList();
+}
+
+function renderSummary(){
+  const dates=getScheduleDates();
+  const rangeJobs=jobs.filter(j=>dates.includes(j.date));
+  const validJobs=rangeJobs.filter(isValidJob);
+  let title=`${dates[0]} ～ ${dates[dates.length-1]}`;
+  let html=`<b>${title}</b>　總有效派工：${validJobs.length} 件　`;
+  engineers.forEach(e=>{
+    const cnt = validJobs.filter(j=>j.engineer===e).length;
+    html+=`<span class="badge">${displayEngineer(e)}：${cnt} 件</span>`;
+  });
+  document.getElementById("summary").innerHTML=html;
+}
+
+
+
+
+
+function setupFixedBottomScrollbar(){
+  const wrap = document.getElementById("scheduleWrap") || document.querySelector(".table-wrap");
+  const table = document.getElementById("schedule");
+  const bar = document.getElementById("fixedBottomScroll");
+  const inner = document.getElementById("fixedBottomScrollInner");
+
+  if(!wrap || !table || !bar || !inner) return;
+
+  const scrollWidth = Math.max(6800, table.scrollWidth, wrap.scrollWidth);
+  table.style.minWidth = scrollWidth + "px";
+  inner.style.width = scrollWidth + "px";
+  bar.style.display = "block";
+
+  if(bar.dataset.syncReady !== "1"){
+    bar.dataset.syncReady = "1";
+
+    let syncingFromBar = false;
+    let syncingFromWrap = false;
+
+    bar.addEventListener("scroll", function(){
+      if(syncingFromWrap) return;
+      syncingFromBar = true;
+      wrap.scrollLeft = bar.scrollLeft;
+      syncingFromBar = false;
+    });
+
+    wrap.addEventListener("scroll", function(){
+      if(syncingFromBar) return;
+      syncingFromWrap = true;
+      bar.scrollLeft = wrap.scrollLeft;
+      syncingFromWrap = false;
+    });
+
+    window.addEventListener("resize", function(){
+      setupFixedBottomScrollbar();
+    });
+  }
+
+  bar.scrollLeft = wrap.scrollLeft;
+}
+
+function scrollSchedule(px){
+  const wrap = document.getElementById("scheduleWrap") || document.querySelector(".table-wrap");
+  const bar = document.getElementById("fixedBottomScroll");
+  if(wrap){
+    wrap.scrollLeft += px;
+    if(bar) bar.scrollLeft = wrap.scrollLeft;
+  }
+}
+
+function dragStart(id){dragId=id}
+function allowDrop(e){e.preventDefault();e.currentTarget.classList.add("drop-hover")}
+function leaveDrop(e){e.currentTarget.classList.remove("drop-hover")}
+function dropJob(e,engineer,time){
+  dropJobMulti(e, document.getElementById("viewDate").value, engineer, time);
+}
+
+function dropJobMulti(e,dateStr,engineer,time){
+  e.preventDefault();
+  e.currentTarget.classList.remove("drop-hover");
+  jobs.forEach(j=>{
+    if(j.id===dragId){
+      const oldStart=timeIndex(j.startTime||j.time);
+      const oldEnd=timeIndex(j.endTime);
+      const duration=(oldStart>=0 && oldEnd>=oldStart) ? (oldEnd-oldStart) : 1;
+      const newStart=timeIndex(time);
+      const newEnd=times[Math.min(newStart+duration, times.length-1)];
+      j.engineer=engineer;
+      j.startTime=time;
+      j.time=time;
+      j.endTime=newEnd;
+      j.date=dateStr;
+    }
+  });
+  saveJobs();
+  renderSchedule();
+  renderJobList();
+}
+function deleteJob(id){
+  if(!confirm("確定刪除此筆派工？"))return;
+  jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();
+}
+function editJobForm(id,event){
+  if(event) event.stopPropagation();
+  const j=jobs.find(x=>x.id===id);
+  if(!j) return;
+  editingJobId=id;
+  showPage("dispatchPage");
+  document.getElementById("fEngineer").value=j.engineer||"";
+  document.getElementById("fDate").value=j.date||"";
+  document.getElementById("fStartTime").value=j.startTime||j.time||"09:30";
+  document.getElementById("fEndTime").value=j.endTime||"10:30";
+  document.getElementById("fOrderNo").value=j.orderNo||"";
+  document.getElementById("fCustomerCode").value=j.customerCode||"";
+  document.getElementById("fCustomerName").value=j.customerName||"";
+  document.getElementById("fCodeName").value=j.codeName||`${j.customerCode||""} ${j.customerName||""}`.trim();
+  document.getElementById("fPhone").value=j.phone||"";
+  document.getElementById("fCity").value=j.city||"";
+  document.getElementById("fDistrict").value=j.district||"";
+  document.getElementById("fAddress").value=j.address||"";
+  document.getElementById("fWorkItem").value=j.workItem||"";
+  document.getElementById("fWorkContent").value=j.workContent||"";
+  document.getElementById("fAmount").value=j.amount||"";
+  document.getElementById("fPayment").value=j.payment||"";
+  const btn=document.getElementById("saveJobBtn"); if(btn) btn.textContent="更新派工";
+  syncCityChecks();
+  renderAvailableSlots();
+  window.scrollTo(0,0);
+}
+function editJob(id){
+  const j=jobs.find(x=>x.id===id);if(!j)return;
+  const orderNo=prompt("訂單單號",j.orderNo||"");if(orderNo===null)return;
+  const code=prompt("客編",j.customerCode||"");if(code===null)return;
+  const name=prompt("客名",j.customerName||"");if(name===null)return;
+  const phone=prompt("客人電話",j.phone||"");if(phone===null)return;
+  const address=prompt("地址",j.address||"");if(address===null)return;
+  const p=parseTaiwanAddress(address);
+  const city=prompt("縣市",j.city||p.city);if(city===null)return;
+  const district=prompt("區域",j.district||p.district);if(district===null)return;
+  const workItem=prompt("施工項目",j.workItem||"");if(workItem===null)return;
+  const workContent=prompt("施工內容",j.workContent||"");if(workContent===null)return;
+  const amount=prompt("銷售金額",j.amount||"");if(amount===null)return;
+  const payment=prompt("付款方式",j.payment||"");if(payment===null)return;
+  Object.assign(j,{orderNo,customerCode:code,customerName:name,codeName:`${code} ${name}`.trim(),phone,city,district,address,workItem,workContent,amount,payment});
+  saveJobs();renderSchedule();renderJobList();
+}
+function clearAllJobs(){
+  if(confirm("確定清空全部派工資料？")){jobs=[];saveJobs();renderSchedule();renderJobList()}
+}
+
+function addCustomer(){
+  const customerNo=document.getElementById("cCustomerNo").value.trim();
+  if(!customerNo){alert("請輸入客戶編號");return}
+  const c={
+    id:Date.now(),
+    customerNo,
+    personName:document.getElementById("cPersonName").value.trim(),
+    fullName:document.getElementById("cFullName").value.trim(),
+    shortName:document.getElementById("cShortName").value.trim(),
+    mobile:document.getElementById("cMobile").value.trim(),
+    deliveryAddress:document.getElementById("cDeliveryAddress").value.trim()
+  };
+  const idx=customers.findIndex(x=>x.customerNo&&x.customerNo===customerNo);
+  if(idx>=0){if(confirm("此客戶編號已存在，要覆蓋嗎？"))customers[idx]={...customers[idx],...c}}else customers.push(c);
+  saveCustomers();renderCustomers();
+  ["cCustomerNo","cPersonName","cFullName","cShortName","cMobile","cDeliveryAddress"].forEach(id=>document.getElementById(id).value="");
+}
+
+function renderCustomers(){
+  const kw=document.getElementById("customerSearch").value.trim().toLowerCase();
+  const list=customers.filter(c=>`${c.customerNo} ${c.personName} ${c.fullName} ${c.shortName} ${c.mobile} ${c.deliveryAddress}`.toLowerCase().includes(kw));
+  let html="<tr><th>操作</th><th>客戶編號</th><th>人員姓名</th><th>客戶全稱</th><th>客戶簡稱</th><th>行動電話</th><th>送貨地址</th></tr>";
+  list.forEach(c=>{
+    html+=`<tr>
+      <td><button class="edit" onclick="editCustomer(${c.id})">改</button> <button class="delete" onclick="deleteCustomer(${c.id})">X</button></td>
+      <td>${escapeHtml(c.customerNo)}</td>
+      <td>${escapeHtml(c.personName)}</td>
+      <td>${escapeHtml(c.fullName)}</td>
+      <td>${escapeHtml(c.shortName)}</td>
+      <td>${escapeHtml(c.mobile)}</td>
+      <td>${c.deliveryAddress?`<a href="${mapUrl(c.deliveryAddress)}" target="_blank">${escapeHtml(c.deliveryAddress)}</a>`:""}</td>
+    </tr>`;
+  });
+  document.getElementById("customerTable").innerHTML=html;
+}
+
+function editCustomer(id){
+  const c=customers.find(x=>x.id===id);if(!c)return;
+  const customerNo=prompt("客戶編號",c.customerNo||"");if(customerNo===null)return;
+  const personName=prompt("人員姓名",c.personName||"");if(personName===null)return;
+  const fullName=prompt("客戶全稱",c.fullName||"");if(fullName===null)return;
+  const shortName=prompt("客戶簡稱",c.shortName||"");if(shortName===null)return;
+  const mobile=prompt("行動電話",c.mobile||"");if(mobile===null)return;
+  const deliveryAddress=prompt("送貨地址",c.deliveryAddress||"");if(deliveryAddress===null)return;
+  Object.assign(c,{customerNo,personName,fullName,shortName,mobile,deliveryAddress});
+  saveCustomers();renderCustomers();
+}
+
+function deleteCustomer(id){
+  if(!confirm("確定刪除此客戶資料？"))return;
+  customers=customers.filter(c=>c.id!==id);saveCustomers();renderCustomers();
+}
+function backupAllData(){
+  const backup = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    jobs: jobs,
+    customers: customers
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  const ds = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  a.download = `派工表備份_${ds}.json`;
+  a.click();
+}
+
+function restoreBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!data.customers && !data.jobs){ alert("備份檔格式不正確"); return; }
+      if(data.customers && data.customers.length > 0){
+        if(confirm(`還原 ${data.customers.length} 筆客戶資料？（會覆蓋現有客戶資料）`)){
+          customers = data.customers;
+          saveCustomers();
+          renderCustomers();
+        }
+      }
+      if(data.jobs && data.jobs.length > 0){
+        if(confirm(`還原 ${data.jobs.length} 筆派工資料？（會覆蓋現有派工資料）`)){
+          jobs = data.jobs;
+          saveJobs();
+          renderSchedule();
+          renderJobList();
+        }
+      }
+      alert("還原完成！");
+    }catch(err){
+      alert("讀取備份失敗：" + err.message);
+    }
+    event.target.value = "";
+  };
+  reader.readAsText(file);
+}
+
+function clearCustomers(){
+  if(confirm("確定清空全部客戶資料？")){customers=[];saveCustomers();renderCustomers();document.getElementById("importStatus").innerHTML="已清空客戶資料。"}
+}
+function updateCustomerCodeList(){
+  const list=document.getElementById("customerCodeList");
+  list.innerHTML="";
+  customers.forEach(c=>{
+    const op=document.createElement("option");
+    op.value=c.customerNo||"";
+    op.textContent=`${c.customerNo||""} ${c.fullName||c.shortName||c.personName||""}`;
+    list.appendChild(op);
+  });
+}
+
+function cleanHeader(text){
+  return String(text||"").replace(/\s/g,"").trim();
+}
+
+function findHeaderIndex(headers, names){
+  const cleaned=headers.map(h=>cleanHeader(h));
+  for(const name of names){
+    const idx=cleaned.indexOf(cleanHeader(name));
+    if(idx>=0) return idx;
+  }
+  return -1;
+}
+
+function combinePhones(phoneA, phoneB){
+  const a=String(phoneA||"").trim();
+  const b=String(phoneB||"").trim();
+  const arr=[];
+  if(a) arr.push(a);
+  if(b && b!==a) arr.push(b);
+  return arr.join(" / ");
+}
+
+function normalizeCustomerFromArray(row, idx){
+  const customerNo = row[idx.customerNo] || "";
+  const personName = row[idx.personName] || "";
+  const fullName = row[idx.fullName] || "";
+  const shortName = row[idx.shortName] || "";
+  const mobile = combinePhones(row[idx.mobile], row[idx.contact1]);
+  const deliveryAddress = row[idx.deliveryAddress] || "";
+
+  return {
+    id:Date.now()+Math.floor(Math.random()*999999),
+    customerNo:String(customerNo||"").trim(),
+    personName:String(personName||"").trim(),
+    fullName:String(fullName||"").trim(),
+    shortName:String(shortName||"").trim(),
+    mobile:String(mobile||"").trim(),
+    deliveryAddress:String(deliveryAddress||"").trim()
+  };
+}
+
+function findCustomerSheet(workbook){
+  let best=null;
+  workbook.SheetNames.forEach(sheetName=>{
+    const sheet=workbook.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:false});
+    for(let r=0;r<Math.min(rows.length,30);r++){
+      const headers=rows[r]||[];
+      const idx={
+        customerNo:findHeaderIndex(headers,["客戶編號","客戶代號","客編"]),
+        personName:findHeaderIndex(headers,["人員姓名","姓名","聯絡人"]),
+        fullName:findHeaderIndex(headers,["客戶全稱","客戶名稱","全稱"]),
+        shortName:findHeaderIndex(headers,["客戶簡稱","簡稱"]),
+        mobile:findHeaderIndex(headers,["行動電話","手機"]),
+        contact1:findHeaderIndex(headers,["聯絡電話一","連絡電話一","聯絡電話1","連絡電話1"]),
+        deliveryAddress:findHeaderIndex(headers,["送貨地址","地址"])
+      };
+
+      let score=0;
+      Object.values(idx).forEach(v=>{if(v>=0)score++});
+      if(score>=4 && (!best || score>best.score)){
+        best={sheetName,rows,headerRow:r,headers,idx,score};
+      }
+    }
+  });
+  return best;
+}
+
+function importExcel(event){
+  const file=event.target.files[0];
+  if(!file)return;
+
+  if(typeof XLSX==="undefined"){
+    alert("Excel 讀取套件沒有載入成功，請確認有網路後再重新開啟 HTML 檔。");
+    return;
+  }
+
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const data=new Uint8Array(e.target.result);
+    const wb=XLSX.read(data,{type:"array"});
+    const found=findCustomerSheet(wb);
+
+    if(!found){
+      document.getElementById("importStatus").innerHTML="匯入失敗：找不到包含客戶欄位的工作表。請確認 Excel 有「客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、聯絡電話一、送貨地址」等欄位。";
+      alert("找不到可匯入的客戶資料欄位");
+      event.target.value="";
+      return;
+    }
+
+    let count=0;
+    let skipped=0;
+
+    for(let r=found.headerRow+1;r<found.rows.length;r++){
+      const row=found.rows[r]||[];
+      const c=normalizeCustomerFromArray(row,found.idx);
+
+      if(!c.customerNo && !c.fullName && !c.personName){
+        skipped++;
+        continue;
+      }
+
+      const idx=customers.findIndex(x=>x.customerNo&&x.customerNo===c.customerNo);
+      if(idx>=0) customers[idx]={...customers[idx],...c};
+      else customers.push(c);
+      count++;
+    }
+
+    saveCustomers();
+    renderCustomers();
+
+    document.getElementById("importStatus").innerHTML=
+      `已匯入 ${count} 筆客戶資料。來源工作表：${escapeHtml(found.sheetName)}，標題列：第 ${found.headerRow+1} 列。<br>`+
+      `顯示欄位只保留：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址。<br>`+
+      `行動電話欄已合併 Excel 的「行動電話」與「聯絡電話一」。`;
+
+    alert("已匯入 "+count+" 筆客戶資料");
+    event.target.value="";
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function clearListFilter(){
+  document.getElementById("listCustomerFilter").value="";
+  renderJobList();
+}
+
+function jumpToJobList(event, el){
+  event.stopPropagation();
+  const code = el.dataset.code || "";
+  const name = el.dataset.name || "";
+  const codeName = el.dataset.codename || "";
+  const kw = codeName || (code && name ? code+" "+name : code || name) || "";
+  showPage("listPage");
+  // 清月份篩選以顯示全部歷史
+  document.getElementById("listMonth").value = "";
+  const filterEl = document.getElementById("listCustomerFilter");
+  filterEl.value = kw;
+  renderJobList();
+  setTimeout(()=>{ document.getElementById("jobListTable").scrollIntoView({behavior:"smooth", block:"start"}); }, 150);
+}
+
+function renderJobList(){
+  const month = document.getElementById("listMonth").value;
+  const custFilter = (document.getElementById("listCustomerFilter")||{}).value || "";
+  const kw = custFilter.trim().toLowerCase();
+
+  const list = jobs
+    .filter(j => {
+      const monthOk = !month || String(j.date || "").slice(0,7) === month;
+      const custOk = !kw || [j.customerCode, j.customerName, j.codeName, j.orderNo]
+        .some(v => String(v||"").toLowerCase().includes(kw));
+      return monthOk && custOk;
+    })
+    .sort((a,b)=>(String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer)));
+
+  // 顯示篩選提示
+  const badge = document.getElementById("listFilterBadge");
+  if(badge){
+    if(kw){
+      badge.style.display="block";
+      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">🔍 篩選：「${escapeHtml(custFilter)}」　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
+    } else {
+      badge.style.display="none";
+    }
+  }
+
+  let html="<tr><th>操作</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
+
+  list.forEach(j=>{
+    const highlight = kw ? 'style="background:#fffde7;"' : '';
+    html+=`<tr ${highlight}>
+      <td><button class="edit" onclick="editJobForm(${j.id},event)">改</button> <button class="delete" onclick="deleteJob(${j.id})">X</button></td>
+      <td>${escapeHtml(j.engineer)}</td>
+      <td>${escapeHtml(j.date)}</td>
+      <td>${escapeHtml(j.startTime||j.time)}</td>
+      <td>${escapeHtml(j.endTime)}</td>
+      <td>${escapeHtml(j.orderNo)}</td>
+      <td>${escapeHtml(j.customerCode)}</td>
+      <td>${escapeHtml(j.customerName)}</td>
+      <td>${escapeHtml(j.codeName)}</td>
+      <td>${escapeHtml(j.phone)}</td>
+      <td>${escapeHtml(j.city)}</td>
+      <td>${escapeHtml(j.district)}</td>
+      <td>${j.address?`<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a>`:""}</td>
+      <td>${escapeHtml(j.workItem)}</td>
+      <td>${escapeHtml(j.workContent)}</td>
+      <td>${escapeHtml(j.amount)}</td>
+      <td>${escapeHtml(j.payment)}</td>
+    </tr>`;
+  });
+
+  document.getElementById("jobListTable").innerHTML=html;
+}
+
+function exportCustomers(){
+  const data=customers.map(c=>({
+    "客戶編號":c.customerNo,
+    "人員姓名":c.personName,
+    "客戶全稱":c.fullName,
+    "客戶簡稱":c.shortName,
+    "行動電話":c.mobile,
+    "送貨地址":c.deliveryAddress
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"客戶資料");
+  XLSX.writeFile(wb,"客戶資料.xlsx");
+}
+
+
+function enableDragScroll(){
+  const el=document.getElementById("scheduleWrap");
+  if(!el || el.dataset.dragReady==="1") return;
+  el.dataset.dragReady="1";
+
+  let isDown=false;
+  let startX=0;
+  let scrollLeft=0;
+
+  el.addEventListener("mousedown",function(e){
+    if(e.target.closest("button") || e.target.closest("a") || e.target.closest(".job")) return;
+    isDown=true;
+    startX=e.pageX - el.offsetLeft;
+    scrollLeft=el.scrollLeft;
+  });
+
+  el.addEventListener("mouseleave",function(){isDown=false;});
+  el.addEventListener("mouseup",function(){isDown=false;});
+
+  el.addEventListener("mousemove",function(e){
+    if(!isDown) return;
+    e.preventDefault();
+    const x=e.pageX - el.offsetLeft;
+    const walk=(x-startX)*1.3;
+    el.scrollLeft=scrollLeft-walk;
+  });
+}
+
+enableDragScroll();
+
+function getExportDateRange(){
+  const s1=document.getElementById("exportStartDate");
+  const e1=document.getElementById("exportEndDate");
+  const s2=document.getElementById("exportStartDateList");
+  const e2=document.getElementById("exportEndDateList");
+  let startDate=(s1&&s1.value)||(s2&&s2.value)||"";
+  let endDate=(e1&&e1.value)||(e2&&e2.value)||"";
+  const monthInput=document.getElementById("listMonth");
+  const month=monthInput ? monthInput.value : "";
+  if(!startDate && !endDate && month){
+    startDate=month+"-01";
+    const [y,m]=month.split("-").map(Number);
+    const last=new Date(y,m,0).getDate();
+    endDate=month+"-"+String(last).padStart(2,"0");
+  }
+  return {startDate,endDate};
+}
+
+function exportJobs(){
+  const {startDate,endDate}=getExportDateRange();
+  if(startDate && endDate && startDate>endDate){
+    alert("匯出起日不可大於迄日");
+    return;
+  }
+  const exportList = jobs.filter(j=>{
+    const d=String(j.date||"");
+    if(startDate && d<startDate) return false;
+    if(endDate && d>endDate) return false;
+    return true;
+  });
+
+  if(exportList.length===0){
+    alert("此日期區間沒有派工資料");
+    return;
+  }
+
+  const data=exportList.map(j=>({
+    "工程人員":j.engineer,
+    "排工日期":j.date,
+    "排工時間":j.startTime||j.time,
+    "結束時間":j.endTime,
+    "訂單單號":j.orderNo,
+    "客編":j.customerCode,
+    "客名":j.customerName,
+    "客編&客名":j.codeName,
+    "客人電話":j.phone,
+    "縣市":j.city,
+    "區域":j.district,
+    "地址":j.address,
+    "施工項目":j.workItem,
+    "施工內容":j.workContent,
+    "銷售金額":j.amount,
+    "付款方式":j.payment
+  }));
+
+  const ws=XLSX.utils.json_to_sheet(data);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"派工資料");
+  let fileName="派工資料.xlsx";
+  if(startDate || endDate){
+    fileName=`派工資料_${startDate||"不限"}_${endDate||"不限"}.xlsx`;
+  }
+  XLSX.writeFile(wb,fileName);
+}
+(function initExportRange(){
+  const today=formatDateLocal(new Date());
+  ["exportStartDate","exportStartDateList"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
+  ["exportEndDate","exportEndDateList"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
+})();
+
+renderCityChecks();
+updateCustomerCodeList();
+enableDragScroll();
+renderSchedule();
+renderCustomers();
+renderJobList();
+</script>
+
+<div id="fixedBottomScroll">
+  <div id="fixedBottomScrollInner"></div>
+</div>
+</body>
+</html>
