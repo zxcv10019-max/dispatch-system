@@ -802,6 +802,32 @@ body{
 }
 
 
+/* 暫押派工：尚未正式排日期 */
+.hold-job-card{
+  background:#e8eaf6 !important;
+  border:1px solid #7986cb !important;
+}
+.hold-job-card .card-main::before{
+  content:"暫押｜";
+  color:#3949ab;
+  font-weight:bold;
+}
+.hold-slot-active{
+  background:#e8eaf6 !important;
+}
+.hold-row td{
+  background:#eef0ff !important;
+}
+.hold-badge{
+  display:inline-block;
+  background:#3949ab;
+  color:#fff;
+  border-radius:999px;
+  padding:2px 8px;
+  font-size:11px;
+  font-weight:bold;
+}
+
 /* Google 登入同步狀態 */
 .header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .auth-panel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:normal}
@@ -909,8 +935,6 @@ body{
     <button onclick="scrollSchedule(-900)">← 左移</button>
     <button onclick="scrollSchedule(900)">右移 →</button>
     <button onclick="showPage('dispatchPage')">新增派工</button>
-    <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入舊派工 Excel</button>
-    <input type="file" id="jobExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importJobsExcel(event)">
     <label class="export-range-label">匯出起</label><input type="date" id="exportStartDate" class="export-date">
     <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDate" class="export-date">
     <label class="export-range-label">匯出起</label><input type="date" id="exportStartDateList" class="export-date">
@@ -1041,9 +1065,16 @@ body{
 <div id="listPage" class="page">
   <div class="toolbar">
     <input type="month" id="listMonth">
+    <select id="listHoldFilter" onchange="renderJobList()" title="派工狀態篩選">
+      <option value="normal">正式派工</option>
+      <option value="hold">目前暫押派工</option>
+      <option value="all">全部派工</option>
+    </select>
     <input type="text" id="listCustomerFilter" placeholder="🔍 搜尋客編 / 客名" style="min-width:180px;" oninput="renderJobList()">
     <button onclick="renderJobList()">查詢</button>
     <button onclick="clearListFilter()" style="background:#888;">清除篩選</button>
+    <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入派工 Excel</button>
+    <input type="file" id="jobExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importJobsExcel(event)">
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
   </div>
   <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
@@ -1409,6 +1440,10 @@ function addJobFromForm(){
   if(!job.customerCode&&!job.customerName){alert("請至少輸入客編或客名");return}
 
   const wasEditing = !!editingJobId;
+  if(wasEditing && job.date){
+    job.isHold=false;
+    job.holdReason="";
+  }
   if(editingJobId){
     const idx=jobs.findIndex(x=>x.id===editingJobId);
     if(idx>=0){
@@ -1849,7 +1884,8 @@ function renderSchedule(){
           span=Math.max(...cellJobs.map(j=>calcSpan(j)));
         }
 
-        html+=`<td class="slot ${cellJobs.length?`job-slot-active`:``}" rowspan="${span}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
+        const holdCls = cellJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
+        html+=`<td class="slot ${cellJobs.length?`job-slot-active`:``} ${holdCls}" rowspan="${span}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
         cellJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -1881,7 +1917,7 @@ function jobCard(j){
     ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
   </div>`;
 
-  return `<div class="job" style="" draggable="true" ondragstart="dragStart(${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料">${escapeHtml(codeName)}</div>
       <div class="actions">
@@ -2282,6 +2318,174 @@ function findCustomerSheet(workbook){
   return best;
 }
 
+
+function normalizeExcelDate(value){
+  if(value===undefined || value===null || value==="") return "";
+  if(value instanceof Date && !isNaN(value)) return formatDateLocal(value);
+  const raw=String(value).trim();
+  if(!raw) return "";
+  if(!isNaN(Number(raw)) && Number(raw)>20000){
+    const serial=Number(raw);
+    const utcDays=Math.floor(serial-25569);
+    const date=new Date(utcDays*86400*1000);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,"0")}-${String(date.getUTCDate()).padStart(2,"0")}`;
+  }
+  let s=raw.replace(/年|\//g,"-").replace(/月/g,"-").replace(/日/g,"").trim();
+  const m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m) return `${m[1]}-${String(Number(m[2])).padStart(2,"0")}-${String(Number(m[3])).padStart(2,"0")}`;
+  return raw;
+}
+
+function normalizeExcelTime(value){
+  if(value===undefined || value===null || value==="") return "";
+  if(value instanceof Date && !isNaN(value)){
+    return `${String(value.getHours()).padStart(2,"0")}:${String(value.getMinutes()).padStart(2,"0")}`;
+  }
+  const raw=String(value).trim();
+  if(!raw) return "";
+  const num=Number(raw);
+  if(!isNaN(num)){
+    let total=Math.round((num % 1) * 24 * 60);
+    if(total<0) total+=24*60;
+    const hh=Math.floor(total/60);
+    const mm=total%60;
+    return `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+  }
+  let s=raw.replace("上午","").replace("下午","").replace(/\s+/g," ").trim();
+  const ampm=/PM|下午/i.test(raw) ? "PM" : (/AM|上午/i.test(raw) ? "AM" : "");
+  const m=s.match(/(\d{1,2})[:：](\d{1,2})/);
+  if(m){
+    let h=Number(m[1]);
+    const mi=Number(m[2]);
+    if(ampm==="PM" && h<12) h+=12;
+    if(ampm==="AM" && h===12) h=0;
+    return `${String(h).padStart(2,"0")}:${String(mi).padStart(2,"0")}`;
+  }
+  return raw;
+}
+
+function findJobSheet(workbook){
+  let best=null;
+  workbook.SheetNames.forEach(sheetName=>{
+    const sheet=workbook.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:true});
+    for(let r=0;r<Math.min(rows.length,30);r++){
+      const headers=rows[r]||[];
+      const idx={
+        engineer:findHeaderIndex(headers,["工程人員","工程師","人員"]),
+        date:findHeaderIndex(headers,["排工日期","日期","施工日期"]),
+        startTime:findHeaderIndex(headers,["排工時間","開始時間","起始時間","時間"]),
+        endTime:findHeaderIndex(headers,["結束時間","完工時間","迄時"]),
+        orderNo:findHeaderIndex(headers,["訂單單號","單號","訂單號"]),
+        customerCode:findHeaderIndex(headers,["客編","客戶編號","客戶代號"]),
+        customerName:findHeaderIndex(headers,["客名","客戶名稱","客戶全稱","姓名"]),
+        codeName:findHeaderIndex(headers,["客編&客名","客編客名","客戶"]),
+        phone:findHeaderIndex(headers,["客人電話","電話","行動電話","手機"]),
+        city:findHeaderIndex(headers,["縣市","城市"]),
+        district:findHeaderIndex(headers,["區域","鄉鎮區","地區"]),
+        address:findHeaderIndex(headers,["地址","送貨地址","施工地址","安裝地址"]),
+        workItem:findHeaderIndex(headers,["施工項目","項目","工程項目"]),
+        workContent:findHeaderIndex(headers,["施工內容","內容","備註"]),
+        amount:findHeaderIndex(headers,["銷售金額","金額","收款金額"]),
+        payment:findHeaderIndex(headers,["付款方式","付款"])
+      };
+      let score=0;
+      [idx.engineer,idx.date,idx.startTime,idx.customerCode,idx.customerName,idx.address,idx.workItem].forEach(v=>{if(v>=0)score++});
+      if(score>=3 && (!best || score>best.score)){
+        best={sheetName,rows,headerRow:r,headers,idx,score};
+      }
+    }
+  });
+  return best;
+}
+
+function normalizeJobFromArray(row, idx){
+  const get=(key)=>idx[key]>=0 ? row[idx[key]] : "";
+  const address=String(get("address")||"").trim();
+  const p=parseTaiwanAddress(address);
+  const startTime=normalizeExcelTime(get("startTime"));
+  const endTime=normalizeExcelTime(get("endTime"));
+  const customerCode=String(get("customerCode")||"").trim();
+  const customerName=String(get("customerName")||"").trim();
+  const codeName=String(get("codeName")||"").trim() || `${customerCode} ${customerName}`.trim();
+  return {
+    id:Date.now()+Math.floor(Math.random()*999999),
+    engineer:normalizeEngineerName(String(get("engineer")||"").trim()),
+    date:normalizeExcelDate(get("date")),
+    startTime:startTime,
+    time:startTime,
+    endTime:endTime || startTime,
+    orderNo:String(get("orderNo")||"").trim(),
+    customerCode:customerCode,
+    customerName:customerName,
+    codeName:codeName,
+    phone:String(get("phone")||"").trim(),
+    city:String(get("city")||"").trim() || p.city,
+    district:String(get("district")||"").trim() || p.district,
+    address:address,
+    workItem:String(get("workItem")||"").trim(),
+    workContent:String(get("workContent")||"").trim(),
+    amount:String(get("amount")||"").trim(),
+    payment:String(get("payment")||"").trim(),
+    isHold:false
+  };
+}
+
+function importJobsExcel(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  if(typeof XLSX==="undefined"){
+    alert("Excel 讀取套件沒有載入成功，請確認有網路後再重新整理網頁。");
+    return;
+  }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=new Uint8Array(e.target.result);
+      const wb=XLSX.read(data,{type:"array",cellDates:false});
+      const found=findJobSheet(wb);
+      if(!found){
+        alert("找不到可匯入的派工資料欄位。請確認 Excel 有工程人員、日期、排工時間、客編/客名等欄位。");
+        event.target.value="";
+        return;
+      }
+      let count=0, skipped=0, holdCount=0;
+      for(let r=found.headerRow+1;r<found.rows.length;r++){
+        const row=found.rows[r]||[];
+        const j=normalizeJobFromArray(row,found.idx);
+        if(!j.engineer && !j.date && !j.customerCode && !j.customerName && !j.orderNo && !j.startTime){
+          skipped++;
+          continue;
+        }
+        if(!j.startTime){
+          skipped++;
+          continue;
+        }
+        // 沒有日期但有時間/客戶資料：視為「暫押工程時間」，保留在派工明細的暫押清單，不排進正式派工表。
+        if(!j.date){
+          j.isHold = true;
+          j.holdReason = "缺排工日期，暫押工程時間";
+          holdCount++;
+        }
+        jobs.push(j);
+        count++;
+      }
+      saveJobs();
+      renderSchedule();
+      renderJobList();
+      showToast(`✅ 已匯入 ${count} 筆派工資料`);
+      writeLog("import", { type:"派工資料", count:count, holdCount:holdCount, sheetName:found.sheetName });
+      alert(`已匯入 ${count} 筆派工資料${holdCount?`，其中 ${holdCount} 筆為暫押派工`:""}${skipped?`，略過 ${skipped} 筆空白或缺時間資料`:""}`);
+      event.target.value="";
+    }catch(err){
+      console.error(err);
+      alert("匯入失敗："+(err.message||err));
+      event.target.value="";
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function importExcel(event){
   const file=event.target.files[0];
   if(!file)return;
@@ -2338,6 +2542,8 @@ function importExcel(event){
 
 function clearListFilter(){
   document.getElementById("listCustomerFilter").value="";
+  const hf=document.getElementById("listHoldFilter");
+  if(hf) hf.value="normal";
   renderJobList();
 }
 
@@ -2358,37 +2564,48 @@ function jumpToJobList(event, el){
 
 function renderJobList(){
   const month = document.getElementById("listMonth").value;
+  const holdFilter = (document.getElementById("listHoldFilter")||{}).value || "normal";
   const custFilter = (document.getElementById("listCustomerFilter")||{}).value || "";
   const kw = custFilter.trim().toLowerCase();
 
   const list = jobs
     .filter(j => {
-      const monthOk = !month || String(j.date || "").slice(0,7) === month;
+      const isHold = !!j.isHold || !j.date;
+      const holdOk = holdFilter==="all" || (holdFilter==="hold" ? isHold : !isHold);
+      const monthOk = holdFilter==="hold" || !month || String(j.date || "").slice(0,7) === month;
       const custOk = !kw || [j.customerCode, j.customerName, j.codeName, j.orderNo]
         .some(v => String(v||"").toLowerCase().includes(kw));
-      return monthOk && custOk;
+      return holdOk && monthOk && custOk;
     })
-    .sort((a,b)=>(String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer)));
+    .sort((a,b)=>{
+      const ah=(!!a.isHold || !a.date) ? 0 : 1;
+      const bh=(!!b.isHold || !b.date) ? 0 : 1;
+      if(ah!==bh) return ah-bh;
+      return (String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer));
+    });
 
   // 顯示篩選提示
   const badge = document.getElementById("listFilterBadge");
   if(badge){
-    if(kw){
+    const holdText = holdFilter==="hold" ? "目前暫押派工" : (holdFilter==="all" ? "全部派工" : "正式派工");
+    if(kw || holdFilter!=="normal"){
       badge.style.display="block";
-      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">🔍 篩選：「${escapeHtml(custFilter)}」　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
+      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">${escapeHtml(holdText)}${kw?`　🔍 篩選：「${escapeHtml(custFilter)}」`:""}　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
     } else {
       badge.style.display="none";
     }
   }
 
-  let html="<tr><th>操作</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
+  let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
 
   list.forEach(j=>{
+    const isHold = !!j.isHold || !j.date;
     const highlight = kw ? 'style="background:#fffde7;"' : '';
-    html+=`<tr ${highlight}>
+    html+=`<tr class="${isHold?"hold-row":""}" ${highlight}>
       <td><button class="edit" onclick="editJobForm(${j.id},event)">改</button> <button class="delete" onclick="deleteJob(${j.id})">X</button></td>
+      <td>${isHold?'<span class="hold-badge">暫押</span>':'正式'}</td>
       <td>${escapeHtml(j.engineer)}</td>
-      <td>${escapeHtml(j.date)}</td>
+      <td>${isHold?'<span style="color:#3949ab;font-weight:bold;">暫押未排日期</span>':escapeHtml(j.date)}</td>
       <td>${escapeHtml(j.startTime||j.time)}</td>
       <td>${escapeHtml(j.endTime)}</td>
       <td>${escapeHtml(j.orderNo)}</td>
