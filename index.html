@@ -906,6 +906,19 @@ body{
 .log-user-cell{font-size:12px;line-height:1.5}
 .log-user-cell .user-email{color:#0066cc;font-weight:bold}
 .log-user-cell .user-name{color:#666}
+
+/* ===== 權限角色管理 ===== */
+.viewer-mode .edit, .viewer-mode .delete, .viewer-mode .job-resize-handle{display:none!important}
+.role-panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:16px}
+.role-panel h3{margin:0 0 10px;font-size:16px;color:#2f3542}
+.role-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.role-row input{min-width:260px}
+.role-list{font-size:13px;border-top:1px solid #eee;padding-top:8px}
+.role-item{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f3f3}
+.role-item code{background:#f5f5f5;padding:2px 6px;border-radius:4px}
+.role-badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:bold;background:#e8f4fd;color:#155a8a}
+.role-badge.viewer{background:#eee;color:#555}.role-badge.editor{background:#d4edda;color:#155724}.role-badge.admin{background:#fde2e2;color:#922b21}
+
 </style>
 </head>
 
@@ -1149,65 +1162,156 @@ function signOutGoogle(){
   if(firebaseAuth) firebaseAuth.signOut();
 }
 
+const ADMIN_EMAIL = "zxcv10019@gmail.com";
+let currentRole = "viewer"; // admin / editor / viewer
+let rolesCache = [];
+
+function emailKey(email){
+  return String(email||"").trim().toLowerCase().replaceAll(".",",");
+}
+function isAdmin(){
+  return currentUser && String(currentUser.email||"").toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+function canEdit(){
+  return currentRole === "admin" || currentRole === "editor";
+}
+function requireEdit(action="操作"){
+  if(canEdit()) return true;
+  alert(`你的帳號目前是「查看」權限，不能${action}。`);
+  return false;
+}
+function sharedRootRef(){
+  if(!firebaseDb) return null;
+  return firebaseDb.collection("dispatchShared").doc("main");
+}
+function chunksColRef(){
+  const root=sharedRootRef();
+  return root ? root.collection("chunks") : null;
+}
+function rolesColRef(){
+  const root=sharedRootRef();
+  return root ? root.collection("roles") : null;
+}
 function cloudDocRef(){
-  if(!firebaseDb || !currentUser) return null;
-  return firebaseDb.collection("users").doc(currentUser.uid).collection("dispatchSystem").doc("main");
+  return sharedRootRef();
 }
 
+async function loadUserRole(){
+  if(!currentUser || !firebaseDb){ currentRole="viewer"; applyRoleUI(); return; }
+  if(isAdmin()){ currentRole="admin"; applyRoleUI(); return; }
+  try{
+    const doc = await rolesColRef().doc(emailKey(currentUser.email)).get();
+    const role = doc.exists ? (doc.data().role || "viewer") : "viewer";
+    currentRole = ["admin","editor","viewer"].includes(role) ? role : "viewer";
+  }catch(e){
+    console.warn("讀取角色失敗，暫以查看權限處理", e);
+    currentRole="viewer";
+  }
+  applyRoleUI();
+}
+
+function roleLabel(){
+  if(currentRole==="admin") return "管理員";
+  if(currentRole==="editor") return "可編輯";
+  return "僅查看";
+}
 function localDataExists(){
   return (Array.isArray(jobs) && jobs.length>0) || (Array.isArray(customers) && customers.length>0);
 }
+function chunkArray(arr, size){
+  const out=[];
+  for(let i=0;i<(arr||[]).length;i+=size) out.push(arr.slice(i,i+size));
+  return out;
+}
 
-function saveCloudNow(){
-  const ref=cloudDocRef();
-  if(!ref || isApplyingRemote) return;
+async function saveCloudNow(){
+  if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
+  if(!canEdit()){
+    setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}，不可編輯）`, "ok");
+    return;
+  }
+  if(isApplyingRemote) return;
+  const root=sharedRootRef();
+  const chunks=chunksColRef();
+  if(!root || !chunks) return;
   setSyncStatus("同步中…", "wait");
-  ref.set({
-    jobs: jobs || [],
-    customers: customers || [],
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
-    clientImportToken: importProtectToken || ""
-  }, {merge:true}).then(()=>{
-    setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
-  }).catch(err=>{
+  const token = importProtectToken || ("save_" + Date.now());
+  try{
+    const oldSnap = await chunks.get();
+    let batch = firebaseDb.batch();
+    let writes = 0;
+    async function commitIfNeeded(force=false){
+      if(writes >= 430 || (force && writes>0)){
+        await batch.commit();
+        batch = firebaseDb.batch();
+        writes = 0;
+      }
+    }
+    for(const d of oldSnap.docs){
+      batch.delete(d.ref); writes++;
+      await commitIfNeeded();
+    }
+    const jobChunks = chunkArray(jobs || [], 120);
+    const customerChunks = chunkArray(customers || [], 250);
+    jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
+    customerChunks.forEach((items,i)=>{ batch.set(chunks.doc(`customers_${String(i).padStart(4,"0")}`), {type:"customers", index:i, items}); writes++; });
+    batch.set(root, {
+      chunked:true,
+      jobsChunkCount:jobChunks.length,
+      customersChunkCount:customerChunks.length,
+      jobsCount:(jobs||[]).length,
+      customersCount:(customers||[]).length,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAtLocal: new Date().toISOString(),
+      updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
+      clientImportToken: token
+    }, {merge:true}); writes++;
+    await commitIfNeeded(true);
+    setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
+  }catch(err){
     console.error("Firestore 同步失敗", err);
-    setSyncStatus("同步失敗，請檢查 Firestore 規則", "err");
-  });
+    setSyncStatus("同步失敗，請檢查 Firestore 規則/權限", "err");
+  }
 }
 
 function queueCloudSave(){
-  if(!currentUser || isApplyingRemote) return;
+  if(!currentUser || isApplyingRemote || !canEdit()) return;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer=setTimeout(saveCloudNow, 650);
 }
 
-function applyRemoteData(data){
-  const remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
-  const remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
+async function loadCloudChunks(meta){
+  const chunks=chunksColRef();
+  if(!chunks) return {jobs:[], customers:[]};
+  const snap = await chunks.get();
+  const jobParts=[], customerParts=[];
+  snap.forEach(doc=>{
+    const d=doc.data()||{};
+    if(d.type==="jobs") jobParts[d.index||0]=Array.isArray(d.items)?d.items:[];
+    if(d.type==="customers") customerParts[d.index||0]=Array.isArray(d.items)?d.items:[];
+  });
+  return {jobs: jobParts.flat(), customers: customerParts.flat()};
+}
+
+async function applyRemoteData(data){
   const remoteToken = data.clientImportToken || "";
   const now = Date.now();
-
-  // 保護期內：略過所有不帶本次 token 的舊雲端快照
-  if(importProtectActive && now < ignoreRemoteUntil){
-    if(remoteToken !== importProtectToken){
-      console.warn("保護期：略過舊雲端快照，避免蓋掉本機匯入資料", {remoteToken, importProtectToken});
-      setSyncStatus("匯入資料上傳中，等待雲端確認…", "wait");
-      return;
-    }
-    // 雲端已收到本次匯入 token，解除保護
+  if(importProtectActive && now < ignoreRemoteUntil && remoteToken !== importProtectToken){
+    setSyncStatus("匯入資料上傳中，等待雲端確認…", "wait");
+    return;
+  }
+  let remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
+  let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
+  if(data.chunked){
+    const loaded = await loadCloudChunks(data);
+    remoteJobs = loaded.jobs;
+    remoteCustomers = loaded.customers;
+  }
+  if(importProtectActive && remoteToken === importProtectToken){
     importProtectActive = false;
     ignoreRemoteUntil = 0;
     importProtectToken = "";
   }
-
-  // 額外保護：雲端資料筆數遠少於本機（超過 3 筆差距），且仍在保護期延伸期，不覆蓋
-  if(now < ignoreRemoteUntil + 5000 && remoteJobs && remoteJobs.length + 3 < (jobs || []).length){
-    console.warn("略過偏少的雲端資料：remote", remoteJobs.length, "local", (jobs||[]).length);
-    setSyncStatus("同步中，保留本機資料…", "wait");
-    return;
-  }
-
   isApplyingRemote = true;
   if(remoteJobs) jobs = remoteJobs;
   if(remoteCustomers) customers = remoteCustomers;
@@ -1218,35 +1322,33 @@ function applyRemoteData(data){
   renderCustomers();
   renderJobList();
   renderAvailableSlots();
+  applyRoleUI();
   isApplyingRemote = false;
+  applyRoleUI();
 }
 
 function startCloudSync(){
   if(!currentUser || !firebaseDb) return;
   if(cloudUnsubscribe) cloudUnsubscribe();
-  const ref = cloudDocRef();
-  setSyncStatus("讀取雲端資料…", "wait");
-  let firstSnapshot = true;
-  cloudUnsubscribe = ref.onSnapshot(doc=>{
-    // 保護期內的第一個快照幾乎必然是匯入/還原前的舊資料，直接跳過
-    if(firstSnapshot && importProtectActive){
-      firstSnapshot = false;
-      setSyncStatus("匯入資料上傳中…", "wait");
-      return;
-    }
-    firstSnapshot = false;
-
-    if(doc.exists){
-      const data = doc.data() || {};
-      applyRemoteData(data);
-      setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
-    }else{
-      if(localDataExists()){
-        saveCloudNow();
-        showToast("✅ 已將本機資料上傳到雲端");
+  const ref = sharedRootRef();
+  setSyncStatus("讀取共用派工表…", "wait");
+  cloudUnsubscribe = ref.onSnapshot(async doc=>{
+    try{
+      if(doc.exists){
+        const data = doc.data() || {};
+        await applyRemoteData(data);
+        setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
       }else{
-        setSyncStatus(`已登入：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
+        if(localDataExists() && canEdit()){
+          await saveCloudNow();
+          showToast("✅ 已建立共用派工表");
+        }else{
+          setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, "ok");
+        }
       }
+    }catch(err){
+      console.error("讀取共用資料失敗", err);
+      setSyncStatus("共用資料讀取失敗", "err");
     }
   }, err=>{
     console.error("Firestore 讀取失敗", err);
@@ -1257,8 +1359,55 @@ function startCloudSync(){
 function stopCloudSync(){
   if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
   currentUser=null;
+  currentRole="viewer";
+  applyRoleUI();
   setSyncStatus("未登入，資料暫存在本機", "wait");
 }
+
+function applyRoleUI(){
+  const readOnly = currentUser && !canEdit();
+  document.body.classList.toggle("viewer-mode", !!readOnly);
+  const statusExtra = currentUser ? `（${roleLabel()}）` : "";
+  if(currentUser){ setSyncStatus(`已登入：${currentUser.email}${statusExtra}`, canEdit()?"ok":"wait"); }
+  const denyWords=["儲存派工","清空派工","新增 / 更新客戶","匯入 Excel","還原備份","清空客戶","匯入派工 Excel"];
+  document.querySelectorAll("button").forEach(btn=>{
+    const txt=(btn.textContent||"").trim();
+    const on=btn.getAttribute("onclick")||"";
+    const isEditBtn = denyWords.some(w=>txt.includes(w)) || /addJobFromForm|clearAllJobs|addCustomer|clearCustomers|importJobsExcel|importExcel|restoreBackup|deleteJob|editJobForm/.test(on);
+    if(isEditBtn){ btn.disabled=!!readOnly; btn.title=readOnly?"你的帳號是查看權限": ""; }
+  });
+}
+
+async function loadRoles(){
+  if(!firebaseDb || !isAdmin()) return;
+  const snap = await rolesColRef().get();
+  rolesCache = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>(a.email||"").localeCompare(b.email||""));
+  renderRoles();
+}
+function renderRoles(){
+  const box=document.getElementById("roleList");
+  if(!box) return;
+  if(!rolesCache.length){ box.innerHTML='<div style="color:#888">目前尚未設定其他帳號權限。</div>'; return; }
+  box.innerHTML = rolesCache.map(r=>`<div class="role-item"><span><code>${escapeHtml(r.email||r.id)}</code> <span class="role-badge ${escapeHtml(r.role||"viewer")}">${escapeHtml(r.role||"viewer")}</span></span><button onclick="deleteRole('${escapeHtml(r.id)}')" style="background:#b33939;padding:4px 8px;font-size:12px">刪除</button></div>`).join("");
+}
+async function saveRole(){
+  if(!isAdmin()) return alert("只有主帳號可以設定權限");
+  const email=(document.getElementById("roleEmail")?.value||"").trim().toLowerCase();
+  const role=document.getElementById("roleSelect")?.value||"viewer";
+  if(!email) return alert("請輸入 email");
+  if(email===ADMIN_EMAIL.toLowerCase()) return alert("主帳號固定為 admin，不需要設定");
+  await rolesColRef().doc(emailKey(email)).set({email, role, updatedAt:new Date().toISOString(), updatedBy:currentUser.email},{merge:true});
+  document.getElementById("roleEmail").value="";
+  await loadRoles();
+  showToast("✅ 權限已更新");
+}
+async function deleteRole(id){
+  if(!isAdmin()) return;
+  if(!confirm("確定刪除此帳號權限？刪除後會變成僅查看。")) return;
+  await rolesColRef().doc(id).delete();
+  await loadRoles();
+}
+
 
 if(firebaseAuth){
   firebaseAuth.onAuthStateChanged(user=>{
@@ -1269,11 +1418,14 @@ if(firebaseAuth){
     if(user){
       if(loginBtn) loginBtn.style.display="none";
       if(logoutBtn) logoutBtn.style.display="inline-block";
-      startCloudSync();
-      // 記錄登入
-      writeLog("login", {
-        device: navigator.userAgent.includes("Mobile") ? "手機" : "電腦",
-        browser: navigator.userAgent.slice(0,80)
+      loadUserRole().then(()=>{
+        startCloudSync();
+        if(isAdmin()) loadRoles();
+        writeLog("login", {
+          device: navigator.userAgent.includes("Mobile") ? "手機" : "電腦",
+          browser: navigator.userAgent.slice(0,80),
+          role: currentRole
+        });
       });
     }else{
       if(wasLoggedIn){
@@ -1470,6 +1622,7 @@ function getFormJob(){
 }
 
 function addJobFromForm(){
+  if(!requireEdit("新增/修改派工")) return;
   const job=getFormJob();
   if(!job.engineer||!job.date||!job.startTime){alert("請填工程人員、排工日期、排工時間");return}
   if(!job.customerCode&&!job.customerName){alert("請至少輸入客編或客名");return}
@@ -1779,6 +1932,7 @@ let resizeStartEnd = "";
 let resizeRowHeight = 48; // px per 30min slot
 
 function startResizeJob(e, jobId){
+  if(!requireEdit("調整時間")) return;
   e.preventDefault();
   e.stopPropagation();
   resizingJobId = jobId;
@@ -1996,6 +2150,7 @@ function updateJobStatus(id, status){
 }
 
 function toggleJobStatusFlag(id, flag, checked){
+  if(!requireEdit("勾選狀態")){ if(event&&event.target) event.target.checked=!checked; return; }
   const j = jobs.find(x=>x.id===id);
   if(!j) return;
   let arr = Array.isArray(j.statusList) ? [...j.statusList] : (j.status ? [j.status] : []);
@@ -2082,6 +2237,7 @@ function dropJob(e,engineer,time){
 }
 
 function dropJobMulti(e,dateStr,engineer,time){
+  if(!requireEdit("拖拉派工")){ e.preventDefault(); return; }
   e.preventDefault();
   e.currentTarget.classList.remove("drop-hover");
   jobs.forEach(j=>{
@@ -2104,12 +2260,14 @@ function dropJobMulti(e,dateStr,engineer,time){
   renderJobList();
 }
 function deleteJob(id){
+  if(!requireEdit("刪除派工")) return;
   if(!confirm("確定刪除此筆派工？"))return;
   const j=jobs.find(x=>x.id===id);
   if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer});
   jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();
 }
 function editJobForm(id,event){
+  if(!requireEdit("修改派工")) return;
   if(event) event.stopPropagation();
   const j=jobs.find(x=>x.id===id);
   if(!j) return;
@@ -2154,6 +2312,7 @@ function editJob(id){
   saveJobs();renderSchedule();renderJobList();
 }
 function clearAllJobs(){
+  if(!requireEdit("清空派工")) return;
   if(confirm("確定清空全部派工資料？")){
     writeLog("clear",{type:"派工",count:jobs.length});
     jobs=[];saveJobs();renderSchedule();renderJobList();
@@ -2161,6 +2320,7 @@ function clearAllJobs(){
 }
 
 function addCustomer(){
+  if(!requireEdit("新增/修改客戶")) return;
   const customerNo=document.getElementById("cCustomerNo").value.trim();
   if(!customerNo){alert("請輸入客戶編號");return}
   const c={
@@ -2218,6 +2378,7 @@ function editCustomer(id){
 }
 
 function deleteCustomer(id){
+  if(!requireEdit("刪除客戶")) return;
   if(!confirm("確定刪除此客戶資料？"))return;
   const c=customers.find(x=>x.id===id);
   if(c) writeLog("customer_delete",{customerNo:c.customerNo||"",fullName:c.fullName||c.personName||""});
@@ -2240,6 +2401,7 @@ function backupAllData(){
 }
 
 function restoreBackup(event){
+  if(!requireEdit("還原備份")){ event.target.value=""; return; }
   const file = event.target.files[0];
   if(!file) return;
   const reader = new FileReader();
@@ -2280,6 +2442,7 @@ function restoreBackup(event){
 }
 
 function clearCustomers(){
+  if(!requireEdit("清空客戶")) return;
   if(confirm("確定清空全部客戶資料？")){customers=[];saveCustomers();renderCustomers();document.getElementById("importStatus").innerHTML="已清空客戶資料。"}
 }
 function updateCustomerCodeList(){
@@ -2475,6 +2638,7 @@ function normalizeJobFromArray(row, idx){
 }
 
 function importJobsExcel(event){
+  if(!requireEdit("匯入派工")){ event.target.value=""; return; }
   const file=event.target.files[0];
   if(!file)return;
   if(typeof XLSX==="undefined"){
@@ -2535,6 +2699,7 @@ function importJobsExcel(event){
 }
 
 function importExcel(event){
+  if(!requireEdit("匯入客戶")){ event.target.value=""; return; }
   const file=event.target.files[0];
   if(!file)return;
 
@@ -2798,11 +2963,7 @@ renderCustomers();
 renderJobList();
 
 // ===== 後台管理系統 =====
-const ADMIN_EMAIL = "zxcv10019@gmail.com";
 let adminLogs = []; // 本地快取的日誌
-
-// 判斷是否為管理員
-function isAdmin(){ return currentUser && currentUser.email === ADMIN_EMAIL; }
 
 // 日誌寫入 Firestore
 async function writeLog(action, detail = {}){
@@ -2974,6 +3135,7 @@ function showAdminPage(){
   }
   document.getElementById("adminLockScreen").style.display="none";
   document.getElementById("adminContent").style.display="block";
+  loadRoles();
   loadAdminLogs();
 }
 
@@ -2985,6 +3147,7 @@ function showAdminPage(){
     if(tab) tab.style.display="inline-block";
   }
 })();
+applyRoleUI();
 </script>
 
 <!-- ===== 隱藏後台頁面 ===== -->
@@ -3006,6 +3169,21 @@ function showAdminPage(){
   <!-- 有權限時顯示 -->
   <div id="adminContent" style="display:none">
     <div class="admin-body">
+
+      <!-- 權限管理 -->
+      <div class="role-panel">
+        <h3>帳號權限設定</h3>
+        <div class="role-row">
+          <input id="roleEmail" type="email" placeholder="輸入要設定的 Google Email">
+          <select id="roleSelect">
+            <option value="editor">可編輯</option>
+            <option value="viewer">僅查看</option>
+          </select>
+          <button onclick="saveRole()" style="background:#218c74">儲存權限</button>
+        </div>
+        <div class="role-list" id="roleList">載入中…</div>
+      </div>
+
       <!-- 統計卡片 -->
       <div class="admin-stats" id="adminStats"></div>
 
