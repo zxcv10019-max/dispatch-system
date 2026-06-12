@@ -812,6 +812,74 @@ body{
 .sync-dot.ok{background:#2ecc71}.sync-dot.wait{background:#f1c40f}.sync-dot.err{background:#e74c3c}
 @media(max-width:700px){.header{align-items:flex-start;flex-direction:column}.auth-panel{width:100%}.auth-status{max-width:100%;font-size:12px}}
 
+/* ===== 隱藏後台樣式 ===== */
+#adminTab{display:none}
+#adminPage{display:none}
+#adminPage.active{display:block}
+.admin-header{
+  background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+  color:#e2e8f0;padding:18px 20px;display:flex;align-items:center;gap:12px;
+  border-bottom:3px solid #e94560;
+}
+.admin-header h2{margin:0;font-size:20px;letter-spacing:1px}
+.admin-header .admin-badge{
+  background:#e94560;color:#fff;font-size:11px;padding:2px 8px;
+  border-radius:999px;font-weight:bold;letter-spacing:1px;
+}
+.admin-body{padding:16px;max-width:1200px}
+.admin-filter{
+  background:#fff;border:1px solid #ddd;padding:12px 16px;
+  border-radius:8px;margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+}
+.admin-filter label{font-size:13px;font-weight:bold;color:#555}
+.admin-filter input,.admin-filter select{font-size:13px;padding:6px 10px}
+.admin-stats{
+  display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;
+}
+.admin-stat-card{
+  background:#fff;border:1px solid #e2e8f0;border-radius:8px;
+  padding:14px 20px;flex:1;min-width:140px;text-align:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.admin-stat-card .stat-num{font-size:28px;font-weight:bold;color:#2f3542}
+.admin-stat-card .stat-label{font-size:12px;color:#888;margin-top:2px}
+.admin-stat-card.login-stat .stat-num{color:#2ecc71}
+.admin-stat-card.add-stat .stat-num{color:#3498db}
+.admin-stat-card.edit-stat .stat-num{color:#f39c12}
+.admin-stat-card.del-stat .stat-num{color:#e74c3c}
+.log-table-wrap{background:#fff;border:1px solid #ddd;border-radius:8px;overflow:auto;max-height:calc(100vh - 380px)}
+.log-table-wrap table{width:100%;border-collapse:collapse;min-width:860px}
+.log-table-wrap th{
+  background:#2f3542;color:#fff;padding:10px 12px;text-align:left;
+  font-size:13px;position:sticky;top:0;z-index:2;
+}
+.log-table-wrap td{padding:9px 12px;font-size:13px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+.log-table-wrap tr:hover td{background:#f8f9fa}
+.log-action-badge{
+  display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;white-space:nowrap;
+}
+.badge-login{background:#d5f5e3;color:#1e8449}
+.badge-logout{background:#fdebd0;color:#a04000}
+.badge-add{background:#d6eaf8;color:#1a5276}
+.badge-edit{background:#fef9e7;color:#7d6608}
+.badge-delete{background:#fadbd8;color:#922b21}
+.badge-customer{background:#e8daef;color:#6c3483}
+.badge-drag{background:#d5d8dc;color:#424949}
+.badge-resize{background:#d1f2eb;color:#0e6655}
+.badge-import{background:#e8f8f5;color:#0b6e4f}
+.badge-clear{background:#f9ebea;color:#922b21}
+.log-detail{color:#666;font-size:12px;line-height:1.5}
+.admin-no-data{text-align:center;padding:40px;color:#aaa;font-size:15px}
+.admin-lock{
+  background:#1a1a2e;min-height:100vh;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:16px;
+}
+.admin-lock .lock-icon{font-size:60px}
+.admin-lock .lock-msg{color:#e2e8f0;font-size:16px;text-align:center;line-height:1.6}
+.admin-lock .lock-sub{color:#718096;font-size:13px}
+.log-user-cell{font-size:12px;line-height:1.5}
+.log-user-cell .user-email{color:#0066cc;font-weight:bold}
+.log-user-cell .user-name{color:#666}
 </style>
 </head>
 
@@ -830,6 +898,7 @@ body{
   <button id="tabDispatch" onclick="showPage('dispatchPage')">新增派工資料</button>
   <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
   <button id="tabList" onclick="showPage('listPage')">派工明細</button>
+  <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
 </div>
 
 <div id="schedulePage" class="page active">
@@ -1127,6 +1196,7 @@ function stopCloudSync(){
 
 if(firebaseAuth){
   firebaseAuth.onAuthStateChanged(user=>{
+    const wasLoggedIn = !!currentUser;
     currentUser=user || null;
     const loginBtn=document.getElementById("googleLoginBtn");
     const logoutBtn=document.getElementById("googleLogoutBtn");
@@ -1134,7 +1204,25 @@ if(firebaseAuth){
       if(loginBtn) loginBtn.style.display="none";
       if(logoutBtn) logoutBtn.style.display="inline-block";
       startCloudSync();
+      // 記錄登入
+      writeLog("login", {
+        device: navigator.userAgent.includes("Mobile") ? "手機" : "電腦",
+        browser: navigator.userAgent.slice(0,80)
+      });
     }else{
+      if(wasLoggedIn){
+        // 記錄登出（用暫存的currentUser寫，但已清空，改用直接寫）
+        if(firebaseDb){
+          const uid = wasLoggedIn;
+          firebaseDb.collection("adminLogs").add({
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            tsLocal: new Date().toISOString(),
+            action: "logout",
+            detail: {},
+            user: { uid:"", email:"(登出)", name:"" }
+          }).catch(()=>{});
+        }
+      }
       if(loginBtn) loginBtn.style.display="inline-block";
       if(logoutBtn) logoutBtn.style.display="none";
       stopCloudSync();
@@ -1203,6 +1291,11 @@ function showPage(pageId){
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+  if(pageId==="adminPage"){
+    const tab=document.getElementById("adminTab");
+    if(tab) tab.classList.add("active");
+    showAdminPage();
+  }
 }
 
 function saveJobs(){
@@ -1321,12 +1414,14 @@ function addJobFromForm(){
     if(idx>=0){
       jobs[idx]={...jobs[idx], ...job, id:editingJobId};
       saveJobs();
+      writeLog("edit", { codeName:jobs[idx].codeName||jobs[idx].customerName||"", date:jobs[idx].date, engineer:jobs[idx].engineer, startTime:jobs[idx].startTime, endTime:jobs[idx].endTime });
       editingJobId=null;
       document.getElementById("saveJobBtn").textContent="儲存派工";
     }
   }else{
     jobs.push(job);
     saveJobs();
+    writeLog("add", { codeName:job.codeName||job.customerName||"", date:job.date, engineer:job.engineer, startTime:job.startTime, endTime:job.endTime });
   }
 
   enableScheduleDrag();
@@ -1660,6 +1755,8 @@ function doResizeMove(clientY){
 
 function doResizeUp(){
   if(!resizingJobId) return;
+  const j=jobs.find(x=>x.id===resizingJobId);
+  if(j) writeLog("resize",{codeName:j.codeName||j.customerName||"",endTime:j.endTime,date:j.date,engineer:j.engineer});
   saveJobs();
   renderJobList();
   resizingJobId = null;
@@ -1928,6 +2025,7 @@ function dropJobMulti(e,dateStr,engineer,time){
       j.time=time;
       j.endTime=newEnd;
       j.date=dateStr;
+      writeLog("drag",{codeName:j.codeName||j.customerName||"",engineer,date:dateStr,startTime:time,endTime:newEnd});
     }
   });
   saveJobs();
@@ -1936,6 +2034,8 @@ function dropJobMulti(e,dateStr,engineer,time){
 }
 function deleteJob(id){
   if(!confirm("確定刪除此筆派工？"))return;
+  const j=jobs.find(x=>x.id===id);
+  if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer});
   jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();
 }
 function editJobForm(id,event){
@@ -1983,7 +2083,10 @@ function editJob(id){
   saveJobs();renderSchedule();renderJobList();
 }
 function clearAllJobs(){
-  if(confirm("確定清空全部派工資料？")){jobs=[];saveJobs();renderSchedule();renderJobList()}
+  if(confirm("確定清空全部派工資料？")){
+    writeLog("clear",{type:"派工",count:jobs.length});
+    jobs=[];saveJobs();renderSchedule();renderJobList();
+  }
 }
 
 function addCustomer(){
@@ -1999,7 +2102,15 @@ function addCustomer(){
     deliveryAddress:document.getElementById("cDeliveryAddress").value.trim()
   };
   const idx=customers.findIndex(x=>x.customerNo&&x.customerNo===customerNo);
-  if(idx>=0){if(confirm("此客戶編號已存在，要覆蓋嗎？"))customers[idx]={...customers[idx],...c}}else customers.push(c);
+  if(idx>=0){
+    if(confirm("此客戶編號已存在，要覆蓋嗎？")){
+      customers[idx]={...customers[idx],...c};
+      writeLog("customer_edit",{customerNo:c.customerNo,fullName:c.fullName||c.personName||""});
+    }
+  }else{
+    customers.push(c);
+    writeLog("customer_add",{customerNo:c.customerNo,fullName:c.fullName||c.personName||""});
+  }
   saveCustomers();renderCustomers();
   ["cCustomerNo","cPersonName","cFullName","cShortName","cMobile","cDeliveryAddress"].forEach(id=>document.getElementById(id).value="");
 }
@@ -2031,11 +2142,14 @@ function editCustomer(id){
   const mobile=prompt("行動電話",c.mobile||"");if(mobile===null)return;
   const deliveryAddress=prompt("送貨地址",c.deliveryAddress||"");if(deliveryAddress===null)return;
   Object.assign(c,{customerNo,personName,fullName,shortName,mobile,deliveryAddress});
+  writeLog("customer_edit",{customerNo,fullName:fullName||personName||""});
   saveCustomers();renderCustomers();
 }
 
 function deleteCustomer(id){
   if(!confirm("確定刪除此客戶資料？"))return;
+  const c=customers.find(x=>x.id===id);
+  if(c) writeLog("customer_delete",{customerNo:c.customerNo||"",fullName:c.fullName||c.personName||""});
   customers=customers.filter(c=>c.id!==id);saveCustomers();renderCustomers();
 }
 function backupAllData(){
@@ -2417,7 +2531,261 @@ enableDragScroll();
 renderSchedule();
 renderCustomers();
 renderJobList();
+
+// ===== 後台管理系統 =====
+const ADMIN_EMAIL = "zxcv10019@gmail.com";
+let adminLogs = []; // 本地快取的日誌
+
+// 判斷是否為管理員
+function isAdmin(){ return currentUser && currentUser.email === ADMIN_EMAIL; }
+
+// 日誌寫入 Firestore
+async function writeLog(action, detail = {}){
+  if(!firebaseDb || !currentUser) return;
+  try{
+    const logEntry = {
+      ts: firebase.firestore.FieldValue.serverTimestamp(),
+      tsLocal: new Date().toISOString(),
+      action,
+      detail,
+      user: {
+        uid: currentUser.uid,
+        email: currentUser.email || "",
+        name: currentUser.displayName || ""
+      }
+    };
+    await firebaseDb.collection("adminLogs").add(logEntry);
+  }catch(e){ console.warn("寫入日誌失敗", e); }
+}
+
+// 讀取所有日誌（僅管理員）
+async function loadAdminLogs(){
+  if(!firebaseDb || !isAdmin()){
+    renderAdminLogs();
+    return;
+  }
+  document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">🔄 載入中…</td></tr>';
+  try{
+    const snap = await firebaseDb.collection("adminLogs")
+      .orderBy("tsLocal","desc")
+      .limit(1000)
+      .get();
+    adminLogs = snap.docs.map(d=>{ const data=d.data(); return {...data, _id:d.id}; });
+    renderAdminLogs();
+    renderAdminStats();
+  }catch(e){
+    console.error("讀取日誌失敗", e);
+    document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">❌ 讀取失敗，請確認 Firestore 規則</td></tr>';
+  }
+}
+
+// 渲染統計卡片
+function renderAdminStats(){
+  const total = adminLogs.length;
+  const logins = adminLogs.filter(l=>l.action==="login").length;
+  const adds = adminLogs.filter(l=>l.action==="add").length;
+  const edits = adminLogs.filter(l=>["edit","drag","resize"].includes(l.action)).length;
+  const dels = adminLogs.filter(l=>["delete","clear"].includes(l.action)).length;
+  document.getElementById("adminStats").innerHTML = `
+    <div class="admin-stat-card"><div class="stat-num">${total}</div><div class="stat-label">全部紀錄</div></div>
+    <div class="admin-stat-card login-stat"><div class="stat-num">${logins}</div><div class="stat-label">登入次數</div></div>
+    <div class="admin-stat-card add-stat"><div class="stat-num">${adds}</div><div class="stat-label">新增派工</div></div>
+    <div class="admin-stat-card edit-stat"><div class="stat-num">${edits}</div><div class="stat-label">修改操作</div></div>
+    <div class="admin-stat-card del-stat"><div class="stat-num">${dels}</div><div class="stat-label">刪除操作</div></div>
+  `;
+}
+
+// 渲染日誌列表（含篩選）
+function renderAdminLogs(){
+  const emailF = (document.getElementById("adminFilterEmail")?.value||"").trim().toLowerCase();
+  const typeF = document.getElementById("adminFilterType")?.value||"";
+  const startF = document.getElementById("adminFilterStart")?.value||"";
+  const endF = document.getElementById("adminFilterEnd")?.value||"";
+
+  let filtered = adminLogs.filter(l=>{
+    const email = (l.user?.email||"").toLowerCase();
+    if(emailF && !email.includes(emailF)) return false;
+    if(typeF && l.action !== typeF) return false;
+    const dateStr = (l.tsLocal||"").slice(0,10);
+    if(startF && dateStr < startF) return false;
+    if(endF && dateStr > endF) return false;
+    return true;
+  });
+
+  if(!filtered.length){
+    document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">沒有符合條件的紀錄</td></tr>';
+    return;
+  }
+
+  const actionLabel = {
+    login:"登入", logout:"登出", add:"新增派工", edit:"修改派工",
+    delete:"刪除派工", drag:"拖拉移動", resize:"調整時間",
+    customer_add:"新增客戶", customer_edit:"修改客戶", customer_delete:"刪除客戶",
+    customer:"客戶操作", import:"匯入資料", clear:"清空資料"
+  };
+  const badgeClass = {
+    login:"badge-login", logout:"badge-logout", add:"badge-add", edit:"badge-edit",
+    delete:"badge-delete", drag:"badge-drag", resize:"badge-resize",
+    customer_add:"badge-customer", customer_edit:"badge-customer",
+    customer_delete:"badge-customer", customer:"badge-customer",
+    import:"badge-import", clear:"badge-clear"
+  };
+
+  const rows = filtered.map(l=>{
+    const ts = l.tsLocal ? new Date(l.tsLocal).toLocaleString("zh-TW",{hour12:false}) : "-";
+    const email = escapeHtml(l.user?.email||"未知");
+    const name = escapeHtml(l.user?.name||"");
+    const action = l.action||"unknown";
+    const label = actionLabel[action] || action;
+    const badge = badgeClass[action] || "badge-login";
+    const detail = formatLogDetail(action, l.detail||{});
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${ts}</td>
+      <td class="log-user-cell"><div class="user-email">${email}</div>${name?`<div class="user-name">${name}</div>`:""}</td>
+      <td><span class="log-action-badge ${badge}">${label}</span></td>
+      <td class="log-detail">${detail}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("adminLogBody").innerHTML = rows;
+}
+
+function formatLogDetail(action, d){
+  if(!d) return "";
+  const esc = s => escapeHtml(String(s||""));
+  if(action==="login") return `從 <b>${esc(d.device||"裝置不明")}</b> 登入`;
+  if(action==="logout") return `登出系統`;
+  if(action==="add") return `新增派工：<b>${esc(d.codeName||d.customerName||"")}</b>　日期：${esc(d.date)}　工程師：${esc(d.engineer)}　時間：${esc(d.startTime)}~${esc(d.endTime)}`;
+  if(action==="edit") return `修改派工：<b>${esc(d.codeName||d.customerName||"")}</b>　日期：${esc(d.date)}　工程師：${esc(d.engineer)}　時間：${esc(d.startTime)}~${esc(d.endTime)}`;
+  if(action==="delete") return `刪除派工：<b>${esc(d.codeName||d.customerName||"")}</b>　日期：${esc(d.date)}　工程師：${esc(d.engineer)}`;
+  if(action==="drag") return `拖拉移動：<b>${esc(d.codeName||"")}</b>　→ 工程師：${esc(d.engineer)}　日期：${esc(d.date)}　時間：${esc(d.startTime)}~${esc(d.endTime)}`;
+  if(action==="resize") return `調整時間：<b>${esc(d.codeName||"")}</b>　新結束時間：${esc(d.endTime)}`;
+  if(action==="customer_add") return `新增客戶：<b>${esc(d.customerNo)}</b> ${esc(d.fullName||d.personName||"")}`;
+  if(action==="customer_edit") return `修改客戶：<b>${esc(d.customerNo)}</b> ${esc(d.fullName||d.personName||"")}`;
+  if(action==="customer_delete") return `刪除客戶：<b>${esc(d.customerNo)}</b> ${esc(d.fullName||d.personName||"")}`;
+  if(action==="import") return `匯入 ${esc(d.type||"")}：共 ${esc(d.count||0)} 筆`;
+  if(action==="clear") return `清空 ${esc(d.type||"")} 資料（共 ${esc(d.count||0)} 筆）`;
+  return JSON.stringify(d);
+}
+
+function clearAdminFilter(){
+  ["adminFilterEmail","adminFilterStart","adminFilterEnd"].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=""; });
+  document.getElementById("adminFilterType").value="";
+  renderAdminLogs();
+}
+
+function exportAdminLogs(){
+  if(!adminLogs.length){ alert("目前沒有日誌資料"); return; }
+  const data = adminLogs.map(l=>({
+    "時間": l.tsLocal ? new Date(l.tsLocal).toLocaleString("zh-TW",{hour12:false}) : "",
+    "Email": l.user?.email||"",
+    "姓名": l.user?.name||"",
+    "操作": l.action||"",
+    "詳情": formatLogDetail(l.action, l.detail||{}).replace(/<[^>]+>/g,"")
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "操作紀錄");
+  const d = new Date();
+  XLSX.writeFile(wb, `操作紀錄_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.xlsx`);
+}
+
+// 顯示後台頁面（帶權限判斷）
+function showAdminPage(){
+  document.getElementById("adminLoginInfo").textContent = currentUser ? `已登入：${currentUser.email}` : "";
+  if(!currentUser){
+    document.getElementById("adminLockScreen").style.display="flex";
+    document.getElementById("adminContent").style.display="none";
+    return;
+  }
+  if(!isAdmin()){
+    document.getElementById("adminLockScreen").style.display="flex";
+    document.getElementById("adminContent").style.display="none";
+    return;
+  }
+  document.getElementById("adminLockScreen").style.display="none";
+  document.getElementById("adminContent").style.display="block";
+  loadAdminLogs();
+}
+
+// 偵測 ?admin 網址參數，顯示後台 tab
+(function checkAdminMode(){
+  const params = new URLSearchParams(window.location.search);
+  if(params.has("admin")){
+    const tab = document.getElementById("adminTab");
+    if(tab) tab.style.display="inline-block";
+  }
+})();
 </script>
+
+<!-- ===== 隱藏後台頁面 ===== -->
+<div id="adminPage" class="page">
+  <div class="admin-header">
+    <span style="font-size:28px">🛡️</span>
+    <h2>後台管理系統</h2>
+    <span class="admin-badge">ADMIN ONLY</span>
+    <span style="margin-left:auto;font-size:12px;color:#94a3b8" id="adminLoginInfo"></span>
+  </div>
+
+  <!-- 權限不足時顯示 -->
+  <div id="adminLockScreen" class="admin-lock" style="display:none">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-msg">您沒有權限訪問後台管理系統</div>
+    <div class="lock-sub">僅限系統管理員使用</div>
+  </div>
+
+  <!-- 有權限時顯示 -->
+  <div id="adminContent" style="display:none">
+    <div class="admin-body">
+      <!-- 統計卡片 -->
+      <div class="admin-stats" id="adminStats"></div>
+
+      <!-- 篩選列 -->
+      <div class="admin-filter">
+        <label>帳號篩選</label>
+        <input id="adminFilterEmail" placeholder="輸入 email 搜尋" style="min-width:200px" oninput="renderAdminLogs()">
+        <label>操作類型</label>
+        <select id="adminFilterType" onchange="renderAdminLogs()">
+          <option value="">全部</option>
+          <option value="login">登入</option>
+          <option value="logout">登出</option>
+          <option value="add">新增派工</option>
+          <option value="edit">修改派工</option>
+          <option value="delete">刪除派工</option>
+          <option value="drag">拖拉移動</option>
+          <option value="resize">調整時間</option>
+          <option value="customer">客戶操作</option>
+          <option value="import">匯入</option>
+          <option value="clear">清空</option>
+        </select>
+        <label>日期起</label>
+        <input type="date" id="adminFilterStart" onchange="renderAdminLogs()">
+        <label>日期迄</label>
+        <input type="date" id="adminFilterEnd" onchange="renderAdminLogs()">
+        <button onclick="clearAdminFilter()" style="background:#888;padding:6px 12px;font-size:13px">清除篩選</button>
+        <button onclick="loadAdminLogs()" style="background:#2f3542;padding:6px 12px;font-size:13px">🔄 重新整理</button>
+        <button onclick="exportAdminLogs()" style="background:#8e44ad;padding:6px 12px;font-size:13px">📥 匯出紀錄</button>
+      </div>
+
+      <!-- 日誌表格 -->
+      <div class="log-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:160px">時間</th>
+              <th style="width:200px">帳號</th>
+              <th style="width:110px">操作類型</th>
+              <th>操作詳情</th>
+            </tr>
+          </thead>
+          <tbody id="adminLogBody">
+            <tr><td colspan="4" class="admin-no-data">載入中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="fixedBottomScroll">
   <div id="fixedBottomScrollInner"></div>
