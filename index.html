@@ -1118,6 +1118,8 @@ let cloudUnsubscribe=null;
 let isApplyingRemote=false;
 let cloudSaveTimer=null;
 let ignoreRemoteUntil=0; // 匯入後短時間內避免雲端舊資料覆蓋本機新匯入資料
+let importProtectToken=""; // 匯入後用來辨識雲端是否已收到最新資料
+let importProtectActive=false;
 
 try{
   firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
@@ -1164,7 +1166,8 @@ function saveCloudNow(){
     jobs: jobs || [],
     customers: customers || [],
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null
+    updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
+    clientImportToken: importProtectToken || ""
   }, {merge:true}).then(()=>{
     setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
   }).catch(err=>{
@@ -1181,11 +1184,30 @@ function queueCloudSave(){
 
 function applyRemoteData(data){
   const remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
-  // 剛匯入 Excel 後，若雲端舊快照比較少筆，先不要讓它覆蓋本機剛匯入的資料。
-  if(Date.now() < ignoreRemoteUntil && remoteJobs && remoteJobs.length < (jobs || []).length){
-    console.warn("略過雲端舊資料覆蓋：remote", remoteJobs.length, "local", (jobs||[]).length);
+  const remoteToken = data.clientImportToken || "";
+
+  // 匯入 Excel 後，等待 Firestore 回傳「同一批匯入 token」前，全部略過舊雲端快照。
+  // 這樣就不會出現：匯入成功 → 切回派工表 → 被雲端舊空資料洗掉。
+  if(importProtectActive && Date.now() < ignoreRemoteUntil && importProtectToken && remoteToken !== importProtectToken){
+    console.warn("略過匯入前的舊雲端快照，避免覆蓋本機匯入資料", {remoteToken, importProtectToken, remoteJobs: remoteJobs ? remoteJobs.length : null, localJobs:(jobs||[]).length});
+    setSyncStatus("匯入資料同步中，暫不讀取舊雲端資料…", "wait");
     return;
   }
+
+  // 如果雲端回傳的 token 已經是本次匯入，代表雲端已更新，可以恢復正常同步。
+  if(importProtectActive && remoteToken === importProtectToken){
+    importProtectActive=false;
+    ignoreRemoteUntil=0;
+    importProtectToken="";
+  }
+
+  // 額外保護：匯入後短時間內，若雲端資料筆數比本機少，也不要覆蓋。
+  if(Date.now() < ignoreRemoteUntil && remoteJobs && remoteJobs.length < (jobs || []).length){
+    console.warn("略過雲端舊資料覆蓋：remote", remoteJobs.length, "local", (jobs||[]).length);
+    setSyncStatus("匯入資料同步中，保留本機資料…", "wait");
+    return;
+  }
+
   isApplyingRemote=true;
   if(remoteJobs) jobs=remoteJobs;
   if(Array.isArray(data.customers)) customers=data.customers;
@@ -2474,8 +2496,10 @@ function importJobsExcel(event){
         jobs.push(j);
         count++;
       }
-      // 匯入大量資料時，立即上傳雲端，並暫時避免 Firestore 舊快照把畫面洗回空白。
-      ignoreRemoteUntil = Date.now() + 8000;
+      // 匯入大量資料時，建立本次匯入 token，直到雲端回傳同一個 token 前，都不允許舊雲端快照覆蓋本機資料。
+      importProtectToken = "import_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
+      importProtectActive = true;
+      ignoreRemoteUntil = Date.now() + 30000;
       saveJobs();
       saveCloudNow();
       renderSchedule();
