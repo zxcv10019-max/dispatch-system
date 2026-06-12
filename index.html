@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>派工表系統</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore-compat.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f3f3f3;color:#222}
@@ -799,11 +802,28 @@ body{
 }
 
 
+/* Google 登入同步狀態 */
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.auth-panel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:normal}
+.auth-status{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 10px;color:#fff;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.auth-panel button{background:#ffffff;color:#2f3542;border:0;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:bold}
+.auth-panel button:hover{background:#f1f2f6}
+.sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#aaa;margin-right:5px;vertical-align:middle}
+.sync-dot.ok{background:#2ecc71}.sync-dot.wait{background:#f1c40f}.sync-dot.err{background:#e74c3c}
+@media(max-width:700px){.header{align-items:flex-start;flex-direction:column}.auth-panel{width:100%}.auth-status{max-width:100%;font-size:12px}}
+
 </style>
 </head>
 
 <body>
-<div class="header">派工表系統</div>
+<div class="header">
+  <div>派工表系統</div>
+  <div class="auth-panel">
+    <span id="syncStatus" class="auth-status"><span class="sync-dot wait"></span>未登入，資料暫存在本機</span>
+    <button id="googleLoginBtn" onclick="signInGoogle()">Google 登入</button>
+    <button id="googleLogoutBtn" onclick="signOutGoogle()" style="display:none">登出</button>
+  </div>
+</div>
 
 <div class="tabs">
   <button id="tabSchedule" class="active" onclick="showPage('schedulePage')">派工表</button>
@@ -983,6 +1003,145 @@ let customers=JSON.parse(localStorage.getItem(CUSTOMERS_KEY)||"[]");
 let dragId=null;
 let editingJobId=null;
 
+
+// ===== Firebase Google 登入 + Firestore 同步 =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDoHSyZU6Y6xYuddGKQl_5mQm2p4ETxY5A",
+  authDomain: "dispatching-386da.firebaseapp.com",
+  projectId: "dispatching-386da",
+  storageBucket: "dispatching-386da.firebasestorage.app",
+  messagingSenderId: "79344587250",
+  appId: "1:79344587250:web:55ee46a4769ca4ae52db6b",
+  measurementId: "G-40C3G2Z595"
+};
+
+let firebaseApp=null, firebaseAuth=null, firebaseDb=null;
+let currentUser=null;
+let cloudUnsubscribe=null;
+let isApplyingRemote=false;
+let cloudSaveTimer=null;
+
+try{
+  firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+  firebaseAuth = firebase.auth();
+  firebaseDb = firebase.firestore();
+}catch(err){
+  console.error("Firebase 初始化失敗", err);
+}
+
+function setSyncStatus(text, type="wait"){
+  const el=document.getElementById("syncStatus");
+  if(!el) return;
+  el.innerHTML=`<span class="sync-dot ${type}"></span>${escapeHtml(text)}`;
+}
+
+function signInGoogle(){
+  if(!firebaseAuth){alert("Firebase 尚未初始化，請檢查網路或 Firebase 設定");return;}
+  const provider = new firebase.auth.GoogleAuthProvider();
+  firebaseAuth.signInWithPopup(provider).catch(err=>{
+    console.error(err);
+    alert("Google 登入失敗：" + (err.message || err));
+    setSyncStatus("登入失敗", "err");
+  });
+}
+
+function signOutGoogle(){
+  if(firebaseAuth) firebaseAuth.signOut();
+}
+
+function cloudDocRef(){
+  if(!firebaseDb || !currentUser) return null;
+  return firebaseDb.collection("users").doc(currentUser.uid).collection("dispatchSystem").doc("main");
+}
+
+function localDataExists(){
+  return (Array.isArray(jobs) && jobs.length>0) || (Array.isArray(customers) && customers.length>0);
+}
+
+function saveCloudNow(){
+  const ref=cloudDocRef();
+  if(!ref || isApplyingRemote) return;
+  setSyncStatus("同步中…", "wait");
+  ref.set({
+    jobs: jobs || [],
+    customers: customers || [],
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null
+  }, {merge:true}).then(()=>{
+    setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
+  }).catch(err=>{
+    console.error("Firestore 同步失敗", err);
+    setSyncStatus("同步失敗，請檢查 Firestore 規則", "err");
+  });
+}
+
+function queueCloudSave(){
+  if(!currentUser || isApplyingRemote) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(saveCloudNow, 650);
+}
+
+function applyRemoteData(data){
+  isApplyingRemote=true;
+  if(Array.isArray(data.jobs)) jobs=data.jobs;
+  if(Array.isArray(data.customers)) customers=data.customers;
+  localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || []));
+  localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || []));
+  updateCustomerCodeList();
+  renderSchedule();
+  renderCustomers();
+  renderJobList();
+  renderAvailableSlots();
+  isApplyingRemote=false;
+}
+
+function startCloudSync(){
+  if(!currentUser || !firebaseDb) return;
+  if(cloudUnsubscribe) cloudUnsubscribe();
+  const ref=cloudDocRef();
+  setSyncStatus("讀取雲端資料…", "wait");
+  cloudUnsubscribe = ref.onSnapshot(doc=>{
+    if(doc.exists){
+      const data=doc.data() || {};
+      applyRemoteData(data);
+      setSyncStatus(`已同步：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
+    }else{
+      if(localDataExists()){
+        saveCloudNow();
+        showToast("✅ 已將本機資料上傳到雲端");
+      }else{
+        setSyncStatus(`已登入：${currentUser.email || currentUser.displayName || "Google 帳號"}`, "ok");
+      }
+    }
+  }, err=>{
+    console.error("Firestore 讀取失敗", err);
+    setSyncStatus("雲端讀取失敗，請檢查 Firestore 規則", "err");
+  });
+}
+
+function stopCloudSync(){
+  if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
+  currentUser=null;
+  setSyncStatus("未登入，資料暫存在本機", "wait");
+}
+
+if(firebaseAuth){
+  firebaseAuth.onAuthStateChanged(user=>{
+    currentUser=user || null;
+    const loginBtn=document.getElementById("googleLoginBtn");
+    const logoutBtn=document.getElementById("googleLogoutBtn");
+    if(user){
+      if(loginBtn) loginBtn.style.display="none";
+      if(logoutBtn) logoutBtn.style.display="inline-block";
+      startCloudSync();
+    }else{
+      if(loginBtn) loginBtn.style.display="inline-block";
+      if(logoutBtn) logoutBtn.style.display="none";
+      stopCloudSync();
+    }
+  });
+}
+
 document.getElementById("viewDate").valueAsDate=new Date();
 document.getElementById("fDate").valueAsDate=new Date();
 const nowForList = new Date();
@@ -1046,8 +1205,15 @@ function showPage(pageId){
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
 }
 
-function saveJobs(){localStorage.setItem(JOBS_KEY,JSON.stringify(jobs))}
-function saveCustomers(){localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));updateCustomerCodeList()}
+function saveJobs(){
+  localStorage.setItem(JOBS_KEY,JSON.stringify(jobs));
+  queueCloudSave();
+}
+function saveCustomers(){
+  localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));
+  updateCustomerCodeList();
+  queueCloudSave();
+}
 
 function escapeHtml(text){
   return String(text||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
