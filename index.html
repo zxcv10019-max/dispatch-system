@@ -1107,6 +1107,11 @@ body.no-permission .auth-status{background:#fde2e2;color:#922b21;border-color:#f
   }
 }
 
+/* ===== 手機版兩日派工區塊 ===== */
+.my-day-section{margin-top:14px;}
+.my-day-section h4{margin:10px 0 6px;font-size:16px;color:#2f3542;border-left:4px solid #2f3542;padding-left:8px;}
+@media(max-width:900px){.my-day-section h4{font-size:17px!important;margin-top:16px!important;}}
+
 </style>
 </head>
 
@@ -1876,6 +1881,11 @@ function mapUrl(address){
 function directionUrl(origin,destination){
   const from = cleanMapAddress(origin) || String(origin||"").trim();
   const to = cleanMapAddress(destination) || String(destination||"").trim();
+  if(!to) return "";
+  // 不帶 origin 時，Google Maps 手機 App 會自動用目前 GPS 位置開始導航
+  if(!from || from === "__CURRENT__"){
+    return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(to) + "&travelmode=driving&dir_action=navigate";
+  }
   return "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(from) + "&destination=" + encodeURIComponent(to) + "&travelmode=driving&dir_action=navigate";
 }
 function openMapLink(url){
@@ -2141,7 +2151,7 @@ function routeTagHtml(from,to,label="車程", extra=""){
 function nextRouteHtml(j){
   const next=getNextJob(j);
   if(!j.address) return "";
-  if(!next) return `<div class="route-info">🚗 今日最後一站　<a href="${mapUrl(j.address)}" target="_blank">導航</a></div>`;
+  if(!next) return `<div class="route-info ok">🏁 本日最後一站　<a href="${directionUrl("", j.address)}" target="_blank">從目前位置導航</a></div>`;
   const gap = minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time);
   return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
 }
@@ -2618,49 +2628,57 @@ function renderMyTodayPanel(){
   if(!panel) return;
   if(!currentUser || !hasAccess()){ panel.innerHTML=""; return; }
 
-  const today=formatDateLocal(new Date());
+  const todayObj=new Date();
+  const tomorrowObj=new Date();
+  tomorrowObj.setDate(todayObj.getDate()+1);
+  const today=formatDateLocal(todayObj);
+  const tomorrow=formatDateLocal(tomorrowObj);
   const targetEngineer=currentEngineer || "";
-  let list=jobs.filter(j=>String(j.date||"")===today && !j.isHold);
-  let title="今日派工";
-  let sub=`${today}`;
 
+  let title="兩日派工";
+  let sub="以今天為主，可往下查看明天派工";
   if(targetEngineer){
-    list=list.filter(j=>normalizeEngineerName(j.engineer)===targetEngineer);
-    title=`我的今日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
+    title=`我的兩日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
     sub=`依登入帳號 ${currentUser.email} 綁定工程師顯示`;
   }else if(isAdmin()){
-    sub="管理員未綁定工程師，手機版顯示今日全部派工";
+    sub="管理員未綁定工程師，手機版顯示全部工程師今天與明天派工";
   }else{
-    panel.innerHTML=`<h3>我的今日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
+    panel.innerHTML=`<h3>我的兩日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
     return;
   }
 
-  list=list.filter(isValidJob).sort(sortJobsByTime);
-  const rows=list.map((j,idx)=>{
-    const codeName=escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
-    const time=escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
-    const phoneRaw=String(j.phone||"").trim();
-    const phone=phoneRaw ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>` : `<div style="color:#999">☎️ 電話：未填</div>`;
-    const addrRaw=String(j.address||"").trim();
-    const addr=addrRaw ? `<div>📍 地址：<a class="my-map-link" href="${mapUrl(addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>` : `<div style="color:#999">📍 地址：未填</div>`;
-    const work=j.workItem?`<div>施工項目：${escapeHtml(j.workItem)}</div>`:"";
-    const content=j.workContent?`<div>施工內容：${escapeHtml(j.workContent)}</div>`:"";
-    const routeHtml=nextRouteHtml(j);
-    return `<div class="my-today-job">
-      <div class="time">${time || "未填時間"}</div>
-      <div class="name">${idx+1}. ${codeName}</div>
-      ${phone}
-      ${addr}
-      ${work}
-      ${content}
-      ${routeHtml}
-    </div>`;
-  }).join("");
+  function oneDaySection(dateLabel, caption){
+    let list=jobs.filter(j=>String(j.date||"")===dateLabel && !j.isHold && isValidJob(j));
+    if(targetEngineer){
+      list=list.filter(j=>normalizeEngineerName(j.engineer)===targetEngineer);
+    }
+    list=list.sort(sortJobsByTime);
+    const rows=list.map((j,idx)=>{
+      const codeName=escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+      const time=escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+      const phoneRaw=String(j.phone||"").trim();
+      const phone=phoneRaw ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>` : `<div style="color:#999">☎️ 電話：未填</div>`;
+      const addrRaw=String(j.address||"").trim();
+      const addr=addrRaw ? `<div>📍 地址：<a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>` : `<div style="color:#999">📍 地址：未填</div>`;
+      const work=j.workItem?`<div>施工項目：${escapeHtml(j.workItem)}</div>`:"";
+      const content=j.workContent?`<div>施工內容：${escapeHtml(j.workContent)}</div>`:"";
+      const routeHtml=nextRouteHtml(j);
+      return `<div class="my-today-job">
+        <div class="time">${time || "未填時間"}</div>
+        <div class="name">${idx+1}. ${codeName}</div>
+        ${phone}
+        ${addr}
+        ${work}
+        ${content}
+        ${routeHtml}
+      </div>`;
+    }).join("");
+    return `<div class="my-day-section"><h4>${escapeHtml(caption)}｜${escapeHtml(dateLabel)}　共 ${list.length} 件</h4>${rows || '<div class="my-today-empty">沒有派工。</div>'}</div>`;
+  }
 
-  panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}，共 ${list.length} 件</div>${rows || '<div class="my-today-empty">今天沒有派工。</div>'}`;
+  panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDaySection(today,"今天")}${oneDaySection(tomorrow,"明天")}`;
   setTimeout(updateTravelTags, 80);
 }
-
 
 
 function setupFixedBottomScrollbar(){
