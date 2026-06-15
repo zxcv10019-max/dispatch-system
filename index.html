@@ -1030,6 +1030,83 @@ body.no-permission #noAccessGate{
 .no-access-card button{background:#2f3542;color:#fff;border:0;border-radius:999px;padding:10px 22px;font-weight:bold;font-size:15px;}
 body.no-permission .auth-status{background:#fde2e2;color:#922b21;border-color:#f5a3a3;}
 
+
+
+/* ===== 2026-06 mobile view fix: allow scrolling + phone/route cards ===== */
+@media(max-width:900px){
+  html, body{
+    height:auto !important;
+    min-height:100% !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+  }
+  body.login-required,
+  body.no-permission{
+    height:100vh !important;
+    overflow:hidden !important;
+  }
+  #schedulePage.page.active{
+    display:block !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+  #schedulePage > .toolbar,
+  #schedulePage > .summary,
+  #schedulePage > .engineer-code-note,
+  #scheduleWrap{
+    display:none !important;
+  }
+  #myTodayPanel{
+    display:block !important;
+    margin:12px !important;
+    padding:14px !important;
+    border-radius:14px !important;
+  }
+  #myTodayPanel h3{
+    font-size:20px !important;
+    margin-bottom:8px !important;
+  }
+  .my-today-sub{
+    font-size:13px !important;
+    line-height:1.5 !important;
+  }
+  .my-today-job{
+    font-size:15px !important;
+    line-height:1.65 !important;
+    padding:12px !important;
+    margin:12px 0 !important;
+    border-radius:12px !important;
+    background:#fff !important;
+    border:1px solid #cfe2f3 !important;
+  }
+  .my-today-job .time{
+    font-size:16px !important;
+    margin-bottom:5px !important;
+  }
+  .my-today-job .name{
+    font-size:17px !important;
+    margin-bottom:6px !important;
+  }
+  .my-phone-link,
+  .my-map-link,
+  .my-nav-link{
+    color:#0066cc !important;
+    font-weight:bold !important;
+    text-decoration:underline !important;
+  }
+  .my-today-job .route-info{
+    font-size:14px !important;
+    margin-top:8px !important;
+    padding:8px !important;
+  }
+  .my-today-empty{
+    font-size:15px !important;
+    line-height:1.6 !important;
+  }
+}
+
 </style>
 </head>
 
@@ -2513,15 +2590,21 @@ function renderSummary(){
   document.getElementById("summary").innerHTML=html;
 }
 
+function cleanPhoneForTel(phone){
+  return String(phone||"").replace(/[^0-9+]/g, "");
+}
+
 function renderMyTodayPanel(){
   const panel=document.getElementById("myTodayPanel");
   if(!panel) return;
-  if(!currentUser){ panel.innerHTML=""; return; }
+  if(!currentUser || !hasAccess()){ panel.innerHTML=""; return; }
+
   const today=formatDateLocal(new Date());
   const targetEngineer=currentEngineer || "";
-  let list=jobs.filter(j=>String(j.date||"")===today);
+  let list=jobs.filter(j=>String(j.date||"")===today && !j.isHold);
   let title="今日派工";
   let sub=`${today}`;
+
   if(targetEngineer){
     list=list.filter(j=>normalizeEngineerName(j.engineer)===targetEngineer);
     title=`我的今日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
@@ -2532,19 +2615,32 @@ function renderMyTodayPanel(){
     panel.innerHTML=`<h3>我的今日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
     return;
   }
+
   list=list.filter(isValidJob).sort(sortJobsByTime);
-  const rows=list.map(j=>{
+  const rows=list.map((j,idx)=>{
     const codeName=escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
     const time=escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
-    const addr=j.address?`<div>📍 <a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`:"";
+    const phoneRaw=String(j.phone||"").trim();
+    const phone=phoneRaw ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>` : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw=String(j.address||"").trim();
+    const addr=addrRaw ? `<div>📍 地址：<a class="my-map-link" href="${mapUrl(addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>` : `<div style="color:#999">📍 地址：未填</div>`;
     const work=j.workItem?`<div>施工項目：${escapeHtml(j.workItem)}</div>`:"";
     const content=j.workContent?`<div>施工內容：${escapeHtml(j.workContent)}</div>`:"";
-    return `<div class="my-today-job"><div class="time">${time}</div><div class="name">${codeName}</div>${addr}${work}${content}${nextRouteHtml(j)}</div>`;
+    const routeHtml=nextRouteHtml(j);
+    return `<div class="my-today-job">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${phone}
+      ${addr}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
   }).join("");
+
   panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}，共 ${list.length} 件</div>${rows || '<div class="my-today-empty">今天沒有派工。</div>'}`;
+  setTimeout(updateTravelTags, 80);
 }
-
-
 
 
 
