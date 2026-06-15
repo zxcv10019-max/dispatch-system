@@ -1859,9 +1859,28 @@ function saveCustomers(){
 function escapeHtml(text){
   return String(text||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
-function mapUrl(address){return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(address||"")}
+// Google Maps 手機版較挑地址格式：導航連結會先清掉樓層/備註，避免手機 App 判讀成錯誤地點
+function cleanMapAddress(address){
+  return String(address||"")
+    .replace(/（[^）]*）/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\d+\s*[fF]/g, "")
+    .replace(/\d+\s*樓/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+function mapUrl(address){
+  const q = cleanMapAddress(address) || String(address||"").trim();
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+}
 function directionUrl(origin,destination){
-  return "https://www.google.com/maps/dir/?api=1&origin="+encodeURIComponent(origin||"")+"&destination="+encodeURIComponent(destination||"")+"&travelmode=driving";
+  const from = cleanMapAddress(origin) || String(origin||"").trim();
+  const to = cleanMapAddress(destination) || String(destination||"").trim();
+  return "https://www.google.com/maps/dir/?api=1&origin=" + encodeURIComponent(from) + "&destination=" + encodeURIComponent(to) + "&travelmode=driving&dir_action=navigate";
+}
+function openMapLink(url){
+  if(!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 function cleanCityDistrict(city,district){
   city=String(city||"").trim();
