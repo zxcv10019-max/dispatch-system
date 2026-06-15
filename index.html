@@ -934,6 +934,16 @@ body{
 
 
 
+/* ===== 手機版：個人今日派工 ===== */
+#myTodayPanel{display:none;margin:10px;background:#fff;border:1px solid #d6e4f0;border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#myTodayPanel h3{margin:0 0 8px;font-size:16px;color:#2f3542}
+.my-today-sub{font-size:12px;color:#666;margin-bottom:8px}
+.my-today-job{border:1px solid #cfe2f3;background:#f8fbff;border-radius:8px;padding:9px;margin:8px 0;font-size:13px;line-height:1.5}
+.my-today-job .time{font-weight:bold;color:#1f4e79}
+.my-today-job .name{font-weight:bold;color:#0066cc}
+.my-today-empty{font-size:13px;color:#777;background:#fafafa;border-radius:8px;padding:10px}
+@media(max-width:900px){body:not(.login-required) #myTodayPanel{display:block}}
+
 /* ===== 登入必須：未登入時完全隱藏系統內容 ===== */
 body.login-required{
   height:100vh !important;
@@ -1018,12 +1028,11 @@ body.login-required .auth-status{background:#fff3cd;color:#7a5b00;border-color:#
     <button onclick="showPage('dispatchPage')">新增派工</button>
     <label class="export-range-label">匯出起</label><input type="date" id="exportStartDate" class="export-date">
     <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDate" class="export-date">
-    <label class="export-range-label">匯出起</label><input type="date" id="exportStartDateList" class="export-date">
-    <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDateList" class="export-date">
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
     <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
     <button class="clear-btn" onclick="clearAllJobs()">清空派工</button>
   </div>
+  <div id="myTodayPanel"></div>
   <div class="summary" id="summary"></div>
   <div class="engineer-code-note">工程代號：M＝林川閔、C＝陳昱存、Y＝陳義強、E＝鄧長益。</div>
   <div class="table-wrap" id="scheduleWrap"><table id="schedule"></table></div>
@@ -1259,6 +1268,7 @@ function signOutGoogle(){
 
 const ADMIN_EMAIL = "zxcv10019@gmail.com";
 let currentRole = "viewer"; // admin / editor / viewer
+let currentEngineer = ""; // 綁定工程師，手機版用來顯示本人今日派工
 let rolesCache = [];
 
 function emailKey(email){
@@ -1292,15 +1302,18 @@ function cloudDocRef(){
 }
 
 async function loadUserRole(){
-  if(!currentUser || !firebaseDb){ currentRole="viewer"; applyRoleUI(); return; }
-  if(isAdmin()){ currentRole="admin"; applyRoleUI(); return; }
+  if(!currentUser || !firebaseDb){ currentRole="viewer"; currentEngineer=""; applyRoleUI(); return; }
+  if(isAdmin()){ currentRole="admin"; currentEngineer=""; applyRoleUI(); return; }
   try{
     const doc = await rolesColRef().doc(emailKey(currentUser.email)).get();
-    const role = doc.exists ? (doc.data().role || "viewer") : "viewer";
+    const roleData = doc.exists ? (doc.data() || {}) : {};
+    const role = roleData.role || "viewer";
     currentRole = ["admin","editor","viewer"].includes(role) ? role : "viewer";
+    currentEngineer = normalizeEngineerName(roleData.engineer || "");
   }catch(e){
     console.warn("讀取角色失敗，暫以查看權限處理", e);
     currentRole="viewer";
+    currentEngineer="";
   }
   applyRoleUI();
 }
@@ -1494,6 +1507,7 @@ function stopCloudSync(){
   if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
   currentUser=null;
   currentRole="viewer";
+  currentEngineer="";
   applyRoleUI();
   setSyncStatus("未登入，資料暫存在本機", "wait");
 }
@@ -1503,6 +1517,7 @@ function applyRoleUI(){
   document.body.classList.toggle("viewer-mode", !!readOnly);
   const statusExtra = currentUser ? `（${roleLabel()}）` : "";
   if(currentUser){ setSyncStatus(`已登入：${currentUser.email}${statusExtra}`, canEdit()?"ok":"wait"); }
+  renderMyTodayPanel();
   const denyWords=["儲存派工","清空派工","新增 / 更新客戶","匯入 Excel","還原備份","清空客戶","匯入派工 Excel"];
   document.querySelectorAll("button").forEach(btn=>{
     const txt=(btn.textContent||"").trim();
@@ -1522,16 +1537,18 @@ function renderRoles(){
   const box=document.getElementById("roleList");
   if(!box) return;
   if(!rolesCache.length){ box.innerHTML='<div style="color:#888">目前尚未設定其他帳號權限。</div>'; return; }
-  box.innerHTML = rolesCache.map(r=>`<div class="role-item"><span><code>${escapeHtml(r.email||r.id)}</code> <span class="role-badge ${escapeHtml(r.role||"viewer")}">${escapeHtml(r.role||"viewer")}</span></span><button onclick="deleteRole('${escapeHtml(r.id)}')" style="background:#b33939;padding:4px 8px;font-size:12px">刪除</button></div>`).join("");
+  box.innerHTML = rolesCache.map(r=>`<div class="role-item"><span><code>${escapeHtml(r.email||r.id)}</code> <span class="role-badge ${escapeHtml(r.role||"viewer")}">${escapeHtml(r.role||"viewer")}</span>${r.engineer?` <span class="role-badge editor">${escapeHtml(displayEngineer(r.engineer))} ${escapeHtml(r.engineer)}</span>`:""}</span><button onclick="deleteRole('${escapeHtml(r.id)}')" style="background:#b33939;padding:4px 8px;font-size:12px">刪除</button></div>`).join("");
 }
 async function saveRole(){
   if(!isAdmin()) return alert("只有主帳號可以設定權限");
   const email=(document.getElementById("roleEmail")?.value||"").trim().toLowerCase();
   const role=document.getElementById("roleSelect")?.value||"viewer";
+  const engineer=normalizeEngineerName(document.getElementById("roleEngineer")?.value||"");
   if(!email) return alert("請輸入 email");
   if(email===ADMIN_EMAIL.toLowerCase()) return alert("主帳號固定為 admin，不需要設定");
-  await rolesColRef().doc(emailKey(email)).set({email, role, updatedAt:new Date().toISOString(), updatedBy:currentUser.email},{merge:true});
+  await rolesColRef().doc(emailKey(email)).set({email, role, engineer, updatedAt:new Date().toISOString(), updatedBy:currentUser.email},{merge:true});
   document.getElementById("roleEmail").value="";
+  const engSel=document.getElementById("roleEngineer"); if(engSel) engSel.value="";
   await loadRoles();
   showToast("✅ 權限已更新");
 }
@@ -2306,6 +2323,7 @@ function renderSchedule(){
   table.innerHTML=html;
   table.style.minWidth = "6800px";
   renderSummary();
+  renderMyTodayPanel();
   setTimeout(updateTravelTags, 80);
 }
 
@@ -2397,6 +2415,37 @@ function renderSummary(){
     html+=`<span class="badge">${displayEngineer(e)}：${cnt} 件</span>`;
   });
   document.getElementById("summary").innerHTML=html;
+}
+
+function renderMyTodayPanel(){
+  const panel=document.getElementById("myTodayPanel");
+  if(!panel) return;
+  if(!currentUser){ panel.innerHTML=""; return; }
+  const today=formatDateLocal(new Date());
+  const targetEngineer=currentEngineer || "";
+  let list=jobs.filter(j=>String(j.date||"")===today);
+  let title="今日派工";
+  let sub=`${today}`;
+  if(targetEngineer){
+    list=list.filter(j=>normalizeEngineerName(j.engineer)===targetEngineer);
+    title=`我的今日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
+    sub=`依登入帳號 ${currentUser.email} 綁定工程師顯示`;
+  }else if(isAdmin()){
+    sub="管理員未綁定工程師，手機版顯示今日全部派工";
+  }else{
+    panel.innerHTML=`<h3>我的今日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
+    return;
+  }
+  list=list.filter(isValidJob).sort(sortJobsByTime);
+  const rows=list.map(j=>{
+    const codeName=escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time=escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+    const addr=j.address?`<div>📍 <a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`:"";
+    const work=j.workItem?`<div>施工項目：${escapeHtml(j.workItem)}</div>`:"";
+    const content=j.workContent?`<div>施工內容：${escapeHtml(j.workContent)}</div>`:"";
+    return `<div class="my-today-job"><div class="time">${time}</div><div class="name">${codeName}</div>${addr}${work}${content}${nextRouteHtml(j)}</div>`;
+  }).join("");
+  panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}，共 ${list.length} 件</div>${rows || '<div class="my-today-empty">今天沒有派工。</div>'}`;
 }
 
 
@@ -3207,8 +3256,8 @@ function exportJobs(){
 }
 (function initExportRange(){
   const today=formatDateLocal(new Date());
-  ["exportStartDate","exportStartDateList"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
-  ["exportEndDate","exportEndDateList"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
+  ["exportStartDate"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
+  ["exportEndDate"].forEach(id=>{const el=document.getElementById(id); if(el && !el.value) el.value=today;});
 })();
 
 renderCityChecks();
@@ -3434,6 +3483,13 @@ applyRoleUI();
           <select id="roleSelect">
             <option value="editor">可編輯</option>
             <option value="viewer">僅查看</option>
+          </select>
+          <select id="roleEngineer" title="綁定工程師，手機版會顯示此人的今日派工">
+            <option value="">不綁定工程師</option>
+            <option value="林川閔">M 林川閔</option>
+            <option value="陳昱存">C 陳昱存</option>
+            <option value="陳義強">Y 陳義強</option>
+            <option value="鄧長益">E 鄧長益</option>
           </select>
           <button onclick="saveRole()" style="background:#218c74">儲存權限</button>
         </div>
