@@ -987,6 +987,49 @@ body.login-required #loginGate{
 .login-card small{display:block;margin-top:14px;color:#999;}
 body.login-required .auth-status{background:#fff3cd;color:#7a5b00;border-color:#ffe08a;}
 
+
+/* ===== 未授權帳號：登入後仍不可查看任何資料 ===== */
+body.no-permission{
+  height:100vh !important;
+  overflow:hidden !important;
+  background:#f3f3f3 !important;
+}
+body.no-permission > .tabs,
+body.no-permission > .page{
+  display:none !important;
+  visibility:hidden !important;
+  height:0 !important;
+  max-height:0 !important;
+  overflow:hidden !important;
+  pointer-events:none !important;
+}
+#noAccessGate{
+  display:none;
+  width:100%;
+  min-height:calc(100vh - 64px);
+  align-items:flex-start;
+  justify-content:center;
+  padding:32px 14px;
+  background:#f3f3f3;
+}
+body.no-permission #noAccessGate{
+  display:flex !important;
+}
+.no-access-card{
+  width:min(430px, 92vw);
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:30px 24px;
+  text-align:center;
+  box-shadow:0 2px 12px rgba(0,0,0,.10);
+}
+.no-access-card .gate-icon{font-size:42px;margin-bottom:10px;}
+.no-access-card h2{margin:8px 0 10px;color:#b33939;font-size:22px;}
+.no-access-card p{margin:8px 0 18px;color:#555;line-height:1.6;font-size:14px;}
+.no-access-card button{background:#2f3542;color:#fff;border:0;border-radius:999px;padding:10px 22px;font-weight:bold;font-size:15px;}
+body.no-permission .auth-status{background:#fde2e2;color:#922b21;border-color:#f5a3a3;}
+
 </style>
 </head>
 
@@ -1007,6 +1050,15 @@ body.login-required .auth-status{background:#fff3cd;color:#7a5b00;border-color:#
     <p>登入後才可以查看與使用派工表系統。<br>未登入時不會顯示派工表、客戶資料與派工明細。</p>
     <button onclick="signInGoogle()">使用 Google 登入</button>
     <small>請使用已授權的公司帳號登入。</small>
+  </div>
+</div>
+
+<div id="noAccessGate">
+  <div class="no-access-card">
+    <div class="gate-icon">🚫</div>
+    <h2>此帳號尚未授權</h2>
+    <p>你的 Google 帳號目前沒有查看權限。<br>請先請管理員在後台新增此 Email 權限，才可以查看派工表資料。</p>
+    <button onclick="signOutGoogle()">登出並更換帳號</button>
   </div>
 </div>
 
@@ -1241,19 +1293,35 @@ function isMobileDevice(){
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
 }
 
+let googleLoginBusy=false;
+function setLoginButtonsDisabled(disabled){
+  ["googleLoginBtn"].forEach(id=>{
+    const btn=document.getElementById(id);
+    if(btn) btn.disabled=!!disabled;
+  });
+  document.querySelectorAll("#loginGate button").forEach(btn=>btn.disabled=!!disabled);
+}
 function signInGoogle(){
   if(!firebaseAuth){alert("Firebase 尚未初始化，請檢查網路或 Firebase 設定");return;}
+  if(googleLoginBusy) return;
+  googleLoginBusy=true;
+  setLoginButtonsDisabled(true);
+  setSyncStatus("正在開啟 Google 登入…", "wait");
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  const p = isMobileDevice()
-    ? firebaseAuth.signInWithRedirect(provider)
-    : firebaseAuth.signInWithPopup(provider);
-  p.catch(err=>{
+  firebaseAuth.signInWithPopup(provider).catch(err=>{
     console.error(err);
-    alert("Google 登入失敗：" + (err.message || err));
+    let msg = err.message || String(err);
+    if(err.code === "auth/cancelled-popup-request") msg = "登入視窗重複開啟，請等一下再按一次。";
+    if(err.code === "auth/popup-closed-by-user") msg = "登入視窗已關閉，請重新登入。";
+    alert("Google 登入失敗：" + msg);
     setSyncStatus("登入失敗", "err");
+  }).finally(()=>{
+    googleLoginBusy=false;
+    setLoginButtonsDisabled(false);
   });
 }
+
 
 if(firebaseAuth){
   firebaseAuth.getRedirectResult().catch(err=>{
@@ -1267,7 +1335,7 @@ function signOutGoogle(){
 }
 
 const ADMIN_EMAIL = "zxcv10019@gmail.com";
-let currentRole = "viewer"; // admin / editor / viewer
+let currentRole = "none"; // admin / editor / viewer / none（未授權不可查看）
 let currentEngineer = ""; // 綁定工程師，手機版用來顯示本人今日派工
 let rolesCache = [];
 
@@ -1276,6 +1344,9 @@ function emailKey(email){
 }
 function isAdmin(){
   return currentUser && String(currentUser.email||"").toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+function hasAccess(){
+  return currentRole === "admin" || currentRole === "editor" || currentRole === "viewer";
 }
 function canEdit(){
   return currentRole === "admin" || currentRole === "editor";
@@ -1302,17 +1373,23 @@ function cloudDocRef(){
 }
 
 async function loadUserRole(){
-  if(!currentUser || !firebaseDb){ currentRole="viewer"; currentEngineer=""; applyRoleUI(); return; }
+  if(!currentUser || !firebaseDb){ currentRole="none"; currentEngineer=""; applyRoleUI(); return; }
   if(isAdmin()){ currentRole="admin"; currentEngineer=""; applyRoleUI(); return; }
   try{
     const doc = await rolesColRef().doc(emailKey(currentUser.email)).get();
-    const roleData = doc.exists ? (doc.data() || {}) : {};
+    if(!doc.exists){
+      currentRole="none";
+      currentEngineer="";
+      applyRoleUI();
+      return;
+    }
+    const roleData = doc.data() || {};
     const role = roleData.role || "viewer";
-    currentRole = ["admin","editor","viewer"].includes(role) ? role : "viewer";
+    currentRole = ["admin","editor","viewer"].includes(role) ? role : "none";
     currentEngineer = normalizeEngineerName(roleData.engineer || "");
   }catch(e){
-    console.warn("讀取角色失敗，暫以查看權限處理", e);
-    currentRole="viewer";
+    console.warn("讀取角色失敗，暫以未授權處理", e);
+    currentRole="none";
     currentEngineer="";
   }
   applyRoleUI();
@@ -1321,7 +1398,8 @@ async function loadUserRole(){
 function roleLabel(){
   if(currentRole==="admin") return "管理員";
   if(currentRole==="editor") return "可編輯";
-  return "僅查看";
+  if(currentRole==="viewer") return "僅查看";
+  return "未授權";
 }
 function localDataExists(){
   return (Array.isArray(jobs) && jobs.length>0) || (Array.isArray(customers) && customers.length>0);
@@ -1334,6 +1412,10 @@ function chunkArray(arr, size){
 
 async function saveCloudNow(){
   if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
+  if(!hasAccess()){
+    setSyncStatus(`已登入：${currentUser.email}（未授權）`, "err");
+    return;
+  }
   if(!canEdit()){
     setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}，不可編輯）`, "ok");
     return;
@@ -1469,6 +1551,11 @@ async function applyRemoteData(data){
 
 function startCloudSync(){
   if(!currentUser || !firebaseDb) return;
+  if(!hasAccess()){
+    if(cloudUnsubscribe) cloudUnsubscribe();
+    setSyncStatus(`已登入：${currentUser.email}（未授權）`, "err");
+    return;
+  }
   if(cloudUnsubscribe) cloudUnsubscribe();
   const ref = sharedRootRef();
   setSyncStatus("讀取共用派工表…", "wait");
@@ -1506,26 +1593,31 @@ function startCloudSync(){
 function stopCloudSync(){
   if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
   currentUser=null;
-  currentRole="viewer";
+  currentRole="none";
   currentEngineer="";
   applyRoleUI();
   setSyncStatus("未登入，資料暫存在本機", "wait");
 }
 
 function applyRoleUI(){
-  const readOnly = currentUser && !canEdit();
+  const loggedIn = !!currentUser;
+  const access = loggedIn && hasAccess();
+  const readOnly = access && !canEdit();
+  document.body.classList.toggle("no-permission", loggedIn && !access);
   document.body.classList.toggle("viewer-mode", !!readOnly);
-  const statusExtra = currentUser ? `（${roleLabel()}）` : "";
-  if(currentUser){ setSyncStatus(`已登入：${currentUser.email}${statusExtra}`, canEdit()?"ok":"wait"); }
+  if(currentUser){
+    setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, access ? (canEdit()?"ok":"wait") : "err");
+  }
   renderMyTodayPanel();
   const denyWords=["儲存派工","清空派工","新增 / 更新客戶","匯入 Excel","還原備份","清空客戶","匯入派工 Excel"];
   document.querySelectorAll("button").forEach(btn=>{
     const txt=(btn.textContent||"").trim();
     const on=btn.getAttribute("onclick")||"";
     const isEditBtn = denyWords.some(w=>txt.includes(w)) || /addJobFromForm|clearAllJobs|addCustomer|clearCustomers|importJobsExcel|importExcel|restoreBackup|deleteJob|editJobForm/.test(on);
-    if(isEditBtn){ btn.disabled=!!readOnly; btn.title=readOnly?"你的帳號是查看權限": ""; }
+    if(isEditBtn){ btn.disabled=!!readOnly || (loggedIn && !access); btn.title=(loggedIn && !access)?"此帳號尚未授權":(readOnly?"你的帳號是查看權限":""); }
   });
 }
+
 
 async function loadRoles(){
   if(!firebaseDb || !isAdmin()) return;
@@ -1566,12 +1658,15 @@ if(firebaseAuth){
     currentUser=user || null;
     const loginBtn=document.getElementById("googleLoginBtn");
     const logoutBtn=document.getElementById("googleLogoutBtn");
-    document.body.classList.toggle("login-required", !user);
     if(user){
+      document.body.classList.add("login-required");
+      document.body.classList.remove("no-permission");
       if(loginBtn) loginBtn.style.display="none";
       if(logoutBtn) logoutBtn.style.display="inline-block";
       loadUserRole().then(()=>{
-        startCloudSync();
+        document.body.classList.toggle("login-required", !hasAccess());
+        document.body.classList.toggle("no-permission", !hasAccess());
+        if(hasAccess()) startCloudSync();
         if(isAdmin()) loadRoles();
         writeLog("login", {
           device: navigator.userAgent.includes("Mobile") ? "手機" : "電腦",
@@ -1594,6 +1689,7 @@ if(firebaseAuth){
         }
       }
       document.body.classList.add("login-required");
+      document.body.classList.remove("no-permission");
       if(loginBtn) loginBtn.style.display="inline-block";
       if(logoutBtn) logoutBtn.style.display="none";
       stopCloudSync();
