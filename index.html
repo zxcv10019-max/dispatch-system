@@ -932,16 +932,71 @@ body{
 .travel-tag.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
 .overlap-badge{display:inline-block;background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:10px;margin-left:4px;font-weight:bold}
 
+
+
+/* ===== 登入必須：未登入時完全隱藏系統內容 ===== */
+body.login-required{
+  height:100vh !important;
+  overflow:hidden !important;
+  background:#f3f3f3 !important;
+}
+body.login-required > .tabs,
+body.login-required > .page{
+  display:none !important;
+  visibility:hidden !important;
+  height:0 !important;
+  max-height:0 !important;
+  overflow:hidden !important;
+  pointer-events:none !important;
+}
+#loginGate{
+  display:none;
+  width:100%;
+  min-height:calc(100vh - 64px);
+  align-items:flex-start;
+  justify-content:center;
+  padding:32px 14px;
+  background:#f3f3f3;
+}
+body.login-required #loginGate{
+  display:flex !important;
+}
+.login-card{
+  width:min(420px, 92vw);
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:14px;
+  padding:30px 24px;
+  text-align:center;
+  box-shadow:0 2px 12px rgba(0,0,0,.10);
+}
+.login-card .gate-icon{font-size:42px;margin-bottom:10px;}
+.login-card h2{margin:8px 0 10px;color:#2f3542;font-size:22px;}
+.login-card p{margin:8px 0 18px;color:#555;line-height:1.6;font-size:14px;}
+.login-card button{background:#2f3542;color:#fff;border:0;border-radius:999px;padding:10px 22px;font-weight:bold;font-size:15px;}
+.login-card small{display:block;margin-top:14px;color:#999;}
+body.login-required .auth-status{background:#fff3cd;color:#7a5b00;border-color:#ffe08a;}
+
 </style>
 </head>
 
-<body>
+<body class="login-required">
 <div class="header">
   <div>派工表系統</div>
   <div class="auth-panel">
     <span id="syncStatus" class="auth-status"><span class="sync-dot wait"></span>未登入，資料暫存在本機</span>
     <button id="googleLoginBtn" onclick="signInGoogle()">Google 登入</button>
     <button id="googleLogoutBtn" onclick="signOutGoogle()" style="display:none">登出</button>
+  </div>
+</div>
+
+<div id="loginGate">
+  <div class="login-card">
+    <div class="gate-icon">🔐</div>
+    <h2>請先 Google 登入</h2>
+    <p>登入後才可以查看與使用派工表系統。<br>未登入時不會顯示派工表、客戶資料與派工明細。</p>
+    <button onclick="signInGoogle()">使用 Google 登入</button>
+    <small>請使用已授權的公司帳號登入。</small>
   </div>
 </div>
 
@@ -1173,12 +1228,27 @@ function setSyncStatus(text, type="wait"){
   el.innerHTML=`<span class="sync-dot ${type}"></span>${escapeHtml(text)}`;
 }
 
+function isMobileDevice(){
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+}
+
 function signInGoogle(){
   if(!firebaseAuth){alert("Firebase 尚未初始化，請檢查網路或 Firebase 設定");return;}
   const provider = new firebase.auth.GoogleAuthProvider();
-  firebaseAuth.signInWithPopup(provider).catch(err=>{
+  provider.setCustomParameters({ prompt: "select_account" });
+  const p = isMobileDevice()
+    ? firebaseAuth.signInWithRedirect(provider)
+    : firebaseAuth.signInWithPopup(provider);
+  p.catch(err=>{
     console.error(err);
     alert("Google 登入失敗：" + (err.message || err));
+    setSyncStatus("登入失敗", "err");
+  });
+}
+
+if(firebaseAuth){
+  firebaseAuth.getRedirectResult().catch(err=>{
+    console.error("Google redirect 登入失敗", err);
     setSyncStatus("登入失敗", "err");
   });
 }
@@ -1479,6 +1549,7 @@ if(firebaseAuth){
     currentUser=user || null;
     const loginBtn=document.getElementById("googleLoginBtn");
     const logoutBtn=document.getElementById("googleLogoutBtn");
+    document.body.classList.toggle("login-required", !user);
     if(user){
       if(loginBtn) loginBtn.style.display="none";
       if(logoutBtn) logoutBtn.style.display="inline-block";
@@ -1505,6 +1576,7 @@ if(firebaseAuth){
           }).catch(()=>{});
         }
       }
+      document.body.classList.add("login-required");
       if(loginBtn) loginBtn.style.display="inline-block";
       if(logoutBtn) logoutBtn.style.display="none";
       stopCloudSync();
