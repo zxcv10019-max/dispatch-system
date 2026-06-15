@@ -1113,7 +1113,7 @@ body.no-permission .auth-status{background:#fde2e2;color:#922b21;border-color:#f
 @media(max-width:900px){.my-day-section h4{font-size:17px!important;margin-top:16px!important;}}
 
 
-/* ===== 2026-06 admin page scroll fix ===== */
+/* old admin page scroll fix disabled */
 html, body{
   min-height:100% !important;
 }
@@ -1179,6 +1179,56 @@ body.admin-scroll-mode{
     max-height:none !important;
   }
 }
+
+
+/* ===== 2026-06 admin whole-page scroll fix ===== */
+/* 後台不要固定畫面，讓整個頁面可以下滑，右側顯示瀏覽器捲軸 */
+body.admin-scroll-mode,
+body:has(#adminPage.page.active){
+  display:block !important;
+  height:auto !important;
+  min-height:100vh !important;
+  overflow-y:scroll !important;
+  overflow-x:hidden !important;
+  padding-bottom:120px !important;
+}
+
+/* 後台頁內容跟著整頁下滑，上方標題/帳號設定區不固定 */
+#adminPage.page.active{
+  display:block !important;
+  height:auto !important;
+  min-height:100vh !important;
+  overflow:visible !important;
+  padding-bottom:140px !important;
+}
+
+#adminPage .admin-header,
+#adminPage .admin-body,
+#adminPage .role-panel,
+#adminPage .admin-filter,
+#adminPage .admin-stats{
+  position:static !important;
+  top:auto !important;
+}
+
+/* 表格不要只在小框框內滑，讓它撐開頁面，跟整頁一起滑 */
+#adminPage .log-table-wrap{
+  max-height:none !important;
+  height:auto !important;
+  overflow:visible !important;
+}
+
+#adminPage .log-table-wrap table{
+  width:100% !important;
+}
+
+/* 表頭不要 sticky，避免整頁滑動時卡住 */
+#adminPage .log-table-wrap th{
+  position:static !important;
+  top:auto !important;
+}
+
+/* 如果瀏覽器不支援 :has，也由 JS 加 admin-scroll-mode 控制 */
 
 </style>
 </head>
@@ -3846,5 +3896,31 @@ applyRoleUI();
 <div id="fixedBottomScroll">
   <div id="fixedBottomScrollInner"></div>
 </div>
+
+<script>
+document.addEventListener("click", function(e){
+  const btn = e.target.closest && e.target.closest("button");
+  if(!btn) return;
+  const on = btn.getAttribute("onclick") || "";
+  if(on.includes("showPage('adminPage')") || on.includes('showPage("adminPage")')){
+    document.body.classList.add("admin-scroll-mode");
+  }else if(on.includes("showPage(")){
+    document.body.classList.remove("admin-scroll-mode");
+  }
+});
+</script>
+
+
+<script>
+(function(){
+  function syncAdminScrollMode(){
+    var admin = document.getElementById("adminPage");
+    document.body.classList.toggle("admin-scroll-mode", !!(admin && admin.classList.contains("active")));
+  }
+  document.addEventListener("DOMContentLoaded", syncAdminScrollMode);
+  setInterval(syncAdminScrollMode, 500);
+})();
+</script>
+
 </body>
 </html>
