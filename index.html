@@ -1230,6 +1230,49 @@ body:has(#adminPage.page.active){
 
 /* 如果瀏覽器不支援 :has，也由 JS 加 admin-scroll-mode 控制 */
 
+
+/* ===== ADMIN SCROLL FORCE FIX 2026-06-15 ===== */
+body.force-admin-scroll,
+html.force-admin-scroll{
+  height:auto !important;
+  min-height:100% !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+}
+body.force-admin-scroll{
+  display:block !important;
+  position:static !important;
+  padding-bottom:180px !important;
+}
+body.force-admin-scroll .header,
+body.force-admin-scroll .tabs,
+body.force-admin-scroll #adminPage .admin-header,
+body.force-admin-scroll #adminPage .admin-body{
+  position:static !important;
+  top:auto !important;
+}
+body.force-admin-scroll #adminPage.page.active{
+  display:block !important;
+  height:auto !important;
+  min-height:160vh !important;
+  overflow:visible !important;
+  padding-bottom:200px !important;
+}
+body.force-admin-scroll #adminPage .admin-body{
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+}
+body.force-admin-scroll #adminPage .log-table-wrap{
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+}
+body.force-admin-scroll #adminPage .log-table-wrap th{
+  position:static !important;
+  top:auto !important;
+}
+
 </style>
 </head>
 
@@ -3919,6 +3962,42 @@ document.addEventListener("click", function(e){
   }
   document.addEventListener("DOMContentLoaded", syncAdminScrollMode);
   setInterval(syncAdminScrollMode, 500);
+})();
+</script>
+
+
+<script>
+(function(){
+  function forceAdminScroll(){
+    var isAdmin = location.search.indexOf("admin") >= 0 || (document.getElementById("adminPage") && document.getElementById("adminPage").classList.contains("active"));
+    document.documentElement.classList.toggle("force-admin-scroll", !!isAdmin);
+    document.body.classList.toggle("force-admin-scroll", !!isAdmin);
+    if(isAdmin){
+      document.documentElement.style.height = "auto";
+      document.documentElement.style.overflowY = "auto";
+      document.body.style.height = "auto";
+      document.body.style.minHeight = "100vh";
+      document.body.style.overflowY = "auto";
+      document.body.style.overflowX = "hidden";
+      document.body.style.display = "block";
+      var admin = document.getElementById("adminPage");
+      if(admin){
+        admin.style.height = "auto";
+        admin.style.minHeight = "160vh";
+        admin.style.overflow = "visible";
+        admin.style.paddingBottom = "200px";
+      }
+      document.querySelectorAll("#adminPage .log-table-wrap").forEach(function(el){
+        el.style.maxHeight = "none";
+        el.style.height = "auto";
+        el.style.overflow = "visible";
+      });
+    }
+  }
+  window.forceAdminScroll = forceAdminScroll;
+  document.addEventListener("DOMContentLoaded", forceAdminScroll);
+  window.addEventListener("load", forceAdminScroll);
+  setInterval(forceAdminScroll, 300);
 })();
 </script>
 
