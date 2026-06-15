@@ -1112,6 +1112,74 @@ body.no-permission .auth-status{background:#fde2e2;color:#922b21;border-color:#f
 .my-day-section h4{margin:10px 0 6px;font-size:16px;color:#2f3542;border-left:4px solid #2f3542;padding-left:8px;}
 @media(max-width:900px){.my-day-section h4{font-size:17px!important;margin-top:16px!important;}}
 
+
+/* ===== 2026-06 admin page scroll fix ===== */
+html, body{
+  min-height:100% !important;
+}
+
+body:has(#adminPage.page.active),
+body.admin-scroll-mode{
+  height:auto !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  display:block !important;
+}
+
+#adminPage.page.active{
+  display:block !important;
+  height:auto !important;
+  min-height:calc(100vh - 96px) !important;
+  overflow:visible !important;
+  padding-bottom:120px !important;
+}
+
+#adminPage .admin-body{
+  height:auto !important;
+  min-height:0 !important;
+  overflow:visible !important;
+  padding-bottom:120px !important;
+}
+
+#adminPage .log-table-wrap{
+  max-height:none !important;
+  overflow:visible !important;
+}
+
+#adminPage .role-panel,
+#adminPage .admin-filter,
+#adminPage .admin-stats{
+  max-width:1200px !important;
+}
+
+/* 手機 / 平板後台也能上下滑 */
+@media(max-width:900px){
+  body:has(#adminPage.page.active),
+  body.admin-scroll-mode{
+    height:auto !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+  }
+
+  #adminPage.page.active{
+    height:auto !important;
+    overflow:visible !important;
+    padding-bottom:140px !important;
+  }
+
+  #adminPage .admin-body{
+    padding:12px !important;
+    overflow:visible !important;
+  }
+
+  #adminPage .log-table-wrap{
+    overflow-x:auto !important;
+    overflow-y:visible !important;
+    max-height:none !important;
+  }
+}
+
 </style>
 </head>
 
