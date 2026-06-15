@@ -920,6 +920,18 @@ body{
 .role-badge{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:bold;background:#e8f4fd;color:#155a8a}
 .role-badge.viewer{background:#eee;color:#555}.role-badge.editor{background:#d4edda;color:#155724}.role-badge.admin{background:#fde2e2;color:#922b21}
 
+
+
+/* ===== Google 車程顯示 ===== */
+.route-info{margin-top:4px;font-size:11px;line-height:1.45;border-radius:6px;padding:4px 6px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;display:block}
+.route-info.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.route-info.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.route-info a{color:inherit;text-decoration:underline;font-weight:bold}
+.travel-tag{display:inline-block;padding:2px 7px;border-radius:10px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;font-size:11px;margin-left:3px;line-height:1.5}
+.travel-tag.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.travel-tag.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.overlap-badge{display:inline-block;background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:10px;margin-left:4px;font-weight:bold}
+
 </style>
 </head>
 
@@ -1082,6 +1094,8 @@ body{
 <div id="listPage" class="page">
   <div class="toolbar">
     <input type="month" id="listMonth">
+    <label class="export-range-label">日期起</label><input type="date" id="listStartDate" class="export-date" onchange="renderJobList()">
+    <label class="export-range-label">日期迄</label><input type="date" id="listEndDate" class="export-date" onchange="renderJobList()">
     <select id="listHoldFilter" onchange="renderJobList()" title="派工狀態篩選">
       <option value="normal">正式派工</option>
       <option value="hold">目前暫押派工</option>
@@ -1128,6 +1142,9 @@ const firebaseConfig = {
   appId: "1:79344587250:web:55ee46a4769ca4ae52db6b",
   measurementId: "G-40C3G2Z595"
 };
+
+// Google Maps Platform：使用 Firebase Browser key（已限制 GitHub Pages 網域與 Routes/Geocoding/Places API）
+const GOOGLE_MAPS_API_KEY = firebaseConfig.apiKey;
 
 let firebaseApp=null, firebaseAuth=null, firebaseDb=null;
 let currentUser=null;
@@ -1713,6 +1730,9 @@ function addJobFromForm(){
 function clearDispatchForm(){
   ["fOrderNo","fCustomerCode","fCustomerName","fCodeName","fPhone","fCity","fDistrict","fAddress","fWorkContent","fAmount"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("fEngineer").value="";
+  document.getElementById("fDate").valueAsDate=new Date();
+  document.getElementById("fStartTime").value="09:30";
+  document.getElementById("fEndTime").value="10:30";
   document.getElementById("fWorkItem").value="";
   document.getElementById("fPayment").value="";
   editingJobId=null;
@@ -1744,57 +1764,139 @@ function getEngineerFreeRanges(engineer, date){
   return { freeRanges, dayJobs };
 }
 
-// ===== 車程自動計算（Nominatim geocoding + OSRM routing，免費不需 API Key）=====
-const geoCache = {};   // address -> {lat,lon} or null
-const travelCache = {}; // "lat1,lon1|lat2,lon2" -> "XX 分鐘" or null
+// ===== Google Maps Routes API 車程自動計算 =====
+const travelCache = {}; // "from|to" -> {durationText,distanceText,durationMinutes,distanceKm} or null
 
-async function geocodeAddress(addr){
-  if(!addr) return null;
-  const key = addr.trim();
-  if(key in geoCache) return geoCache[key];
-  try{
-    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(key);
-    const res = await fetch(url, {headers:{"Accept-Language":"zh-TW,zh","User-Agent":"dispatch-system"}});
-    const data = await res.json();
-    const result = data && data[0] ? {lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon)} : null;
-    geoCache[key] = result;
-    return result;
-  }catch(e){ geoCache[key]=null; return null; }
+function parseDurationSeconds(duration){
+  const m = String(duration||"").match(/([0-9.]+)s/);
+  return m ? Math.round(parseFloat(m[1])) : 0;
 }
-
-async function fetchDrivingMinutes(addrA, addrB){
+function formatDuration(sec){
+  const mins = Math.max(0, Math.round((sec||0)/60));
+  if(mins < 60) return `${mins} 分鐘`;
+  const h = Math.floor(mins/60), m = mins%60;
+  return m ? `${h} 小時 ${m} 分鐘` : `${h} 小時`;
+}
+function formatDistance(meters){
+  const km = (Number(meters||0)/1000);
+  if(km < 1) return `${Math.round(Number(meters||0))} m`;
+  return `${km.toFixed(km>=10 ? 0 : 1)} km`;
+}
+function minutesBetween(startTime,endTime){
+  const s=timeIndex(startTime), e=timeIndex(endTime);
+  if(s<0 || e<0) return null;
+  return (e-s)*30;
+}
+function getJobStartIndex(j){ return timeIndex(j.startTime||j.time); }
+function sortJobsByTime(a,b){
+  const ai=getJobStartIndex(a), bi=getJobStartIndex(b);
+  if(ai!==bi) return ai-bi;
+  return Number(a.id||0)-Number(b.id||0);
+}
+function getNextJob(j){
+  if(!j || !j.date || !j.engineer) return null;
+  const day = jobs.filter(x=>x.id!==j.id && !x.isHold && x.date===j.date && x.engineer===j.engineer && x.address).sort(sortJobsByTime);
+  const curIdx=getJobStartIndex(j);
+  return day.find(x=>getJobStartIndex(x)>curIdx) || null;
+}
+function hasOverlap(j){
+  if(!j || !j.date || !j.engineer) return false;
+  const s=getJobStartIndex(j), e=timeIndex(j.endTime||j.startTime||j.time);
+  if(s<0) return false;
+  const end=e>=s?e:s;
+  return jobs.some(x=>{
+    if(x.id===j.id || x.date!==j.date || x.engineer!==j.engineer) return false;
+    const xs=getJobStartIndex(x), xe=timeIndex(x.endTime||x.startTime||x.time);
+    if(xs<0) return false;
+    const xend=xe>=xs?xe:xs;
+    return s<=xend && xs<=end;
+  });
+}
+async function fetchDrivingInfo(addrA, addrB){
   if(!addrA || !addrB) return null;
-  const cacheKey = addrA + "|" + addrB;
+  if(String(addrA).trim()===String(addrB).trim()) return {durationText:"0 分鐘",distanceText:"0 m",durationMinutes:0,distanceKm:0};
+  const cacheKey = String(addrA).trim() + "|" + String(addrB).trim();
   if(cacheKey in travelCache) return travelCache[cacheKey];
-  const [gA, gB] = await Promise.all([geocodeAddress(addrA), geocodeAddress(addrB)]);
-  if(!gA || !gB){ travelCache[cacheKey]=null; return null; }
   try{
-    const url = `https://router.project-osrm.org/route/v1/driving/${gA.lon},${gA.lat};${gB.lon},${gB.lat}?overview=false`;
-    const res = await fetch(url);
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask":"routes.duration,routes.distanceMeters"
+      },
+      body:JSON.stringify({
+        origin:{address:addrA},
+        destination:{address:addrB},
+        travelMode:"DRIVE",
+        routingPreference:"TRAFFIC_AWARE",
+        languageCode:"zh-TW",
+        units:"METRIC"
+      })
+    });
+    if(!res.ok){ throw new Error("Routes API HTTP " + res.status); }
     const data = await res.json();
-    if(data.code==="Ok" && data.routes && data.routes[0]){
-      const mins = Math.round(data.routes[0].duration / 60);
-      const label = mins < 60 ? `約 ${mins} 分鐘` : `約 ${Math.floor(mins/60)} 時 ${mins%60} 分`;
-      travelCache[cacheKey] = label;
-      return label;
-    }
-    travelCache[cacheKey]=null; return null;
-  }catch(e){ travelCache[cacheKey]=null; return null; }
+    const route = data.routes && data.routes[0];
+    if(!route){ travelCache[cacheKey]=null; return null; }
+    const sec=parseDurationSeconds(route.duration);
+    const meters=Number(route.distanceMeters||0);
+    const result={
+      durationText:formatDuration(sec),
+      distanceText:formatDistance(meters),
+      durationMinutes:Math.round(sec/60),
+      distanceKm:meters/1000
+    };
+    travelCache[cacheKey]=result;
+    return result;
+  }catch(e){
+    console.warn("Google 車程計算失敗", e);
+    travelCache[cacheKey]=null;
+    return null;
+  }
 }
-
-async function updateTravelTags(currentAddr){
-  // 找所有 .travel-tag span，依 data-from / data-to 非同步填入
-  const tags = document.querySelectorAll(".travel-tag[data-from][data-to]");
+function routeTagHtml(from,to,label="車程", extra=""){
+  if(!from || !to) return `<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>`;
+  return `<span class="travel-tag" data-from="${escapeHtml(from)}" data-to="${escapeHtml(to)}" ${extra}>${label}：計算中…</span>`;
+}
+function nextRouteHtml(j){
+  const next=getNextJob(j);
+  if(!j.address) return "";
+  if(!next) return `<div class="route-info">🚗 今日最後一站　<a href="${mapUrl(j.address)}" target="_blank">導航</a></div>`;
+  const gap = minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time);
+  return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
+}
+async function updateTravelTags(){
+  const tags = document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]");
   for(const tag of tags){
     const from = tag.dataset.from;
     const to = tag.dataset.to;
-    if(!from || !to){ continue; }
-    tag.textContent = "計算中…";
-    const mins = await fetchDrivingMinutes(from, to);
-    tag.textContent = mins ? `🚗 ${mins}` : "無法計算";
-    tag.style.background = mins ? "#e8f7ee" : "#f1f1f1";
-    tag.style.borderColor = mins ? "#7ec89a" : "#ccc";
-    tag.style.color = mins ? "#1a5c2a" : "#888";
+    if(!from || !to) continue;
+    const isBox = tag.classList.contains("route-info");
+    const prefix = tag.dataset.prefix || "車程";
+    tag.textContent = isBox ? `🚗 ${prefix}：計算中…` : `${prefix}：計算中…`;
+    const info = await fetchDrivingInfo(from, to);
+    if(info){
+      const gap = tag.dataset.gap==="" || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
+      const warn = gap!==null && !Number.isNaN(gap) && info.durationMinutes > gap;
+      tag.classList.toggle("warn", !!warn);
+      tag.classList.toggle("ok", !warn);
+      const text = `${prefix}：${info.durationText}（${info.distanceText}）${warn?` ⚠️ 空檔${gap}分鐘，可能趕不上`:""}`;
+      if(isBox){
+        const nav = tag.dataset.nav || directionUrl(from,to);
+        tag.innerHTML = `🚗 ${escapeHtml(text)}　<a href="${nav}" target="_blank">導航</a>`;
+      }else{
+        tag.textContent = `🚗 ${text}`;
+      }
+    }else{
+      tag.classList.remove("ok");
+      tag.classList.add("warn");
+      if(isBox){
+        const nav = tag.dataset.nav || directionUrl(from,to);
+        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：無法計算　<a href="${nav}" target="_blank">開 Google Maps</a>`;
+      }else{
+        tag.textContent = `🚗 ${prefix}：無法計算`;
+      }
+    }
   }
 }
 
@@ -1856,8 +1958,7 @@ function renderAvailableSlots(){
         const codename = escapeHtml(j.codeName || j.customerName || j.customerCode || "");
         const hasAddrs = currentAddr && j.address;
         const travelSpan = hasAddrs
-          ? `<span class="travel-tag" data-from="${escapeHtml(currentAddr)}" data-to="${escapeHtml(j.address)}"
-              style="display:inline-block;padding:1px 6px;border-radius:10px;background:#f1f1f1;border:1px solid #ccc;color:#888;font-size:11px;margin-left:3px;">計算中…</span>`
+          ? routeTagHtml(currentAddr, j.address, "到此車程")
           : `<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>`;
         html += `<span style="display:inline-block;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">
           ${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}${travelSpan}</span>`;
@@ -1872,7 +1973,7 @@ function renderAvailableSlots(){
 
   // 非同步填入車程
   if(currentAddr){
-    updateTravelTags(currentAddr);
+    updateTravelTags();
   }
 }
 
@@ -2101,42 +2202,40 @@ function renderSchedule(){
   html+="</tr>";
 
   times.forEach((time,idx)=>{
-    // 使用完整版格式：沒有派工起始的時間列自動壓縮高度
-    const rowHasNewJob = dates.some(dateStr=>
+    const rowHasJob = dates.some(dateStr=>
       engineers.some(engineer=>
-        jobs.some(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time))
+        jobs.some(j=>j.date===dateStr&&j.engineer===engineer&&(
+          (j.time===time||j.startTime===time) ||
+          (timeIndex(j.startTime||j.time)<idx && idx<timeIndex(j.endTime||j.startTime||j.time)+1)
+        ))
       )
     );
-    const trH = rowHasNewJob ? '' : ' style="height:24px;"';
-    const tdStyle = rowHasNewJob ? '' : ' style="font-size:11px;padding:1px 4px;"';
-
+    const trH = rowHasJob ? '' : ' style="height:24px;"';
+    const tdStyle = rowHasJob ? '' : ' style="font-size:11px;padding:1px 4px;"';
     html+=`<tr${trH}><td class="time-col"${tdStyle}>${time}</td>`;
 
     dates.forEach(dateStr=>{
       engineers.forEach(engineer=>{
-        if(isCoveredByPreviousJob(dateStr, engineer, idx)){
-          return;
-        }
-
-        const cellJobs=jobs.filter(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time));
-        let span=1;
-        if(cellJobs.length>0){
-          span=Math.max(...cellJobs.map(j=>calcSpan(j)));
-        }
-
-        const holdCls = cellJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
-        html+=`<td class="slot ${cellJobs.length?`job-slot-active`:``} ${holdCls}" rowspan="${span}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
-        cellJobs.forEach(j=>html+=jobCard(j));
+        const startJobs=jobs.filter(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time)).sort(sortJobsByTime);
+        const activeJobs=jobs.filter(j=>{
+          if(j.date!==dateStr || j.engineer!==engineer) return false;
+          const s=timeIndex(j.startTime||j.time), e=timeIndex(j.endTime||j.startTime||j.time);
+          const end=e>=s?e:s;
+          return s>=0 && idx>=s && idx<=end;
+        });
+        const holdCls = activeJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
+        startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
     });
-
     html+="</tr>";
   });
 
   table.innerHTML=html;
   table.style.minWidth = "6800px";
   renderSummary();
+  setTimeout(updateTravelTags, 80);
 }
 
 function jobCard(j){
@@ -2145,6 +2244,8 @@ function jobCard(j){
     : "";
 
   const codeName = j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim();
+  const overlapHtml = hasOverlap(j) ? `<span class="overlap-badge">重疊</span>` : "";
+  const routeHtml = nextRouteHtml(j);
   const timeText = `${j.startTime || j.time || ""}${j.endTime ? " ~ " + j.endTime : ""}`;
 
   const span = calcSpan(j);
@@ -2159,7 +2260,7 @@ function jobCard(j){
 
   return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
     <div class="job-top">
-      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料">${escapeHtml(codeName)}</div>
+      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料">${escapeHtml(codeName)}${overlapHtml}</div>
       <div class="actions">
         <button class="edit" onclick="editJobForm(${j.id},event)">改</button>
         <button class="delete" onclick="deleteJob(${j.id})">X</button>
@@ -2169,6 +2270,7 @@ function jobCard(j){
     ${timeText.trim() ? `<div class="card-time">時間：${escapeHtml(timeText)}</div>` : ""}
     ${j.phone ? `<div class="card-line">電話：${escapeHtml(j.phone)}</div>` : ""}
     ${address}
+    ${routeHtml}
     ${j.workItem ? `<div class="card-line card-work">施工項目：${escapeHtml(j.workItem)}</div>` : ""}
     ${j.workContent ? `<div class="card-line">施工內容：${escapeHtml(j.workContent)}</div>` : ""}
     ${statusHtml}
@@ -2831,6 +2933,8 @@ function importExcel(event){
 
 function clearListFilter(){
   document.getElementById("listCustomerFilter").value="";
+  const sd=document.getElementById("listStartDate"); if(sd) sd.value="";
+  const ed=document.getElementById("listEndDate"); if(ed) ed.value="";
   const hf=document.getElementById("listHoldFilter");
   if(hf) hf.value="normal";
   renderJobList();
@@ -2854,6 +2958,8 @@ function jumpToJobList(event, el){
 function renderJobList(){
   const month = document.getElementById("listMonth").value;
   const holdFilter = (document.getElementById("listHoldFilter")||{}).value || "normal";
+  const startDate = (document.getElementById("listStartDate")||{}).value || "";
+  const endDate = (document.getElementById("listEndDate")||{}).value || "";
   const custFilter = (document.getElementById("listCustomerFilter")||{}).value || "";
   const kw = custFilter.trim().toLowerCase();
 
@@ -2862,9 +2968,10 @@ function renderJobList(){
       const isHold = !!j.isHold || !j.date;
       const holdOk = holdFilter==="all" || (holdFilter==="hold" ? isHold : !isHold);
       const monthOk = holdFilter==="hold" || !month || String(j.date || "").slice(0,7) === month;
+      const dateOk = holdFilter==="hold" || (!startDate || String(j.date||"")>=startDate) && (!endDate || String(j.date||"")<=endDate);
       const custOk = !kw || [j.customerCode, j.customerName, j.codeName, j.orderNo]
         .some(v => String(v||"").toLowerCase().includes(kw));
-      return holdOk && monthOk && custOk;
+      return holdOk && monthOk && dateOk && custOk;
     })
     .sort((a,b)=>{
       const ah=(!!a.isHold || !a.date) ? 0 : 1;
@@ -2877,15 +2984,15 @@ function renderJobList(){
   const badge = document.getElementById("listFilterBadge");
   if(badge){
     const holdText = holdFilter==="hold" ? "目前暫押派工" : (holdFilter==="all" ? "全部派工" : "正式派工");
-    if(kw || holdFilter!=="normal"){
+    if(kw || holdFilter!=="normal" || startDate || endDate){
       badge.style.display="block";
-      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">${escapeHtml(holdText)}${kw?`　🔍 篩選：「${escapeHtml(custFilter)}」`:""}　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
+      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">${escapeHtml(holdText)}${startDate||endDate?`　📅 ${escapeHtml(startDate||"不限")}～${escapeHtml(endDate||"不限")}`:""}${kw?`　🔍 篩選：「${escapeHtml(custFilter)}」`:""}　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
     } else {
       badge.style.display="none";
     }
   }
 
-  let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
+  let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>下一站車程</th><th>銷售金額</th><th>付款方式</th></tr>";
 
   list.forEach(j=>{
     const isHold = !!j.isHold || !j.date;
@@ -2907,12 +3014,14 @@ function renderJobList(){
       <td>${j.address?`<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a>`:""}</td>
       <td>${escapeHtml(j.workItem)}</td>
       <td>${escapeHtml(j.workContent)}</td>
+      <td>${(()=>{ const n=getNextJob(j); return (j.address&&n&&n.address) ? routeTagHtml(j.address,n.address,"下一站") : (j.address ? "今日最後一站" : ""); })()}</td>
       <td>${escapeHtml(j.amount)}</td>
       <td>${escapeHtml(j.payment)}</td>
     </tr>`;
   });
 
   document.getElementById("jobListTable").innerHTML=html;
+  setTimeout(updateTravelTags, 80);
 }
 
 function exportCustomers(){
