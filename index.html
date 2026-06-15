@@ -1721,10 +1721,9 @@ function addJobFromForm(){
   setupFixedBottomScrollbar();
   renderJobList();
   clearDispatchForm();
-  showPage("schedulePage");
 
-  // 顯示短暫 toast 提示，不用 alert
-  showToast(wasEditing ? "✅ 已更新派工" : "✅ 已新增派工");
+  // 儲存後留在「新增派工資料」頁，清空表單並跳出完成訊息
+  alert(wasEditing ? "已更新派工" : "已新增派工");
 }
 
 function clearDispatchForm(){
