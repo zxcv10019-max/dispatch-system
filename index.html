@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>派工表系統</title>
-<!-- nojump sync fix: shared table + dirty local protection -->
+<!-- fixed: sharedDispatch path + roles + nojump sync protection -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-auth-compat.js"></script>
@@ -1190,7 +1190,7 @@ function requireEdit(action="操作"){
 }
 function sharedRootRef(){
   if(!firebaseDb) return null;
-  return firebaseDb.collection("dispatchShared").doc("main");
+  return firebaseDb.collection("sharedDispatch").doc("main");
 }
 function chunksColRef(){
   const root=sharedRootRef();
