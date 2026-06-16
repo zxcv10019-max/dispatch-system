@@ -1565,6 +1565,144 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   .eng-detail-card a{color:#0066cc!important;font-weight:bold!important;text-decoration:underline!important;}
 }
 
+
+/* ===== 2026-06 desktop supervisor dashboard in admin page ===== */
+#desktopSupervisorBox{
+  display:none;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:14px;
+  margin:16px 0;
+  box-shadow:0 1px 5px rgba(0,0,0,.06);
+}
+
+#desktopSupervisorBox.active{
+  display:block;
+}
+
+.desktop-supervisor-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+
+.desktop-supervisor-title{
+  font-size:20px;
+  font-weight:bold;
+  color:#2f3542;
+}
+
+.desktop-supervisor-tools{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.desktop-supervisor-tools input[type="date"]{
+  padding:8px 10px;
+}
+
+.desktop-supervisor-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(120px,1fr));
+  gap:10px;
+  margin:12px 0 14px;
+}
+
+.desktop-supervisor-stat{
+  background:#f8fbff;
+  border:1px solid #d6e4f0;
+  border-radius:10px;
+  padding:12px;
+  text-align:center;
+}
+
+.desktop-supervisor-stat .num{
+  font-size:26px;
+  font-weight:bold;
+  color:#1f4e79;
+}
+
+.desktop-supervisor-stat .label{
+  font-size:12px;
+  color:#666;
+}
+
+.desktop-supervisor-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(280px,1fr));
+  gap:12px;
+}
+
+.desktop-supervisor-card{
+  border:1px solid #d9e2ec;
+  border-radius:12px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.desktop-supervisor-card-head{
+  background:#eaf3ff;
+  color:#1f3a5f;
+  padding:10px 12px;
+  font-weight:bold;
+  font-size:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.desktop-supervisor-route{
+  padding:9px 12px;
+  border-bottom:1px solid #eef1f5;
+  color:#333;
+  font-size:13px;
+  line-height:1.5;
+}
+
+.desktop-supervisor-job{
+  padding:8px 12px;
+  border-top:1px solid #eef1f5;
+  font-size:13px;
+  line-height:1.45;
+}
+
+.desktop-supervisor-job:nth-child(even){
+  background:#fafafa;
+}
+
+.desktop-supervisor-job .time{
+  font-weight:bold;
+  color:#1f4e79;
+}
+
+.desktop-supervisor-job .name{
+  font-weight:bold;
+  color:#111827;
+}
+
+.desktop-supervisor-job .place{
+  color:#155a8a;
+  font-weight:bold;
+}
+
+.desktop-supervisor-empty{
+  padding:12px;
+  color:#999;
+  font-size:13px;
+}
+
+@media(max-width:900px){
+  #desktopSupervisorBox{
+    display:none !important;
+  }
+}
+
 </style>
 </head>
 
@@ -4959,6 +5097,186 @@ document.addEventListener("click", function(e){
   window.addEventListener("load", function(){ setTimeout(forceMobileScheduleOnly, 200); });
   window.addEventListener("resize", forceMobileScheduleOnly);
   setInterval(forceMobileScheduleOnly, 1200);
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 desktop supervisor dashboard inside hidden admin ===== */
+(function(){
+  const SUPERVISOR_EMAIL = "zxcv10019@gmail.com";
+
+  function isSupervisorAccount(){
+    return currentUser && String(currentUser.email || "").toLowerCase() === SUPERVISOR_EMAIL;
+  }
+
+  function supervisorDate(){
+    const saved = localStorage.getItem("dispatch_desktop_supervisor_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setSupervisorDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
+      localStorage.setItem("dispatch_desktop_supervisor_date", d);
+    }
+  }
+
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return formatDateLocal(d);
+  }
+
+  window.desktopSupervisorToday = function(){
+    const d = formatDateLocal(new Date());
+    setSupervisorDate(d);
+    const input = document.getElementById("desktopSupervisorDate");
+    if(input) input.value = d;
+    renderDesktopSupervisor();
+  };
+
+  window.desktopSupervisorShift = function(n){
+    const d = addDays(supervisorDate(), n);
+    setSupervisorDate(d);
+    const input = document.getElementById("desktopSupervisorDate");
+    if(input) input.value = d;
+    renderDesktopSupervisor();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "desktopSupervisorDate"){
+      setSupervisorDate(e.target.value);
+      renderDesktopSupervisor();
+    }
+  });
+
+  function engLabel(e){
+    return `${typeof displayEngineer === "function" ? displayEngineer(e) : ""} ${e || ""}`.trim();
+  }
+
+  function shortPlace(addr){
+    const s = String(addr || "").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function listFor(date, engineer){
+    return jobs
+      .filter(j => String(j.date || "") === date && !j.isHold && isValidJob(j))
+      .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function routeSummary(list){
+    if(!list.length) return "本日無派工";
+    const places = list.map(j => shortPlace(j.address)).filter(Boolean);
+    const shown = places.slice(0, 5).join(" → ");
+    return places.length > 5 ? shown + " → …" : shown;
+  }
+
+  function jobRow(j, idx){
+    const time = escapeHtml(`${j.startTime || j.time || ""}${j.endTime ? "-" + j.endTime : ""}` || "未填時間");
+    const name = escapeHtml(j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortPlace(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="desktop-supervisor-job">
+      <div class="time">${idx + 1}. ${time}</div>
+      <div class="name">${name}${item}</div>
+      <div class="place">去：${place}</div>
+    </div>`;
+  }
+
+  function ensureDesktopSupervisorBox(){
+    let box = document.getElementById("desktopSupervisorBox");
+    if(box) return box;
+
+    const adminBody = document.querySelector("#adminPage .admin-body") || document.getElementById("adminPage");
+    if(!adminBody) return null;
+
+    box = document.createElement("div");
+    box.id = "desktopSupervisorBox";
+    adminBody.insertBefore(box, adminBody.firstChild);
+    return box;
+  }
+
+  window.renderDesktopSupervisor = function(){
+    const box = ensureDesktopSupervisorBox();
+    if(!box) return;
+    const shouldShow = isSupervisorAccount() && window.innerWidth > 900 && location.search.includes("admin");
+    box.classList.toggle("active", !!shouldShow);
+    if(!shouldShow){
+      box.innerHTML = "";
+      return;
+    }
+
+    const date = supervisorDate();
+    const data = engineers.map(e => ({engineer:e, list:listFor(date, e)}));
+    const total = data.reduce((sum, x) => sum + x.list.length, 0);
+    const active = data.filter(x => x.list.length).length;
+    const firstTimes = data.map(x => x.list[0]?.startTime || x.list[0]?.time || "").filter(Boolean).sort();
+    const lastTimes = data.map(x => {
+      const j = x.list[x.list.length - 1];
+      return j ? (j.endTime || j.startTime || j.time || "") : "";
+    }).filter(Boolean).sort();
+
+    const cards = data.map(x => {
+      const rows = x.list.map((j,i)=>jobRow(j,i)).join("") || '<div class="desktop-supervisor-empty">本日無派工</div>';
+      return `<section class="desktop-supervisor-card">
+        <div class="desktop-supervisor-card-head">
+          <span>${escapeHtml(engLabel(x.engineer))}</span>
+          <span>${x.list.length} 件</span>
+        </div>
+        <div class="desktop-supervisor-route">路線：${escapeHtml(routeSummary(x.list))}</div>
+        ${rows}
+      </section>`;
+    }).join("");
+
+    box.innerHTML = `
+      <div class="desktop-supervisor-head">
+        <div class="desktop-supervisor-title">主管模式｜${escapeHtml(date)}</div>
+        <div class="desktop-supervisor-tools">
+          <input type="date" id="desktopSupervisorDate" value="${escapeHtml(date)}">
+          <button type="button" onclick="desktopSupervisorToday()">今天</button>
+          <button type="button" onclick="desktopSupervisorShift(-1)">前一天</button>
+          <button type="button" onclick="desktopSupervisorShift(1)">後一天</button>
+        </div>
+      </div>
+      <div class="desktop-supervisor-summary">
+        <div class="desktop-supervisor-stat"><div class="num">${total}</div><div class="label">總件數</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${active}</div><div class="label">有派工工程</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${firstTimes[0] || "-"}</div><div class="label">最早開始</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${lastTimes[lastTimes.length-1] || "-"}</div><div class="label">最晚結束</div></div>
+      </div>
+      <div class="desktop-supervisor-grid">${cards}</div>
+    `;
+  };
+
+  const oldApplyRoleUI = window.applyRoleUI;
+  if(typeof oldApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = oldApplyRoleUI.apply(this, arguments);
+      setTimeout(renderDesktopSupervisor, 100);
+      return r;
+    };
+  }
+
+  const oldRenderJobList = window.renderJobList;
+  if(typeof oldRenderJobList === "function"){
+    window.renderJobList = function(){
+      const r = oldRenderJobList.apply(this, arguments);
+      setTimeout(renderDesktopSupervisor, 100);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderDesktopSupervisor, 500); });
+  window.addEventListener("load", function(){ setTimeout(renderDesktopSupervisor, 500); });
+  window.addEventListener("resize", function(){ setTimeout(renderDesktopSupervisor, 100); });
+  setInterval(function(){
+    if(location.search.includes("admin")) renderDesktopSupervisor();
+  }, 1500);
 })();
 </script>
 
