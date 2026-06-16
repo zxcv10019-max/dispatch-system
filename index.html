@@ -1924,6 +1924,32 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== FINAL mobile admin real backend ===== */
+@media(max-width:900px){
+  body.mobile-real-admin:not(.login-required):not(.no-permission){
+    height:auto!important;min-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;display:block!important;background:#f3f3f3!important;
+  }
+  body.mobile-real-admin:not(.login-required):not(.no-permission) .tabs{display:flex!important;flex-wrap:wrap!important;position:static!important;}
+  body.mobile-real-admin:not(.login-required):not(.no-permission) .tabs button{display:block!important;flex:1 1 50%!important;}
+  body.mobile-real-admin:not(.login-required):not(.no-permission) .page{display:none!important;height:auto!important;min-height:0!important;overflow:visible!important;}
+  body.mobile-real-admin:not(.login-required):not(.no-permission) #adminPage.page.active{display:block!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;padding-bottom:28px!important;}
+  body.mobile-real-admin:not(.login-required):not(.no-permission) #myTodayPanel{display:none!important;}
+  body.mobile-real-admin #adminPage .admin-body{display:flex!important;flex-direction:column!important;gap:12px!important;padding:12px!important;height:auto!important;min-height:0!important;overflow:visible!important;}
+  body.mobile-real-admin #adminPage .role-panel{order:1!important;}
+  body.mobile-real-admin #adminPage .admin-stats{order:2!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:0!important;}
+  body.mobile-real-admin #adminPage .admin-filter{order:3!important;}
+  body.mobile-real-admin #adminPage .log-table-wrap{order:4!important;height:auto!important;max-height:70vh!important;overflow:auto!important;margin-bottom:12px!important;}
+  body.mobile-real-admin #adminPage .admin-stat-card{min-width:0!important;padding:12px 8px!important;}
+  body.mobile-real-admin #adminPage .admin-stat-card .stat-num{font-size:24px!important;}
+  body.mobile-real-admin #adminPage .admin-filter input,
+  body.mobile-real-admin #adminPage .admin-filter select,
+  body.mobile-real-admin #adminPage .admin-filter button,
+  body.mobile-real-admin #adminPage .role-row input,
+  body.mobile-real-admin #adminPage .role-row select,
+  body.mobile-real-admin #adminPage .role-row button{width:100%!important;min-width:0!important;}
+}
+
 </style>
 </head>
 
@@ -5771,6 +5797,100 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", ()=>setTimeout(init, 300));
   window.addEventListener("load", ()=>setTimeout(init, 300));
   window.addEventListener("resize", ()=>setTimeout(init, 150));
+})();
+</script>
+
+
+<script>
+(function(){
+  const MAIN_EMAIL="zxcv10019@gmail.com";
+  let mobilePage="schedulePage";
+
+  function isMainMobile(){
+    return window.innerWidth<=900 && window.currentUser &&
+      String(window.currentUser.email||"").toLowerCase()===MAIN_EMAIL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setActiveTab(pageId){
+    const map={schedulePage:"tabSchedule",dispatchPage:"tabDispatch",customerPage:"tabCustomer",listPage:"tabList",adminPage:"adminTab"};
+    document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+    const tab=document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function reorderAdmin(){
+    const body=document.querySelector("#adminPage .admin-body");
+    const role=document.querySelector("#adminPage .role-panel");
+    const stats=document.querySelector("#adminPage .admin-stats");
+    const filter=document.querySelector("#adminPage .admin-filter");
+    const logs=document.querySelector("#adminPage .log-table-wrap");
+    if(body&&role&&stats&&filter&&logs){
+      body.appendChild(role);
+      body.appendChild(stats);
+      body.appendChild(filter);
+      body.appendChild(logs);
+    }
+  }
+
+  function showMainMobilePage(pageId){
+    if(!isMainMobile()) return false;
+    mobilePage=pageId||mobilePage||"schedulePage";
+
+    document.body.classList.toggle("mobile-real-admin", mobilePage==="adminPage");
+    document.body.classList.toggle("main-mobile-shot", mobilePage!=="adminPage");
+
+    const adminTab=document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display="block";
+
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    const page=document.getElementById(mobilePage);
+    if(page) page.classList.add("active");
+    setActiveTab(mobilePage);
+
+    if(mobilePage==="adminPage"){
+      const my=document.getElementById("myTodayPanel");
+      if(my) my.style.display="none";
+      reorderAdmin();
+      if(typeof renderAdminLogs==="function"){try{renderAdminLogs();}catch(e){}}
+      return true;
+    }
+
+    if(mobilePage==="schedulePage"){
+      const wrap=document.getElementById("scheduleWrap");
+      if(wrap) wrap.style.display="none";
+      if(typeof renderMyTodayPanel==="function"){try{renderMyTodayPanel();}catch(e){}}
+    }
+    return true;
+  }
+
+  const oldShowPage=window.showPage;
+  window.showPage=function(id){
+    if(showMainMobilePage(id)) return;
+    if(typeof oldShowPage==="function") return oldShowPage.apply(this,arguments);
+  };
+
+  document.addEventListener("click",function(e){
+    const btn=e.target.closest&&e.target.closest("button");
+    if(!btn) return;
+    const on=btn.getAttribute("onclick")||"";
+    const m=on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m&&isMainMobile()){
+      e.preventDefault();e.stopPropagation();
+      showMainMobilePage(m[1]);
+    }
+  },true);
+
+  function init(){
+    if(!isMainMobile()) return;
+    const active=document.querySelector(".page.active");
+    mobilePage=active&&active.id?active.id:"schedulePage";
+    showMainMobilePage(mobilePage);
+  }
+  document.addEventListener("DOMContentLoaded",()=>setTimeout(init,300));
+  window.addEventListener("load",()=>setTimeout(init,300));
+  window.addEventListener("resize",()=>setTimeout(init,150));
 })();
 </script>
 
