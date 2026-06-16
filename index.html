@@ -1525,6 +1525,46 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 main-account screenshot only; engineers keep detailed cards ===== */
+@media(max-width:900px){
+  body:not(.login-required):not(.no-permission) .tabs{display:none!important;}
+  body:not(.login-required):not(.no-permission) .page{display:none!important;}
+  body:not(.login-required):not(.no-permission) #schedulePage{
+    display:block!important;height:auto!important;min-height:0!important;overflow:visible!important;
+  }
+  body:not(.login-required):not(.no-permission) #schedulePage>.toolbar,
+  body:not(.login-required):not(.no-permission) #schedulePage>.summary,
+  body:not(.login-required):not(.no-permission) #schedulePage>.engineer-code-note,
+  body:not(.login-required):not(.no-permission) #scheduleWrap{display:none!important;}
+  body:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block!important;margin:12px!important;padding:14px!important;border-radius:14px!important;background:#fff!important;
+  }
+
+  .main-shot-board{background:#fff;border:1px solid #d9d9d9;border-radius:14px;padding:12px;margin-top:10px;}
+  .main-shot-title{text-align:center;font-size:20px;font-weight:bold;color:#1f2937;margin:4px 0 6px;}
+  .main-shot-sub{text-align:center;font-size:13px;color:#666;margin-bottom:10px;}
+  .main-shot-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px;padding:10px;border-radius:12px;background:#f7f7f7;border:1px solid #ddd;}
+  .main-shot-picker input[type=date]{flex:1;min-width:160px;font-size:16px;padding:9px;}
+  .main-shot-picker button{padding:9px 12px;border-radius:8px;font-size:14px;}
+  .main-shot-eng{border:1px solid #cfd8e3;border-radius:12px;margin:10px 0;overflow:hidden;background:#fff;}
+  .main-shot-head{background:#eaf3ff;color:#1f3a5f;font-weight:bold;font-size:17px;padding:9px 10px;display:flex;justify-content:space-between;align-items:center;}
+  .main-shot-count{font-size:13px;background:#fff;border:1px solid #bdd4ef;padding:2px 8px;border-radius:999px;}
+  .main-shot-job{padding:8px 10px;border-top:1px solid #eef1f5;font-size:14px;line-height:1.45;}
+  .main-shot-job:nth-child(even){background:#fafafa;}
+  .main-shot-time{font-weight:bold;color:#1f4e79;margin-bottom:2px;}
+  .main-shot-name{font-weight:bold;color:#111827;font-size:15px;}
+  .main-shot-place{color:#155a8a;font-weight:bold;word-break:break-word;}
+  .main-shot-empty{padding:10px;color:#999;font-size:14px;}
+
+  .eng-detail-section{margin-top:14px!important;}
+  .eng-detail-section h4{font-size:17px!important;margin:12px 0 8px!important;padding:8px 10px!important;border-radius:10px!important;background:#eef4ff!important;color:#1f3a5f!important;}
+  .eng-detail-card{background:#fff!important;border:1px solid #cfe2f3!important;border-radius:12px!important;padding:12px!important;margin:10px 0!important;font-size:15px!important;line-height:1.65!important;}
+  .eng-detail-card .time{font-size:16px!important;font-weight:bold!important;color:#1f4e79!important;}
+  .eng-detail-card .name{font-size:17px!important;font-weight:bold!important;color:#0066cc!important;}
+  .eng-detail-card a{color:#0066cc!important;font-weight:bold!important;text-decoration:underline!important;}
+}
+
 </style>
 </head>
 
@@ -4733,6 +4773,192 @@ document.addEventListener("click", function(e){
   window.renderMyTodayPanel = renderScreenshotAdminPanel;
   document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
   window.addEventListener("load", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 zxcv10019 main screenshot view; other engineers detailed two-day view ===== */
+(function(){
+  const MAIN_EMAIL_FOR_SCREENSHOT = "zxcv10019@gmail.com";
+
+  function isMainShotAccount(){
+    return currentUser && String(currentUser.email || "").toLowerCase() === MAIN_EMAIL_FOR_SCREENSHOT;
+  }
+
+  function selectedMainShotDate(){
+    const saved = localStorage.getItem("dispatch_main_shot_date") || localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setMainShotDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
+      localStorage.setItem("dispatch_main_shot_date", d);
+      localStorage.setItem("dispatch_mobile_base_date", d);
+    }
+  }
+
+  function addDaysStr(dateStr, days){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return formatDateLocal(d);
+  }
+
+  window.setMainShotToday = function(){
+    const d = formatDateLocal(new Date());
+    setMainShotDate(d);
+    const input = document.getElementById("mainShotDateInput");
+    if(input) input.value = d;
+    renderMyTodayPanel();
+  };
+
+  window.shiftMainShotDate = function(days){
+    const d = addDaysStr(selectedMainShotDate(), days);
+    setMainShotDate(d);
+    const input = document.getElementById("mainShotDateInput");
+    if(input) input.value = d;
+    renderMyTodayPanel();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "mainShotDateInput"){
+      setMainShotDate(e.target.value);
+      renderMyTodayPanel();
+    }
+  });
+
+  function engLabel(e){
+    return `${typeof displayEngineer === "function" ? displayEngineer(e) : ""} ${e || ""}`.trim();
+  }
+
+  function shortArea(addr){
+    const s = String(addr || "").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function jobsFor(dateLabel, engineer){
+    return jobs
+      .filter(j => String(j.date || "") === dateLabel && !j.isHold && isValidJob(j))
+      .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function mainShotJob(j, idx){
+    const time = escapeHtml(`${j.startTime || j.time || ""}${j.endTime ? "-" + j.endTime : ""}` || "未填時間");
+    const name = escapeHtml(j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortArea(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="main-shot-job">
+      <div class="main-shot-time">${idx + 1}. ${time}</div>
+      <div class="main-shot-name">${name}${item}</div>
+      <div class="main-shot-place">去：${place}</div>
+    </div>`;
+  }
+
+  function renderMainShot(panel){
+    const date = selectedMainShotDate();
+    const total = engineers.reduce((sum, e) => sum + jobsFor(date, e).length, 0);
+    const blocks = engineers.map(e => {
+      const list = jobsFor(date, e);
+      return `<section class="main-shot-eng">
+        <div class="main-shot-head"><span>${escapeHtml(engLabel(e))}</span><span class="main-shot-count">${list.length} 件</span></div>
+        ${list.map((j,i)=>mainShotJob(j,i)).join("") || '<div class="main-shot-empty">本日無派工</div>'}
+      </section>`;
+    }).join("");
+
+    panel.innerHTML = `<div class="main-shot-board">
+      <div class="main-shot-title">派工表｜${escapeHtml(date)}</div>
+      <div class="main-shot-sub">共 ${total} 件｜主帳號截圖版</div>
+      <div class="main-shot-picker">
+        <input type="date" id="mainShotDateInput" value="${escapeHtml(date)}">
+        <button type="button" onclick="setMainShotToday()">今天</button>
+        <button type="button" onclick="shiftMainShotDate(-1)">前一天</button>
+        <button type="button" onclick="shiftMainShotDate(1)">後一天</button>
+      </div>
+      ${blocks}
+    </div>`;
+  }
+
+  function detailJobCard(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime ? " ~ " + j.endTime : ""}`);
+    const phoneRaw = String(j.phone || "").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address || "").trim();
+    const addr = addrRaw
+      ? `<div>📍 地址：<a href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 地址：未填</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="eng-detail-card">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${phone}
+      ${addr}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderEngineerDetail(panel){
+    const targetEngineer = currentEngineer || "";
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const today = formatDateLocal(new Date());
+    const tomorrow = addDaysStr(today, 1);
+    const todayJobs = jobsFor(today, targetEngineer);
+    const tomorrowJobs = jobsFor(tomorrow, targetEngineer);
+
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">工程帳號顯示完整細項：電話、地址、施工內容與導航。</div>
+      <div class="eng-detail-section">
+        <h4>今天 ${escapeHtml(today)}｜${todayJobs.length} 件</h4>
+        ${todayJobs.map((j,i)=>detailJobCard(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+      </div>
+      <div class="eng-detail-section">
+        <h4>明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</h4>
+        ${tomorrowJobs.map((j,i)=>detailJobCard(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+      </div>`;
+    setTimeout(function(){ if(typeof updateTravelTags === "function") updateTravelTags(); }, 80);
+  }
+
+  window.renderMyTodayPanel = function(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+    if(window.innerWidth <= 900 && isMainShotAccount()){
+      renderMainShot(panel);
+      return;
+    }
+    if(window.innerWidth <= 900){
+      renderEngineerDetail(panel);
+      return;
+    }
+  };
+
+  function forceMobileScheduleOnly(){
+    if(window.innerWidth <= 900 && document.body && !document.body.classList.contains("login-required") && !document.body.classList.contains("no-permission")){
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      const schedule = document.getElementById("schedulePage");
+      if(schedule) schedule.classList.add("active");
+      renderMyTodayPanel();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(forceMobileScheduleOnly, 200); });
+  window.addEventListener("load", function(){ setTimeout(forceMobileScheduleOnly, 200); });
+  window.addEventListener("resize", forceMobileScheduleOnly);
+  setInterval(forceMobileScheduleOnly, 1200);
 })();
 </script>
 
