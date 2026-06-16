@@ -629,6 +629,44 @@ body{
   width:auto !important;
   margin:0;
 }
+.remind-msg-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:20px;
+  height:20px;
+  padding:0;
+  margin-left:2px;
+  font-size:12px;
+  line-height:1;
+  border:1px solid #487eb0;
+  border-radius:50%;
+  background:#eaf2fb;
+  color:#2e5d8a;
+  cursor:pointer;
+  flex-shrink:0;
+}
+.remind-msg-btn:hover{background:#d7e9fb}
+.remind-modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.remind-modal-box{
+  background:#fff;border-radius:8px;max-width:420px;width:100%;
+  padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  max-height:90vh;display:flex;flex-direction:column;
+}
+.remind-modal-box h3{margin:0 0 10px;font-size:16px}
+.remind-modal-box textarea{
+  width:100%;flex:1;min-height:260px;font-size:14px;line-height:1.6;
+  font-family:inherit;resize:vertical;
+}
+.remind-modal-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap}
+.remind-modal-actions button{padding:8px 14px;font-size:13px}
+.remind-modal-actions .remind-copy-btn{background:#218c74}
+.remind-modal-actions .remind-copy-btn:hover{background:#33a38a}
+.remind-modal-actions .remind-close-btn{background:#888}
+.remind-modal-actions .remind-close-btn:hover{background:#aaa}
 .city-checks{
   display:flex;
   flex-wrap:wrap;
@@ -1131,14 +1169,14 @@ body.admin-scroll-mode{
   height:auto !important;
   min-height:calc(100vh - 96px) !important;
   overflow:visible !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .admin-body{
   height:auto !important;
   min-height:0 !important;
   overflow:visible !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .log-table-wrap{
@@ -1165,7 +1203,7 @@ body.admin-scroll-mode{
   #adminPage.page.active{
     height:auto !important;
     overflow:visible !important;
-    padding-bottom:140px !important;
+    padding-bottom:24px !important;
   }
 
   #adminPage .admin-body{
@@ -1190,7 +1228,7 @@ body:has(#adminPage.page.active){
   min-height:100vh !important;
   overflow-y:scroll !important;
   overflow-x:hidden !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 /* 後台頁內容跟著整頁下滑，上方標題/帳號設定區不固定 */
@@ -1199,7 +1237,7 @@ body:has(#adminPage.page.active){
   height:auto !important;
   min-height:100vh !important;
   overflow:visible !important;
-  padding-bottom:140px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .admin-header,
@@ -1242,7 +1280,7 @@ html.force-admin-scroll{
 body.force-admin-scroll{
   display:block !important;
   position:static !important;
-  padding-bottom:180px !important;
+  padding-bottom:24px !important;
 }
 body.force-admin-scroll .header,
 body.force-admin-scroll .tabs,
@@ -1254,9 +1292,9 @@ body.force-admin-scroll #adminPage .admin-body{
 body.force-admin-scroll #adminPage.page.active{
   display:block !important;
   height:auto !important;
-  min-height:160vh !important;
+  min-height:auto !important;
   overflow:visible !important;
-  padding-bottom:200px !important;
+  padding-bottom:24px !important;
 }
 body.force-admin-scroll #adminPage .admin-body{
   height:auto !important;
@@ -1379,6 +1417,570 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     margin-top:8px !important;
     padding:8px !important;
   }
+}
+
+
+/* ===== 2026-06 admin mobile grouped-by-engineer view ===== */
+@media(max-width:900px){
+  .admin-engineer-block{
+    margin:14px 0 18px !important;
+    padding:12px !important;
+    border-radius:14px !important;
+    background:#f8f9fa !important;
+    border:1px solid #d9e2ec !important;
+  }
+  .admin-engineer-block > h4{
+    margin:0 0 10px !important;
+    font-size:18px !important;
+    color:#1f3a5f !important;
+    background:#eaf3ff !important;
+    padding:9px 10px !important;
+    border-radius:10px !important;
+  }
+  .admin-day-label{
+    margin:10px 0 6px !important;
+    font-weight:bold !important;
+    color:#555 !important;
+    font-size:15px !important;
+  }
+  .admin-job-address{
+    font-weight:bold !important;
+    color:#155a8a !important;
+  }
+}
+
+
+/* ===== 2026-06 admin mobile date picker ===== */
+@media(max-width:900px){
+  .mobile-date-picker-box{
+    display:flex !important;
+    gap:8px !important;
+    align-items:center !important;
+    flex-wrap:wrap !important;
+    margin:10px 0 14px !important;
+    padding:10px !important;
+    border-radius:12px !important;
+    background:#fff8dc !important;
+    border:1px solid #e0c35a !important;
+  }
+  .mobile-date-picker-box label{
+    font-weight:bold !important;
+    font-size:14px !important;
+    color:#333 !important;
+  }
+  .mobile-date-picker-box input[type="date"]{
+    flex:1 !important;
+    min-width:160px !important;
+    font-size:16px !important;
+    padding:9px !important;
+  }
+  .mobile-date-picker-box button{
+    padding:9px 12px !important;
+    border-radius:8px !important;
+    font-size:14px !important;
+  }
+}
+
+
+/* ===== 2026-06 screenshot-friendly admin one-day view ===== */
+@media(max-width:900px){
+  .screenshot-board{
+    background:#fff !important;
+    border:1px solid #d9d9d9 !important;
+    border-radius:14px !important;
+    padding:12px !important;
+    margin-top:10px !important;
+  }
+  .screenshot-title{
+    text-align:center !important;
+    font-size:20px !important;
+    font-weight:bold !important;
+    color:#1f2937 !important;
+    margin:4px 0 10px !important;
+  }
+  .screenshot-subtitle{
+    text-align:center !important;
+    font-size:13px !important;
+    color:#666 !important;
+    margin-bottom:10px !important;
+  }
+  .shot-engineer{
+    border:1px solid #cfd8e3 !important;
+    border-radius:12px !important;
+    margin:10px 0 !important;
+    overflow:hidden !important;
+    background:#fff !important;
+  }
+  .shot-engineer-head{
+    background:#eaf3ff !important;
+    color:#1f3a5f !important;
+    font-weight:bold !important;
+    font-size:17px !important;
+    padding:9px 10px !important;
+    display:flex !important;
+    justify-content:space-between !important;
+    align-items:center !important;
+  }
+  .shot-count{
+    font-size:13px !important;
+    background:#fff !important;
+    border:1px solid #bdd4ef !important;
+    padding:2px 8px !important;
+    border-radius:999px !important;
+  }
+  .shot-job{
+    padding:9px 10px !important;
+    border-top:1px solid #eef1f5 !important;
+    font-size:14px !important;
+    line-height:1.5 !important;
+  }
+  .shot-job:nth-child(even){
+    background:#fafafa !important;
+  }
+  .shot-time{
+    font-weight:bold !important;
+    color:#1f4e79 !important;
+    margin-bottom:2px !important;
+  }
+  .shot-name{
+    font-weight:bold !important;
+    color:#111827 !important;
+    font-size:15px !important;
+  }
+  .shot-place{
+    color:#155a8a !important;
+    font-weight:bold !important;
+    word-break:break-word !important;
+  }
+  .shot-empty{
+    padding:10px !important;
+    color:#999 !important;
+    font-size:14px !important;
+  }
+  .mobile-date-picker-box.screenshot-picker{
+    background:#f7f7f7 !important;
+    border:1px solid #ddd !important;
+  }
+}
+
+
+/* ===== 2026-06 main-account screenshot only; engineers keep detailed cards ===== */
+@media(max-width:900px){
+  body:not(.login-required):not(.no-permission) .tabs{display:none!important;}
+  body:not(.login-required):not(.no-permission) .page{display:none!important;}
+  body:not(.login-required):not(.no-permission) #schedulePage{
+    display:block!important;height:auto!important;min-height:0!important;overflow:visible!important;
+  }
+  body:not(.login-required):not(.no-permission) #schedulePage>.toolbar,
+  body:not(.login-required):not(.no-permission) #schedulePage>.summary,
+  body:not(.login-required):not(.no-permission) #schedulePage>.engineer-code-note,
+  body:not(.login-required):not(.no-permission) #scheduleWrap{display:none!important;}
+  body:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block!important;margin:12px!important;padding:14px!important;border-radius:14px!important;background:#fff!important;
+  }
+
+  .main-shot-board{background:#fff;border:1px solid #d9d9d9;border-radius:14px;padding:12px;margin-top:10px;}
+  .main-shot-title{text-align:center;font-size:20px;font-weight:bold;color:#1f2937;margin:4px 0 6px;}
+  .main-shot-sub{text-align:center;font-size:13px;color:#666;margin-bottom:10px;}
+  .main-shot-picker{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 12px;padding:10px;border-radius:12px;background:#f7f7f7;border:1px solid #ddd;}
+  .main-shot-picker input[type=date]{flex:1;min-width:160px;font-size:16px;padding:9px;}
+  .main-shot-picker button{padding:9px 12px;border-radius:8px;font-size:14px;}
+  .main-shot-eng{border:1px solid #cfd8e3;border-radius:12px;margin:10px 0;overflow:hidden;background:#fff;}
+  .main-shot-head{background:#eaf3ff;color:#1f3a5f;font-weight:bold;font-size:17px;padding:9px 10px;display:flex;justify-content:space-between;align-items:center;}
+  .main-shot-count{font-size:13px;background:#fff;border:1px solid #bdd4ef;padding:2px 8px;border-radius:999px;}
+  .main-shot-job{padding:8px 10px;border-top:1px solid #eef1f5;font-size:14px;line-height:1.45;}
+  .main-shot-job:nth-child(even){background:#fafafa;}
+  .main-shot-time{font-weight:bold;color:#1f4e79;margin-bottom:2px;}
+  .main-shot-name{font-weight:bold;color:#111827;font-size:15px;}
+  .main-shot-place{color:#155a8a;font-weight:bold;word-break:break-word;}
+  .main-shot-empty{padding:10px;color:#999;font-size:14px;}
+
+  .eng-detail-section{margin-top:14px!important;}
+  .eng-detail-section h4{font-size:17px!important;margin:12px 0 8px!important;padding:8px 10px!important;border-radius:10px!important;background:#eef4ff!important;color:#1f3a5f!important;}
+  .eng-detail-card{background:#fff!important;border:1px solid #cfe2f3!important;border-radius:12px!important;padding:12px!important;margin:10px 0!important;font-size:15px!important;line-height:1.65!important;}
+  .eng-detail-card .time{font-size:16px!important;font-weight:bold!important;color:#1f4e79!important;}
+  .eng-detail-card .name{font-size:17px!important;font-weight:bold!important;color:#0066cc!important;}
+  .eng-detail-card a{color:#0066cc!important;font-weight:bold!important;text-decoration:underline!important;}
+}
+
+
+/* ===== 2026-06 desktop supervisor dashboard in admin page ===== */
+#desktopSupervisorBox{
+  display:none;
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:12px;
+  padding:14px;
+  margin:16px 0;
+  box-shadow:0 1px 5px rgba(0,0,0,.06);
+}
+
+#desktopSupervisorBox.active{
+  display:block;
+}
+
+.desktop-supervisor-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+}
+
+.desktop-supervisor-title{
+  font-size:20px;
+  font-weight:bold;
+  color:#2f3542;
+}
+
+.desktop-supervisor-tools{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.desktop-supervisor-tools input[type="date"]{
+  padding:8px 10px;
+}
+
+.desktop-supervisor-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(120px,1fr));
+  gap:10px;
+  margin:12px 0 14px;
+}
+
+.desktop-supervisor-stat{
+  background:#f8fbff;
+  border:1px solid #d6e4f0;
+  border-radius:10px;
+  padding:12px;
+  text-align:center;
+}
+
+.desktop-supervisor-stat .num{
+  font-size:26px;
+  font-weight:bold;
+  color:#1f4e79;
+}
+
+.desktop-supervisor-stat .label{
+  font-size:12px;
+  color:#666;
+}
+
+.desktop-supervisor-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(280px,1fr));
+  gap:12px;
+}
+
+.desktop-supervisor-card{
+  border:1px solid #d9e2ec;
+  border-radius:12px;
+  overflow:hidden;
+  background:#fff;
+}
+
+.desktop-supervisor-card-head{
+  background:#eaf3ff;
+  color:#1f3a5f;
+  padding:10px 12px;
+  font-weight:bold;
+  font-size:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.desktop-supervisor-route{
+  padding:9px 12px;
+  border-bottom:1px solid #eef1f5;
+  color:#333;
+  font-size:13px;
+  line-height:1.5;
+}
+
+.desktop-supervisor-job{
+  padding:8px 12px;
+  border-top:1px solid #eef1f5;
+  font-size:13px;
+  line-height:1.45;
+}
+
+.desktop-supervisor-job:nth-child(even){
+  background:#fafafa;
+}
+
+.desktop-supervisor-job .time{
+  font-weight:bold;
+  color:#1f4e79;
+}
+
+.desktop-supervisor-job .name{
+  font-weight:bold;
+  color:#111827;
+}
+
+.desktop-supervisor-job .place{
+  color:#155a8a;
+  font-weight:bold;
+}
+
+.desktop-supervisor-empty{
+  padding:12px;
+  color:#999;
+  font-size:13px;
+}
+
+@media(max-width:900px){
+  #desktopSupervisorBox{
+    display:none !important;
+  }
+}
+
+
+/* ===== 2026-06 main account mobile full-data mode ===== */
+/* 主帳號手機版不走隱藏後台，也不要只鎖兩日派工，可正常切換所有資料頁 */
+@media(max-width:900px){
+  body.mobile-main-full:not(.login-required):not(.no-permission){
+    height:auto !important;
+    min-height:100% !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+    position:static !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .tabs button{
+    flex:1 1 50% !important;
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .toolbar,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .summary,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .engineer-code-note,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #scheduleWrap{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .toolbar{
+    display:flex !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #dispatchPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #customerPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #listPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #adminPage.page.active{
+    display:block !important;
+    overflow-y:visible !important;
+    padding-bottom:100px !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .customer-table{
+    overflow:auto !important;
+    max-height:none !important;
+  }
+}
+
+
+/* ===== 2026-06 FIX: main mobile screenshot only + working nav buttons ===== */
+@media(max-width:900px){
+  body.main-mobile-shot:not(.login-required):not(.no-permission){
+    height:auto !important;
+    min-height:100% !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+    background:#f3f3f3 !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+    flex-wrap:wrap !important;
+    position:static !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs button{
+    display:block !important;
+    flex:1 1 50% !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  /* 主帳號手機派工頁：只留截圖版，不顯示原本大表格 */
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .toolbar,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .summary,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .engineer-code-note,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active #scheduleWrap{
+    display:none !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block !important;
+    margin:12px !important;
+    padding:14px !important;
+    border-radius:14px !important;
+    background:#fff !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #dispatchPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #customerPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #listPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #adminPage.page.active{
+    display:block !important;
+    padding-bottom:100px !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .customer-table,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .log-table-wrap{
+    overflow:auto !important;
+    max-height:none !important;
+  }
+}
+
+
+/* ===== 2026-06 FINAL MOBILE FIX: no dispatch grid on mobile, stop admin flicker ===== */
+@media(max-width:900px){
+  /* 手機永遠不顯示派工大表格 */
+  #scheduleWrap,
+  #schedule,
+  .week-schedule-table,
+  .engineer-code-note,
+  #schedulePage > .summary{
+    display:none !important;
+  }
+
+  /* 手機的派工頁只保留截圖/卡片區 */
+  #schedulePage.page.active{
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  #myTodayPanel{
+    display:block !important;
+  }
+
+  /* 主帳號手機可切換各頁，不要被程式強制跳回派工表 */
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  /* 手機後台整頁滑動，不使用內框閃爍 */
+  body.main-mobile-shot #adminPage.page.active,
+  #adminPage.page.active{
+    height:auto !important;
+    min-height:100vh !important;
+    overflow:visible !important;
+    padding-bottom:24px !important;
+  }
+
+  #adminPage .admin-body,
+  #adminPage .log-table-wrap{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+}
+
+
+/* ===== 2026-06 FINAL admin mobile finite scroll fix ===== */
+@media(max-width:900px){
+  body.main-mobile-shot #adminPage.page.active,
+  #adminPage.page.active{
+    display:block !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    padding-bottom:24px !important;
+  }
+
+  #adminPage .admin-body{
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    padding-bottom:24px !important;
+  }
+
+  #adminPage .log-table-wrap{
+    height:auto !important;
+    max-height:70vh !important;
+    overflow:auto !important;
+    margin-bottom:12px !important;
+  }
+
+  body.main-mobile-shot,
+  html.force-admin-scroll,
+  body.force-admin-scroll{
+    min-height:100% !important;
+  }
+
+  body.force-admin-scroll #adminPage.page.active{
+    min-height:0 !important;
+    padding-bottom:24px !important;
+  }
+}
+
+
+/* ===== 2026-06 restored route display style ===== */
+.route-info .nav-btn,
+.travel-tag .nav-btn{
+  display:inline-block !important;
+  margin-top:4px !important;
+  margin-left:0 !important;
+  padding:2px 10px !important;
+  border-radius:8px !important;
+  background:#2f3542 !important;
+  color:#fff !important;
+  text-decoration:none !important;
+  font-weight:bold !important;
+  line-height:1.5 !important;
+}
+.route-info,
+.travel-tag{
+  white-space:normal !important;
+  line-height:1.5 !important;
 }
 
 </style>
@@ -2815,7 +3417,7 @@ function jobCard(j){
   const statusList = Array.isArray(j.statusList) ? j.statusList : (j.status ? [j.status] : []);
   const statusOptions = ["已印單","已確認","已提醒"];
   const statusHtml = `<div class="status-checks" onclick="event.stopPropagation()">
-    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
+    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>${o==="已提醒"?`<button type="button" class="remind-msg-btn" title="預覽提醒訊息" onclick="event.stopPropagation();openRemindMsgModal(${j.id})">💬</button>`:""}`).join("")}
   </div>`;
 
   return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
@@ -2873,6 +3475,76 @@ function toggleJobStatusFlag(id, flag, checked){
   j.status = arr.join("、");
   saveJobs();
   renderJobList();
+}
+
+// ===== 預約提醒訊息（依派工資料自動帶入） =====
+function buildRemindMessage(j){
+  const d = j.date ? parseDateLocal(j.date) : null;
+  const dateText = d ? `${d.getMonth()+1}/${d.getDate()}（${getWeekdayName(j.date).replace("週","")}）` : "";
+  const timeText = j.startTime || j.time || "";
+  const workItem = j.workItem || "";
+  const amount = j.amount!==undefined && j.amount!==null && j.amount!=="" ? `${j.amount} 元` : "";
+  const payment = j.payment || "";
+  const address = j.address || "";
+
+  const lines = [];
+  lines.push("您好，這邊提醒您有預約");
+  lines.push(`📅 ${dateText}${timeText?` ${timeText}`:""}`);
+  if(workItem){ lines.push("🔧 服務內容："); lines.push(workItem); }
+  if(amount){ lines.push("💰 應收款項："); lines.push(amount); }
+  if(payment){ lines.push("💳 付款方式："); lines.push(payment); }
+  if(address){ lines.push("📍 服務地址："); lines.push(address); }
+  lines.push("—");
+  lines.push("因工程前一日已排定整日行程，");
+  lines.push("當日件無法變更時段，");
+  lines.push("以上確認後無法臨時變更喔！");
+  lines.push("如有其他問題或需改約其他日期，");
+  lines.push("請提早通知。");
+  lines.push("確認正確請再傳個貼圖～");
+  lines.push("謝謝！😊");
+  return lines.join("\n");
+}
+
+function openRemindMsgModal(id){
+  const j = jobs.find(x=>x.id===id);
+  if(!j) return;
+  closeRemindMsgModal();
+  const msg = buildRemindMessage(j);
+
+  const overlay = document.createElement("div");
+  overlay.className = "remind-modal-overlay";
+  overlay.id = "remindMsgOverlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) closeRemindMsgModal(); };
+
+  overlay.innerHTML = `
+    <div class="remind-modal-box" onclick="event.stopPropagation()">
+      <h3>提醒訊息預覽（可修改）</h3>
+      <textarea id="remindMsgTextarea">${escapeHtml(msg)}</textarea>
+      <div class="remind-modal-actions">
+        <button type="button" class="remind-close-btn" onclick="closeRemindMsgModal()">關閉</button>
+        <button type="button" class="remind-copy-btn" onclick="copyRemindMsg()">複製訊息</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeRemindMsgModal(){
+  const overlay = document.getElementById("remindMsgOverlay");
+  if(overlay) overlay.remove();
+}
+
+function copyRemindMsg(){
+  const ta = document.getElementById("remindMsgTextarea");
+  if(!ta) return;
+  const text = ta.value;
+  const done = ()=>{ if(typeof showToast==="function") showToast("已複製訊息"); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>{
+      ta.select(); document.execCommand("copy"); done();
+    });
+  }else{
+    ta.select(); document.execCommand("copy"); done();
+  }
 }
 
 function renderSummary(){
@@ -4213,9 +4885,1024 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", forceMobileOnlyView);
   window.addEventListener("load", forceMobileOnlyView);
   window.addEventListener("resize", forceMobileOnlyView);
-  setInterval(forceMobileOnlyView, 1000);
+  /* mobile force interval disabled to prevent flicker */
 })();
 </script>
+
+
+<script>
+/* ===== 2026-06 override: main account mobile groups jobs by engineer ===== */
+(function(){
+  function engLabel(e){
+    return (typeof displayEngineer === "function" ? displayEngineer(e) : "") + " " + (e || "");
+  }
+
+  function jobCardForAdmin(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+    const phoneRaw = String(j.phone||"").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address||"").trim();
+    const addr = addrRaw
+      ? `<div class="admin-job-address">📍 去：<a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 去：未填地址</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="my-today-job">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${addr}
+      ${phone}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderGroupedMobilePanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+
+    const todayObj = new Date();
+    const tomorrowObj = new Date();
+    tomorrowObj.setDate(todayObj.getDate()+1);
+    const today = formatDateLocal(todayObj);
+    const tomorrow = formatDateLocal(tomorrowObj);
+
+    const adminMode = (typeof isAdmin === "function" && isAdmin());
+    const targetEngineer = currentEngineer || "";
+
+    function listFor(dateLabel, engineer){
+      return jobs
+        .filter(j => String(j.date||"") === dateLabel && !j.isHold && isValidJob(j))
+        .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+        .sort(sortJobsByTime);
+    }
+
+    if(adminMode){
+      const allSections = engineers.map(e => {
+        const todayJobs = listFor(today, e);
+        const tomorrowJobs = listFor(tomorrow, e);
+        const total = todayJobs.length + tomorrowJobs.length;
+        return `<section class="admin-engineer-block">
+          <h4>${escapeHtml(engLabel(e))}｜兩日共 ${total} 件</h4>
+          <div class="admin-day-label">今天 ${escapeHtml(today)}｜${todayJobs.length} 件</div>
+          ${todayJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+          <div class="admin-day-label">明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</div>
+          ${tomorrowJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+        </section>`;
+      }).join("");
+
+      const totalAll = engineers.reduce((sum,e)=>sum + listFor(today,e).length + listFor(tomorrow,e).length, 0);
+      panel.innerHTML = `<h3>兩日派工表｜全部工程</h3>
+        <div class="my-today-sub">主帳號手機版依「工程人員」分組顯示，方便看出哪個工程去哪裡。兩日共 ${totalAll} 件。</div>
+        ${allSections}`;
+      setTimeout(updateTravelTags, 80);
+      return;
+    }
+
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const todayJobs = listFor(today, targetEngineer);
+    const tomorrowJobs = listFor(tomorrow, targetEngineer);
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">依登入帳號 ${escapeHtml(currentUser.email)} 綁定工程師顯示。</div>
+      <section class="admin-engineer-block">
+        <h4>${escapeHtml(engLabel(targetEngineer))}｜兩日共 ${todayJobs.length + tomorrowJobs.length} 件</h4>
+        <div class="admin-day-label">今天 ${escapeHtml(today)}｜${todayJobs.length} 件</div>
+        ${todayJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+        <div class="admin-day-label">明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</div>
+        ${tomorrowJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+      </section>`;
+    setTimeout(updateTravelTags, 80);
+  }
+
+  window.renderMyTodayPanel = renderGroupedMobilePanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderGroupedMobilePanel, 100); });
+  window.addEventListener("load", function(){ setTimeout(renderGroupedMobilePanel, 100); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account mobile selectable date ===== */
+(function(){
+  function selectedMobileBaseDate(){
+    const saved = localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setSelectedMobileBaseDate(dateStr){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){
+      localStorage.setItem("dispatch_mobile_base_date", dateStr);
+    }
+  }
+
+  function addDaysString(dateStr, days){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return formatDateLocal(d);
+  }
+
+  function datePickerHtml(baseDate){
+    return `<div class="mobile-date-picker-box">
+      <label>查看日期</label>
+      <input type="date" id="mobileBaseDateInput" value="${escapeHtml(baseDate)}">
+      <button type="button" onclick="window.setMobileBaseDateToday()">今天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(-1)">前一天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(1)">後一天</button>
+    </div>`;
+  }
+
+  window.setMobileBaseDateToday = function(){
+    const today = formatDateLocal(new Date());
+    setSelectedMobileBaseDate(today);
+    const input = document.getElementById("mobileBaseDateInput");
+    if(input) input.value = today;
+    if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+  };
+
+  window.shiftMobileBaseDate = function(days){
+    const next = addDaysString(selectedMobileBaseDate(), days);
+    setSelectedMobileBaseDate(next);
+    const input = document.getElementById("mobileBaseDateInput");
+    if(input) input.value = next;
+    if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "mobileBaseDateInput"){
+      setSelectedMobileBaseDate(e.target.value);
+      if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+    }
+  });
+
+  function engLabel(e){
+    return (typeof displayEngineer === "function" ? displayEngineer(e) : "") + " " + (e || "");
+  }
+
+  function jobCard(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+    const phoneRaw = String(j.phone||"").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address||"").trim();
+    const addr = addrRaw
+      ? `<div class="admin-job-address">📍 去：<a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 去：未填地址</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="my-today-job">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${addr}
+      ${phone}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderSelectableDateMobilePanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+
+    const base = selectedMobileBaseDate();
+    const next = addDaysString(base, 1);
+    const adminMode = (typeof isAdmin === "function" && isAdmin());
+    const targetEngineer = currentEngineer || "";
+
+    function listFor(dateLabel, engineer){
+      return jobs
+        .filter(j => String(j.date||"") === dateLabel && !j.isHold && isValidJob(j))
+        .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+        .sort(sortJobsByTime);
+    }
+
+    if(adminMode){
+      const sections = engineers.map(e => {
+        const d1 = listFor(base, e);
+        const d2 = listFor(next, e);
+        return `<section class="admin-engineer-block">
+          <h4>${escapeHtml(engLabel(e))}｜兩日共 ${d1.length + d2.length} 件</h4>
+          <div class="admin-day-label">選擇日 ${escapeHtml(base)}｜${d1.length} 件</div>
+          ${d1.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">此日沒有派工。</div>'}
+          <div class="admin-day-label">隔天 ${escapeHtml(next)}｜${d2.length} 件</div>
+          ${d2.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">隔天沒有派工。</div>'}
+        </section>`;
+      }).join("");
+      const total = engineers.reduce((sum,e)=>sum + listFor(base,e).length + listFor(next,e).length,0);
+      panel.innerHTML = `<h3>兩日派工表｜全部工程</h3>
+        <div class="my-today-sub">主帳號可選擇查看日期，系統會顯示「選擇日＋隔天」。兩日共 ${total} 件。</div>
+        ${datePickerHtml(base)}
+        ${sections}`;
+      setTimeout(updateTravelTags, 80);
+      return;
+    }
+
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const d1 = listFor(base, targetEngineer);
+    const d2 = listFor(next, targetEngineer);
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">依登入帳號 ${escapeHtml(currentUser.email)} 綁定工程師顯示。</div>
+      ${datePickerHtml(base)}
+      <section class="admin-engineer-block">
+        <h4>${escapeHtml(engLabel(targetEngineer))}｜兩日共 ${d1.length + d2.length} 件</h4>
+        <div class="admin-day-label">選擇日 ${escapeHtml(base)}｜${d1.length} 件</div>
+        ${d1.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">此日沒有派工。</div>'}
+        <div class="admin-day-label">隔天 ${escapeHtml(next)}｜${d2.length} 件</div>
+        ${d2.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">隔天沒有派工。</div>'}
+      </section>`;
+    setTimeout(updateTravelTags, 80);
+  }
+
+  window.renderMyTodayPanel = renderSelectableDateMobilePanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
+  window.addEventListener("load", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account screenshot one-day format ===== */
+(function(){
+  function selectedShotDate(){
+    const saved = localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+  function setShotDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)) localStorage.setItem("dispatch_mobile_base_date", d);
+  }
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate()+n);
+    return formatDateLocal(d);
+  }
+  function engineerLabel(e){
+    return `${typeof displayEngineer==="function" ? displayEngineer(e) : ""} ${e||""}`.trim();
+  }
+  function pickerHtml(date){
+    return `<div class="mobile-date-picker-box screenshot-picker">
+      <label>截圖日期</label>
+      <input type="date" id="mobileBaseDateInput" value="${escapeHtml(date)}">
+      <button type="button" onclick="window.setMobileBaseDateToday()">今天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(-1)">前一天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(1)">後一天</button>
+    </div>`;
+  }
+
+  window.setMobileBaseDateToday = function(){
+    const d = formatDateLocal(new Date());
+    setShotDate(d);
+    const i=document.getElementById("mobileBaseDateInput");
+    if(i) i.value=d;
+    if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+  };
+  window.shiftMobileBaseDate = function(n){
+    const d = addDays(selectedShotDate(), n);
+    setShotDate(d);
+    const i=document.getElementById("mobileBaseDateInput");
+    if(i) i.value=d;
+    if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+  };
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id==="mobileBaseDateInput"){
+      setShotDate(e.target.value);
+      if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+    }
+  });
+
+  function shortArea(addr){
+    const s = String(addr||"").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function shotJob(j, idx){
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?"-"+j.endTime:""}` || "未填時間");
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortArea(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="shot-job">
+      <div class="shot-time">${idx+1}. ${time}</div>
+      <div class="shot-name">${codeName}${item}</div>
+      <div class="shot-place">去：${place}</div>
+    </div>`;
+  }
+
+  function renderScreenshotAdminPanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML=""; return; }
+
+    const isMain = (typeof isAdmin==="function" && isAdmin());
+    const date = selectedShotDate();
+
+    function listFor(e){
+      return jobs
+        .filter(j => String(j.date||"") === date && !j.isHold && isValidJob(j))
+        .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(e))
+        .sort(sortJobsByTime);
+    }
+
+    if(isMain){
+      const total = engineers.reduce((sum,e)=>sum+listFor(e).length,0);
+      const blocks = engineers.map(e=>{
+        const list = listFor(e);
+        return `<section class="shot-engineer">
+          <div class="shot-engineer-head"><span>${escapeHtml(engineerLabel(e))}</span><span class="shot-count">${list.length} 件</span></div>
+          ${list.map((j,i)=>shotJob(j,i)).join("") || '<div class="shot-empty">本日無派工</div>'}
+        </section>`;
+      }).join("");
+      panel.innerHTML = `<div class="screenshot-board">
+        <div class="screenshot-title">派工表｜${escapeHtml(date)}</div>
+        <div class="screenshot-subtitle">共 ${total} 件｜依工程人員分組</div>
+        ${pickerHtml(date)}
+        ${blocks}
+      </div>`;
+      return;
+    }
+
+    const e = currentEngineer || "";
+    if(!e){
+      panel.innerHTML = `<h3>派工表</h3><div class="my-today-empty">此帳號尚未綁定工程師。</div>`;
+      return;
+    }
+    const list = listFor(e);
+    panel.innerHTML = `<div class="screenshot-board">
+      <div class="screenshot-title">${escapeHtml(engineerLabel(e))}｜${escapeHtml(date)}</div>
+      <div class="screenshot-subtitle">共 ${list.length} 件</div>
+      ${pickerHtml(date)}
+      <section class="shot-engineer">
+        <div class="shot-engineer-head"><span>${escapeHtml(engineerLabel(e))}</span><span class="shot-count">${list.length} 件</span></div>
+        ${list.map((j,i)=>shotJob(j,i)).join("") || '<div class="shot-empty">本日無派工</div>'}
+      </section>
+    </div>`;
+  }
+
+  window.renderMyTodayPanel = renderScreenshotAdminPanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
+  window.addEventListener("load", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 zxcv10019 main screenshot view; other engineers detailed two-day view ===== */
+(function(){
+  const MAIN_EMAIL_FOR_SCREENSHOT = "zxcv10019@gmail.com";
+
+  function isMainShotAccount(){
+    return currentUser && String(currentUser.email || "").toLowerCase() === MAIN_EMAIL_FOR_SCREENSHOT;
+  }
+
+  function selectedMainShotDate(){
+    const saved = localStorage.getItem("dispatch_main_shot_date") || localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setMainShotDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
+      localStorage.setItem("dispatch_main_shot_date", d);
+      localStorage.setItem("dispatch_mobile_base_date", d);
+    }
+  }
+
+  function addDaysStr(dateStr, days){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return formatDateLocal(d);
+  }
+
+  window.setMainShotToday = function(){
+    const d = formatDateLocal(new Date());
+    setMainShotDate(d);
+    const input = document.getElementById("mainShotDateInput");
+    if(input) input.value = d;
+    renderMyTodayPanel();
+  };
+
+  window.shiftMainShotDate = function(days){
+    const d = addDaysStr(selectedMainShotDate(), days);
+    setMainShotDate(d);
+    const input = document.getElementById("mainShotDateInput");
+    if(input) input.value = d;
+    renderMyTodayPanel();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "mainShotDateInput"){
+      setMainShotDate(e.target.value);
+      renderMyTodayPanel();
+    }
+  });
+
+  function engLabel(e){
+    return `${typeof displayEngineer === "function" ? displayEngineer(e) : ""} ${e || ""}`.trim();
+  }
+
+  function shortArea(addr){
+    const s = String(addr || "").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function jobsFor(dateLabel, engineer){
+    return jobs
+      .filter(j => String(j.date || "") === dateLabel && !j.isHold && isValidJob(j))
+      .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function mainShotJob(j, idx){
+    const time = escapeHtml(`${j.startTime || j.time || ""}${j.endTime ? "-" + j.endTime : ""}` || "未填時間");
+    const name = escapeHtml(j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortArea(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="main-shot-job">
+      <div class="main-shot-time">${idx + 1}. ${time}</div>
+      <div class="main-shot-name">${name}${item}</div>
+      <div class="main-shot-place">去：${place}</div>
+    </div>`;
+  }
+
+  function renderMainShot(panel){
+    const date = selectedMainShotDate();
+    const total = engineers.reduce((sum, e) => sum + jobsFor(date, e).length, 0);
+    const blocks = engineers.map(e => {
+      const list = jobsFor(date, e);
+      return `<section class="main-shot-eng">
+        <div class="main-shot-head"><span>${escapeHtml(engLabel(e))}</span><span class="main-shot-count">${list.length} 件</span></div>
+        ${list.map((j,i)=>mainShotJob(j,i)).join("") || '<div class="main-shot-empty">本日無派工</div>'}
+      </section>`;
+    }).join("");
+
+    panel.innerHTML = `<div class="main-shot-board">
+      <div class="main-shot-title">派工表｜${escapeHtml(date)}</div>
+      <div class="main-shot-sub">共 ${total} 件｜主帳號截圖版</div>
+      <div class="main-shot-picker">
+        <input type="date" id="mainShotDateInput" value="${escapeHtml(date)}">
+        <button type="button" onclick="setMainShotToday()">今天</button>
+        <button type="button" onclick="shiftMainShotDate(-1)">前一天</button>
+        <button type="button" onclick="shiftMainShotDate(1)">後一天</button>
+      </div>
+      ${blocks}
+    </div>`;
+  }
+
+  function detailJobCard(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime ? " ~ " + j.endTime : ""}`);
+    const phoneRaw = String(j.phone || "").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address || "").trim();
+    const addr = addrRaw
+      ? `<div>📍 地址：<a href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 地址：未填</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="eng-detail-card">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${phone}
+      ${addr}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderEngineerDetail(panel){
+    const targetEngineer = currentEngineer || "";
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const today = formatDateLocal(new Date());
+    const tomorrow = addDaysStr(today, 1);
+    const todayJobs = jobsFor(today, targetEngineer);
+    const tomorrowJobs = jobsFor(tomorrow, targetEngineer);
+
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">工程帳號顯示完整細項：電話、地址、施工內容與導航。</div>
+      <div class="eng-detail-section">
+        <h4>今天 ${escapeHtml(today)}｜${todayJobs.length} 件</h4>
+        ${todayJobs.map((j,i)=>detailJobCard(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+      </div>
+      <div class="eng-detail-section">
+        <h4>明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</h4>
+        ${tomorrowJobs.map((j,i)=>detailJobCard(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+      </div>`;
+    setTimeout(function(){ if(typeof updateTravelTags === "function") updateTravelTags(); }, 80);
+  }
+
+  window.renderMyTodayPanel = function(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+    if(window.innerWidth <= 900 && isMainShotAccount()){
+      renderMainShot(panel);
+      return;
+    }
+    if(window.innerWidth <= 900){
+      renderEngineerDetail(panel);
+      return;
+    }
+  };
+
+  function forceMobileScheduleOnly(){
+    if(window.innerWidth <= 900 && document.body && !document.body.classList.contains("login-required") && !document.body.classList.contains("no-permission")){
+      document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+      const schedule = document.getElementById("schedulePage");
+      if(schedule) schedule.classList.add("active");
+      renderMyTodayPanel();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(forceMobileScheduleOnly, 200); });
+  window.addEventListener("load", function(){ setTimeout(forceMobileScheduleOnly, 200); });
+  window.addEventListener("resize", forceMobileScheduleOnly);
+  /* mobile force interval disabled to prevent flicker */
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 desktop supervisor dashboard inside hidden admin ===== */
+(function(){
+  const SUPERVISOR_EMAIL = "zxcv10019@gmail.com";
+
+  function isSupervisorAccount(){
+    return currentUser && String(currentUser.email || "").toLowerCase() === SUPERVISOR_EMAIL;
+  }
+
+  function supervisorDate(){
+    const saved = localStorage.getItem("dispatch_desktop_supervisor_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setSupervisorDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)){
+      localStorage.setItem("dispatch_desktop_supervisor_date", d);
+    }
+  }
+
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    return formatDateLocal(d);
+  }
+
+  window.desktopSupervisorToday = function(){
+    const d = formatDateLocal(new Date());
+    setSupervisorDate(d);
+    const input = document.getElementById("desktopSupervisorDate");
+    if(input) input.value = d;
+    renderDesktopSupervisor();
+  };
+
+  window.desktopSupervisorShift = function(n){
+    const d = addDays(supervisorDate(), n);
+    setSupervisorDate(d);
+    const input = document.getElementById("desktopSupervisorDate");
+    if(input) input.value = d;
+    renderDesktopSupervisor();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "desktopSupervisorDate"){
+      setSupervisorDate(e.target.value);
+      renderDesktopSupervisor();
+    }
+  });
+
+  function engLabel(e){
+    return `${typeof displayEngineer === "function" ? displayEngineer(e) : ""} ${e || ""}`.trim();
+  }
+
+  function shortPlace(addr){
+    const s = String(addr || "").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function listFor(date, engineer){
+    return jobs
+      .filter(j => String(j.date || "") === date && !j.isHold && isValidJob(j))
+      .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function routeSummary(list){
+    if(!list.length) return "本日無派工";
+    const places = list.map(j => shortPlace(j.address)).filter(Boolean);
+    const shown = places.slice(0, 5).join(" → ");
+    return places.length > 5 ? shown + " → …" : shown;
+  }
+
+  function jobRow(j, idx){
+    const time = escapeHtml(`${j.startTime || j.time || ""}${j.endTime ? "-" + j.endTime : ""}` || "未填時間");
+    const name = escapeHtml(j.codeName || `${j.customerCode || ""} ${j.customerName || ""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortPlace(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="desktop-supervisor-job">
+      <div class="time">${idx + 1}. ${time}</div>
+      <div class="name">${name}${item}</div>
+      <div class="place">去：${place}</div>
+    </div>`;
+  }
+
+  function ensureDesktopSupervisorBox(){
+    let box = document.getElementById("desktopSupervisorBox");
+    if(box) return box;
+
+    const adminBody = document.querySelector("#adminPage .admin-body") || document.getElementById("adminPage");
+    if(!adminBody) return null;
+
+    box = document.createElement("div");
+    box.id = "desktopSupervisorBox";
+    adminBody.insertBefore(box, adminBody.firstChild);
+    return box;
+  }
+
+  window.renderDesktopSupervisor = function(){
+    const box = ensureDesktopSupervisorBox();
+    if(!box) return;
+    const shouldShow = isSupervisorAccount() && window.innerWidth > 900 && location.search.includes("admin");
+    box.classList.toggle("active", !!shouldShow);
+    if(!shouldShow){
+      box.innerHTML = "";
+      return;
+    }
+
+    const date = supervisorDate();
+    const data = engineers.map(e => ({engineer:e, list:listFor(date, e)}));
+    const total = data.reduce((sum, x) => sum + x.list.length, 0);
+    const active = data.filter(x => x.list.length).length;
+    const firstTimes = data.map(x => x.list[0]?.startTime || x.list[0]?.time || "").filter(Boolean).sort();
+    const lastTimes = data.map(x => {
+      const j = x.list[x.list.length - 1];
+      return j ? (j.endTime || j.startTime || j.time || "") : "";
+    }).filter(Boolean).sort();
+
+    const cards = data.map(x => {
+      const rows = x.list.map((j,i)=>jobRow(j,i)).join("") || '<div class="desktop-supervisor-empty">本日無派工</div>';
+      return `<section class="desktop-supervisor-card">
+        <div class="desktop-supervisor-card-head">
+          <span>${escapeHtml(engLabel(x.engineer))}</span>
+          <span>${x.list.length} 件</span>
+        </div>
+        <div class="desktop-supervisor-route">路線：${escapeHtml(routeSummary(x.list))}</div>
+        ${rows}
+      </section>`;
+    }).join("");
+
+    box.innerHTML = `
+      <div class="desktop-supervisor-head">
+        <div class="desktop-supervisor-title">主管模式｜${escapeHtml(date)}</div>
+        <div class="desktop-supervisor-tools">
+          <input type="date" id="desktopSupervisorDate" value="${escapeHtml(date)}">
+          <button type="button" onclick="desktopSupervisorToday()">今天</button>
+          <button type="button" onclick="desktopSupervisorShift(-1)">前一天</button>
+          <button type="button" onclick="desktopSupervisorShift(1)">後一天</button>
+        </div>
+      </div>
+      <div class="desktop-supervisor-summary">
+        <div class="desktop-supervisor-stat"><div class="num">${total}</div><div class="label">總件數</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${active}</div><div class="label">有派工工程</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${firstTimes[0] || "-"}</div><div class="label">最早開始</div></div>
+        <div class="desktop-supervisor-stat"><div class="num">${lastTimes[lastTimes.length-1] || "-"}</div><div class="label">最晚結束</div></div>
+      </div>
+      <div class="desktop-supervisor-grid">${cards}</div>
+    `;
+  };
+
+  const oldApplyRoleUI = window.applyRoleUI;
+  if(typeof oldApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = oldApplyRoleUI.apply(this, arguments);
+      setTimeout(renderDesktopSupervisor, 100);
+      return r;
+    };
+  }
+
+  const oldRenderJobList = window.renderJobList;
+  if(typeof oldRenderJobList === "function"){
+    window.renderJobList = function(){
+      const r = oldRenderJobList.apply(this, arguments);
+      setTimeout(renderDesktopSupervisor, 100);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderDesktopSupervisor, 500); });
+  window.addEventListener("load", function(){ setTimeout(renderDesktopSupervisor, 500); });
+  window.addEventListener("resize", function(){ setTimeout(renderDesktopSupervisor, 100); });
+  setInterval(function(){
+    if(location.search.includes("admin")) renderDesktopSupervisor();
+  }, 1500);
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account mobile full-data mode ===== */
+(function(){
+  const MAIN_EMAIL_FULL = "zxcv10019@gmail.com";
+  let desiredMobilePage = "schedulePage";
+
+  function isMainMobileFull(){
+    return window.innerWidth <= 900 &&
+      currentUser &&
+      String(currentUser.email || "").toLowerCase() === MAIN_EMAIL_FULL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setTabsActive(pageId){
+    document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+    const map = {
+      schedulePage: "tabSchedule",
+      dispatchPage: "tabDispatch",
+      customerPage: "tabCustomer",
+      listPage: "tabList",
+      adminPage: "adminTab"
+    };
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function restoreMainMobilePage(){
+    const enabled = isMainMobileFull();
+    document.body.classList.toggle("mobile-main-full", !!enabled);
+    if(!enabled) return;
+
+    if(!document.getElementById(desiredMobilePage)){
+      desiredMobilePage = "schedulePage";
+    }
+
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const page = document.getElementById(desiredMobilePage);
+    if(page) page.classList.add("active");
+    setTabsActive(desiredMobilePage);
+
+    // 主帳號不是用 ?admin 也要能看到後台頁籤；但不強迫打開後台
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    // 如果正在派工表頁，保留主管截圖區；切其他頁就不干擾
+    if(desiredMobilePage === "schedulePage" && typeof renderMyTodayPanel === "function"){
+      try{ renderMyTodayPanel(); }catch(e){}
+    }
+  }
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m){
+      desiredMobilePage = m[1];
+      setTimeout(restoreMainMobilePage, 30);
+      setTimeout(restoreMainMobilePage, 180);
+    }
+  }, true);
+
+  const oldShowPage = window.showPage;
+  if(typeof oldShowPage === "function"){
+    window.showPage = function(id){
+      desiredMobilePage = id || desiredMobilePage;
+      const r = oldShowPage.apply(this, arguments);
+      setTimeout(restoreMainMobilePage, 30);
+      setTimeout(restoreMainMobilePage, 180);
+      return r;
+    };
+  }
+
+  const oldApplyRoleUI = window.applyRoleUI;
+  if(typeof oldApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = oldApplyRoleUI.apply(this, arguments);
+      setTimeout(restoreMainMobilePage, 50);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(restoreMainMobilePage, 300); });
+  window.addEventListener("load", function(){ setTimeout(restoreMainMobilePage, 300); });
+  window.addEventListener("resize", restoreMainMobilePage);
+  /* mobile force interval disabled to prevent flicker */
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 FIX: main mobile screenshot only + working tabs ===== */
+(function(){
+  const MAIN_EMAIL = "zxcv10019@gmail.com";
+  let currentMobilePage = "schedulePage";
+  let allowForce = true;
+
+  function isMainMobile(){
+    return window.innerWidth <= 900 &&
+      currentUser &&
+      String(currentUser.email || "").toLowerCase() === MAIN_EMAIL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setActiveTab(pageId){
+    const map = {
+      schedulePage: "tabSchedule",
+      dispatchPage: "tabDispatch",
+      customerPage: "tabCustomer",
+      listPage: "tabList",
+      adminPage: "adminTab"
+    };
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function showOnlyPage(pageId){
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const page = document.getElementById(pageId);
+    if(page) page.classList.add("active");
+    setActiveTab(pageId);
+  }
+
+  function renderMainShotIfNeeded(){
+    if(!isMainMobile()) return;
+    document.body.classList.add("main-mobile-shot");
+
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    showOnlyPage(currentMobilePage);
+
+    if(currentMobilePage === "schedulePage" && typeof renderMyTodayPanel === "function"){
+      try{ renderMyTodayPanel(); }catch(e){}
+    }
+  }
+
+  function userClickedTab(pageId){
+    currentMobilePage = pageId;
+    allowForce = false;
+    if(isMainMobile()){
+      document.body.classList.add("main-mobile-shot");
+      showOnlyPage(pageId);
+      if(pageId === "schedulePage" && typeof renderMyTodayPanel === "function"){
+        try{ renderMyTodayPanel(); }catch(e){}
+      }
+    }
+    setTimeout(()=>{ allowForce = true; }, 1200);
+  }
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m) userClickedTab(m[1]);
+  }, true);
+
+  const originalShowPage = window.showPage;
+  if(typeof originalShowPage === "function"){
+    window.showPage = function(id){
+      currentMobilePage = id || currentMobilePage;
+      if(isMainMobile()){
+        userClickedTab(currentMobilePage);
+        return;
+      }
+      return originalShowPage.apply(this, arguments);
+    };
+  }
+
+  const originalApplyRoleUI = window.applyRoleUI;
+  if(typeof originalApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = originalApplyRoleUI.apply(this, arguments);
+      setTimeout(renderMainShotIfNeeded, 80);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderMainShotIfNeeded, 300); });
+  window.addEventListener("load", function(){ setTimeout(renderMainShotIfNeeded, 300); });
+  window.addEventListener("resize", function(){ setTimeout(renderMainShotIfNeeded, 100); });
+
+  /* mobile force interval disabled to prevent flicker */
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 FINAL MOBILE FIX: stable tab switching ===== */
+(function(){
+  const MAIN_EMAIL = "zxcv10019@gmail.com";
+  let mobilePage = "schedulePage";
+
+  function isMainMobile(){
+    return window.innerWidth <= 900 &&
+      window.currentUser &&
+      String(window.currentUser.email || "").toLowerCase() === MAIN_EMAIL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setTab(pageId){
+    const map = {
+      schedulePage:"tabSchedule",
+      dispatchPage:"tabDispatch",
+      customerPage:"tabCustomer",
+      listPage:"tabList",
+      adminPage:"adminTab"
+    };
+    document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function showMobilePage(pageId){
+    if(!isMainMobile()) return false;
+    mobilePage = pageId || mobilePage || "schedulePage";
+    document.body.classList.add("main-mobile-shot");
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    const page = document.getElementById(mobilePage);
+    if(page) page.classList.add("active");
+    setTab(mobilePage);
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    // 手機派工頁只顯示截圖/卡片，不顯示大表格
+    const wrap = document.getElementById("scheduleWrap");
+    if(wrap) wrap.style.display = "none";
+
+    if(mobilePage === "schedulePage" && typeof window.renderMyTodayPanel === "function"){
+      try{ window.renderMyTodayPanel(); }catch(e){}
+    }
+    return true;
+  }
+
+  // Override showPage for main mobile only.
+  const oldShowPage = window.showPage;
+  window.showPage = function(id){
+    if(showMobilePage(id)) return;
+    if(typeof oldShowPage === "function") return oldShowPage.apply(this, arguments);
+  };
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m && isMainMobile()){
+      e.preventDefault();
+      e.stopPropagation();
+      showMobilePage(m[1]);
+    }
+  }, true);
+
+  function init(){
+    if(isMainMobile()){
+      const active = document.querySelector(".page.active");
+      mobilePage = active && active.id ? active.id : "schedulePage";
+      showMobilePage(mobilePage);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>setTimeout(init, 300));
+  window.addEventListener("load", ()=>setTimeout(init, 300));
+  window.addEventListener("resize", ()=>setTimeout(init, 150));
+})();
+</script>
+
 
 </body>
 </html>
