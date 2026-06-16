@@ -1831,6 +1831,59 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 FINAL MOBILE FIX: no dispatch grid on mobile, stop admin flicker ===== */
+@media(max-width:900px){
+  /* 手機永遠不顯示派工大表格 */
+  #scheduleWrap,
+  #schedule,
+  .week-schedule-table,
+  .engineer-code-note,
+  #schedulePage > .summary{
+    display:none !important;
+  }
+
+  /* 手機的派工頁只保留截圖/卡片區 */
+  #schedulePage.page.active{
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  #myTodayPanel{
+    display:block !important;
+  }
+
+  /* 主帳號手機可切換各頁，不要被程式強制跳回派工表 */
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  /* 手機後台整頁滑動，不使用內框閃爍 */
+  body.main-mobile-shot #adminPage.page.active,
+  #adminPage.page.active{
+    height:auto !important;
+    min-height:100vh !important;
+    overflow:visible !important;
+    padding-bottom:140px !important;
+  }
+
+  #adminPage .admin-body,
+  #adminPage .log-table-wrap{
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+}
+
 </style>
 </head>
 
@@ -4663,7 +4716,7 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", forceMobileOnlyView);
   window.addEventListener("load", forceMobileOnlyView);
   window.addEventListener("resize", forceMobileOnlyView);
-  setInterval(forceMobileOnlyView, 1000);
+  /* mobile force interval disabled to prevent flicker */
 })();
 </script>
 
@@ -5224,7 +5277,7 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", function(){ setTimeout(forceMobileScheduleOnly, 200); });
   window.addEventListener("load", function(){ setTimeout(forceMobileScheduleOnly, 200); });
   window.addEventListener("resize", forceMobileScheduleOnly);
-  setInterval(forceMobileScheduleOnly, 1200);
+  /* mobile force interval disabled to prevent flicker */
 })();
 </script>
 
@@ -5495,7 +5548,7 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", function(){ setTimeout(restoreMainMobilePage, 300); });
   window.addEventListener("load", function(){ setTimeout(restoreMainMobilePage, 300); });
   window.addEventListener("resize", restoreMainMobilePage);
-  setInterval(restoreMainMobilePage, 250);
+  /* mobile force interval disabled to prevent flicker */
 })();
 </script>
 
@@ -5595,17 +5648,89 @@ document.addEventListener("click", function(e){
   window.addEventListener("load", function(){ setTimeout(renderMainShotIfNeeded, 300); });
   window.addEventListener("resize", function(){ setTimeout(renderMainShotIfNeeded, 100); });
 
-  setInterval(function(){
-    if(!isMainMobile()){
-      document.body.classList.remove("main-mobile-shot");
-      return;
-    }
+  /* mobile force interval disabled to prevent flicker */
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 FINAL MOBILE FIX: stable tab switching ===== */
+(function(){
+  const MAIN_EMAIL = "zxcv10019@gmail.com";
+  let mobilePage = "schedulePage";
+
+  function isMainMobile(){
+    return window.innerWidth <= 900 &&
+      window.currentUser &&
+      String(window.currentUser.email || "").toLowerCase() === MAIN_EMAIL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setTab(pageId){
+    const map = {
+      schedulePage:"tabSchedule",
+      dispatchPage:"tabDispatch",
+      customerPage:"tabCustomer",
+      listPage:"tabList",
+      adminPage:"adminTab"
+    };
+    document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function showMobilePage(pageId){
+    if(!isMainMobile()) return false;
+    mobilePage = pageId || mobilePage || "schedulePage";
     document.body.classList.add("main-mobile-shot");
-    if(allowForce){
-      const active = document.querySelector(".page.active");
-      if(active && active.id) currentMobilePage = active.id;
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    const page = document.getElementById(mobilePage);
+    if(page) page.classList.add("active");
+    setTab(mobilePage);
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    // 手機派工頁只顯示截圖/卡片，不顯示大表格
+    const wrap = document.getElementById("scheduleWrap");
+    if(wrap) wrap.style.display = "none";
+
+    if(mobilePage === "schedulePage" && typeof window.renderMyTodayPanel === "function"){
+      try{ window.renderMyTodayPanel(); }catch(e){}
     }
-  }, 500);
+    return true;
+  }
+
+  // Override showPage for main mobile only.
+  const oldShowPage = window.showPage;
+  window.showPage = function(id){
+    if(showMobilePage(id)) return;
+    if(typeof oldShowPage === "function") return oldShowPage.apply(this, arguments);
+  };
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m && isMainMobile()){
+      e.preventDefault();
+      e.stopPropagation();
+      showMobilePage(m[1]);
+    }
+  }, true);
+
+  function init(){
+    if(isMainMobile()){
+      const active = document.querySelector(".page.active");
+      mobilePage = active && active.id ? active.id : "schedulePage";
+      showMobilePage(mobilePage);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", ()=>setTimeout(init, 300));
+  window.addEventListener("load", ()=>setTimeout(init, 300));
+  window.addEventListener("resize", ()=>setTimeout(init, 150));
 })();
 </script>
 
