@@ -1411,6 +1411,38 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 admin mobile date picker ===== */
+@media(max-width:900px){
+  .mobile-date-picker-box{
+    display:flex !important;
+    gap:8px !important;
+    align-items:center !important;
+    flex-wrap:wrap !important;
+    margin:10px 0 14px !important;
+    padding:10px !important;
+    border-radius:12px !important;
+    background:#fff8dc !important;
+    border:1px solid #e0c35a !important;
+  }
+  .mobile-date-picker-box label{
+    font-weight:bold !important;
+    font-size:14px !important;
+    color:#333 !important;
+  }
+  .mobile-date-picker-box input[type="date"]{
+    flex:1 !important;
+    min-width:160px !important;
+    font-size:16px !important;
+    padding:9px !important;
+  }
+  .mobile-date-picker-box button{
+    padding:9px 12px !important;
+    border-radius:8px !important;
+    font-size:14px !important;
+  }
+}
+
 </style>
 </head>
 
@@ -4345,6 +4377,154 @@ document.addEventListener("click", function(e){
   window.renderMyTodayPanel = renderGroupedMobilePanel;
   document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderGroupedMobilePanel, 100); });
   window.addEventListener("load", function(){ setTimeout(renderGroupedMobilePanel, 100); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account mobile selectable date ===== */
+(function(){
+  function selectedMobileBaseDate(){
+    const saved = localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+
+  function setSelectedMobileBaseDate(dateStr){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){
+      localStorage.setItem("dispatch_mobile_base_date", dateStr);
+    }
+  }
+
+  function addDaysString(dateStr, days){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return formatDateLocal(d);
+  }
+
+  function datePickerHtml(baseDate){
+    return `<div class="mobile-date-picker-box">
+      <label>查看日期</label>
+      <input type="date" id="mobileBaseDateInput" value="${escapeHtml(baseDate)}">
+      <button type="button" onclick="window.setMobileBaseDateToday()">今天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(-1)">前一天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(1)">後一天</button>
+    </div>`;
+  }
+
+  window.setMobileBaseDateToday = function(){
+    const today = formatDateLocal(new Date());
+    setSelectedMobileBaseDate(today);
+    const input = document.getElementById("mobileBaseDateInput");
+    if(input) input.value = today;
+    if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+  };
+
+  window.shiftMobileBaseDate = function(days){
+    const next = addDaysString(selectedMobileBaseDate(), days);
+    setSelectedMobileBaseDate(next);
+    const input = document.getElementById("mobileBaseDateInput");
+    if(input) input.value = next;
+    if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+  };
+
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id === "mobileBaseDateInput"){
+      setSelectedMobileBaseDate(e.target.value);
+      if(typeof renderMyTodayPanel === "function") renderMyTodayPanel();
+    }
+  });
+
+  function engLabel(e){
+    return (typeof displayEngineer === "function" ? displayEngineer(e) : "") + " " + (e || "");
+  }
+
+  function jobCard(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+    const phoneRaw = String(j.phone||"").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address||"").trim();
+    const addr = addrRaw
+      ? `<div class="admin-job-address">📍 去：<a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 去：未填地址</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="my-today-job">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${addr}
+      ${phone}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderSelectableDateMobilePanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+
+    const base = selectedMobileBaseDate();
+    const next = addDaysString(base, 1);
+    const adminMode = (typeof isAdmin === "function" && isAdmin());
+    const targetEngineer = currentEngineer || "";
+
+    function listFor(dateLabel, engineer){
+      return jobs
+        .filter(j => String(j.date||"") === dateLabel && !j.isHold && isValidJob(j))
+        .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+        .sort(sortJobsByTime);
+    }
+
+    if(adminMode){
+      const sections = engineers.map(e => {
+        const d1 = listFor(base, e);
+        const d2 = listFor(next, e);
+        return `<section class="admin-engineer-block">
+          <h4>${escapeHtml(engLabel(e))}｜兩日共 ${d1.length + d2.length} 件</h4>
+          <div class="admin-day-label">選擇日 ${escapeHtml(base)}｜${d1.length} 件</div>
+          ${d1.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">此日沒有派工。</div>'}
+          <div class="admin-day-label">隔天 ${escapeHtml(next)}｜${d2.length} 件</div>
+          ${d2.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">隔天沒有派工。</div>'}
+        </section>`;
+      }).join("");
+      const total = engineers.reduce((sum,e)=>sum + listFor(base,e).length + listFor(next,e).length,0);
+      panel.innerHTML = `<h3>兩日派工表｜全部工程</h3>
+        <div class="my-today-sub">主帳號可選擇查看日期，系統會顯示「選擇日＋隔天」。兩日共 ${total} 件。</div>
+        ${datePickerHtml(base)}
+        ${sections}`;
+      setTimeout(updateTravelTags, 80);
+      return;
+    }
+
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const d1 = listFor(base, targetEngineer);
+    const d2 = listFor(next, targetEngineer);
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">依登入帳號 ${escapeHtml(currentUser.email)} 綁定工程師顯示。</div>
+      ${datePickerHtml(base)}
+      <section class="admin-engineer-block">
+        <h4>${escapeHtml(engLabel(targetEngineer))}｜兩日共 ${d1.length + d2.length} 件</h4>
+        <div class="admin-day-label">選擇日 ${escapeHtml(base)}｜${d1.length} 件</div>
+        ${d1.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">此日沒有派工。</div>'}
+        <div class="admin-day-label">隔天 ${escapeHtml(next)}｜${d2.length} 件</div>
+        ${d2.map((j,i)=>jobCard(j,i)).join("") || '<div class="my-today-empty">隔天沒有派工。</div>'}
+      </section>`;
+    setTimeout(updateTravelTags, 80);
+  }
+
+  window.renderMyTodayPanel = renderSelectableDateMobilePanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
+  window.addEventListener("load", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
 })();
 </script>
 
