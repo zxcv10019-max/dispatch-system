@@ -1381,6 +1381,36 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 admin mobile grouped-by-engineer view ===== */
+@media(max-width:900px){
+  .admin-engineer-block{
+    margin:14px 0 18px !important;
+    padding:12px !important;
+    border-radius:14px !important;
+    background:#f8f9fa !important;
+    border:1px solid #d9e2ec !important;
+  }
+  .admin-engineer-block > h4{
+    margin:0 0 10px !important;
+    font-size:18px !important;
+    color:#1f3a5f !important;
+    background:#eaf3ff !important;
+    padding:9px 10px !important;
+    border-radius:10px !important;
+  }
+  .admin-day-label{
+    margin:10px 0 6px !important;
+    font-weight:bold !important;
+    color:#555 !important;
+    font-size:15px !important;
+  }
+  .admin-job-address{
+    font-weight:bold !important;
+    color:#155a8a !important;
+  }
+}
+
 </style>
 </head>
 
@@ -4214,6 +4244,107 @@ document.addEventListener("click", function(e){
   window.addEventListener("load", forceMobileOnlyView);
   window.addEventListener("resize", forceMobileOnlyView);
   setInterval(forceMobileOnlyView, 1000);
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 override: main account mobile groups jobs by engineer ===== */
+(function(){
+  function engLabel(e){
+    return (typeof displayEngineer === "function" ? displayEngineer(e) : "") + " " + (e || "");
+  }
+
+  function jobCardForAdmin(j, idx){
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?" ~ "+j.endTime:""}`);
+    const phoneRaw = String(j.phone||"").trim();
+    const phone = phoneRaw
+      ? `<div>☎️ 電話：<a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}">${escapeHtml(phoneRaw)}</a></div>`
+      : `<div style="color:#999">☎️ 電話：未填</div>`;
+    const addrRaw = String(j.address||"").trim();
+    const addr = addrRaw
+      ? `<div class="admin-job-address">📍 去：<a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank">${escapeHtml(addrRaw)}</a></div>`
+      : `<div style="color:#999">📍 去：未填地址</div>`;
+    const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
+    const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
+    const routeHtml = typeof nextRouteHtml === "function" ? nextRouteHtml(j) : "";
+    return `<div class="my-today-job">
+      <div class="time">${time || "未填時間"}</div>
+      <div class="name">${idx+1}. ${codeName}</div>
+      ${addr}
+      ${phone}
+      ${work}
+      ${content}
+      ${routeHtml}
+    </div>`;
+  }
+
+  function renderGroupedMobilePanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
+
+    const todayObj = new Date();
+    const tomorrowObj = new Date();
+    tomorrowObj.setDate(todayObj.getDate()+1);
+    const today = formatDateLocal(todayObj);
+    const tomorrow = formatDateLocal(tomorrowObj);
+
+    const adminMode = (typeof isAdmin === "function" && isAdmin());
+    const targetEngineer = currentEngineer || "";
+
+    function listFor(dateLabel, engineer){
+      return jobs
+        .filter(j => String(j.date||"") === dateLabel && !j.isHold && isValidJob(j))
+        .filter(j => !engineer || normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+        .sort(sortJobsByTime);
+    }
+
+    if(adminMode){
+      const allSections = engineers.map(e => {
+        const todayJobs = listFor(today, e);
+        const tomorrowJobs = listFor(tomorrow, e);
+        const total = todayJobs.length + tomorrowJobs.length;
+        return `<section class="admin-engineer-block">
+          <h4>${escapeHtml(engLabel(e))}｜兩日共 ${total} 件</h4>
+          <div class="admin-day-label">今天 ${escapeHtml(today)}｜${todayJobs.length} 件</div>
+          ${todayJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+          <div class="admin-day-label">明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</div>
+          ${tomorrowJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+        </section>`;
+      }).join("");
+
+      const totalAll = engineers.reduce((sum,e)=>sum + listFor(today,e).length + listFor(tomorrow,e).length, 0);
+      panel.innerHTML = `<h3>兩日派工表｜全部工程</h3>
+        <div class="my-today-sub">主帳號手機版依「工程人員」分組顯示，方便看出哪個工程去哪裡。兩日共 ${totalAll} 件。</div>
+        ${allSections}`;
+      setTimeout(updateTravelTags, 80);
+      return;
+    }
+
+    if(!targetEngineer){
+      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師。</div>`;
+      return;
+    }
+
+    const todayJobs = listFor(today, targetEngineer);
+    const tomorrowJobs = listFor(tomorrow, targetEngineer);
+    panel.innerHTML = `<h3>兩日派工表｜${escapeHtml(engLabel(targetEngineer))}</h3>
+      <div class="my-today-sub">依登入帳號 ${escapeHtml(currentUser.email)} 綁定工程師顯示。</div>
+      <section class="admin-engineer-block">
+        <h4>${escapeHtml(engLabel(targetEngineer))}｜兩日共 ${todayJobs.length + tomorrowJobs.length} 件</h4>
+        <div class="admin-day-label">今天 ${escapeHtml(today)}｜${todayJobs.length} 件</div>
+        ${todayJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">今天沒有派工。</div>'}
+        <div class="admin-day-label">明天 ${escapeHtml(tomorrow)}｜${tomorrowJobs.length} 件</div>
+        ${tomorrowJobs.map((j,i)=>jobCardForAdmin(j,i)).join("") || '<div class="my-today-empty">明天沒有派工。</div>'}
+      </section>`;
+    setTimeout(updateTravelTags, 80);
+  }
+
+  window.renderMyTodayPanel = renderGroupedMobilePanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderGroupedMobilePanel, 100); });
+  window.addEventListener("load", function(){ setTimeout(renderGroupedMobilePanel, 100); });
 })();
 </script>
 
