@@ -629,44 +629,6 @@ body{
   width:auto !important;
   margin:0;
 }
-.remind-msg-btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:20px;
-  height:20px;
-  padding:0;
-  margin-left:2px;
-  font-size:12px;
-  line-height:1;
-  border:1px solid #487eb0;
-  border-radius:50%;
-  background:#eaf2fb;
-  color:#2e5d8a;
-  cursor:pointer;
-  flex-shrink:0;
-}
-.remind-msg-btn:hover{background:#d7e9fb}
-.remind-modal-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.45);
-  z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;
-}
-.remind-modal-box{
-  background:#fff;border-radius:8px;max-width:420px;width:100%;
-  padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);
-  max-height:90vh;display:flex;flex-direction:column;
-}
-.remind-modal-box h3{margin:0 0 10px;font-size:16px}
-.remind-modal-box textarea{
-  width:100%;flex:1;min-height:260px;font-size:14px;line-height:1.6;
-  font-family:inherit;resize:vertical;
-}
-.remind-modal-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap}
-.remind-modal-actions button{padding:8px 14px;font-size:13px}
-.remind-modal-actions .remind-copy-btn{background:#218c74}
-.remind-modal-actions .remind-copy-btn:hover{background:#33a38a}
-.remind-modal-actions .remind-close-btn{background:#888}
-.remind-modal-actions .remind-close-btn:hover{background:#aaa}
 .city-checks{
   display:flex;
   flex-wrap:wrap;
@@ -2362,37 +2324,7 @@ function getEngineerFreeRanges(engineer, date){
 }
 
 // ===== Google Maps Routes API 車程自動計算 =====
-const TRAVEL_CACHE_STORAGE_KEY = "dispatchTravelCache_v1";
-const TRAVEL_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 車程快取保留 30 天
-let travelCache = {}; // "from|to" -> {durationText,distanceText,durationMinutes,distanceKm,ts} or null
-let travelInFlight = {}; // 避免同一組地址同時重複打 API
-let travelUpdateTimer = null;
-let travelUpdateRunning = false;
-let travelUpdateQueued = false;
-let travelApiCooldownUntil = 0;
-
-try{
-  const saved = localStorage.getItem(TRAVEL_CACHE_STORAGE_KEY);
-  if(saved){
-    const parsed = JSON.parse(saved);
-    const now = Date.now();
-    Object.keys(parsed || {}).forEach(k=>{
-      const v = parsed[k];
-      if(v && v.ts && now - v.ts < TRAVEL_CACHE_MAX_AGE_MS) travelCache[k] = v;
-    });
-  }
-}catch(e){ travelCache = {}; }
-
-function saveTravelCache(){
-  try{ localStorage.setItem(TRAVEL_CACHE_STORAGE_KEY, JSON.stringify(travelCache)); }catch(e){}
-}
-
-function normalizeTravelAddress(addr){
-  return String(addr||"").replace(/\s+/g," ").trim();
-}
-function getTravelCacheKey(addrA, addrB){
-  return normalizeTravelAddress(addrA) + "|" + normalizeTravelAddress(addrB);
-}
+const travelCache = {}; // "from|to" -> {durationText,distanceText,durationMinutes,distanceKm} or null
 
 function parseDurationSeconds(duration){
   const m = String(duration||"").match(/([0-9.]+)s/);
@@ -2440,66 +2372,46 @@ function hasOverlap(j){
   });
 }
 async function fetchDrivingInfo(addrA, addrB){
-  addrA = normalizeTravelAddress(addrA);
-  addrB = normalizeTravelAddress(addrB);
   if(!addrA || !addrB) return null;
-  if(addrA===addrB) return {durationText:"0 分鐘",distanceText:"0 m",durationMinutes:0,distanceKm:0,ts:Date.now()};
-
-  const cacheKey = getTravelCacheKey(addrA, addrB);
-  const cached = travelCache[cacheKey];
-  if(cached && cached.ts && Date.now() - cached.ts < TRAVEL_CACHE_MAX_AGE_MS) return cached;
-  if(travelInFlight[cacheKey]) return travelInFlight[cacheKey];
-
-  // 如果剛被 Google 限流，不要繼續連打 API，避免 429 越打越多
-  if(Date.now() < travelApiCooldownUntil) return null;
-
-  travelInFlight[cacheKey] = (async()=>{
-    try{
-      const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-          "X-Goog-FieldMask":"routes.duration,routes.distanceMeters"
-        },
-        body:JSON.stringify({
-          origin:{address:addrA},
-          destination:{address:addrB},
-          travelMode:"DRIVE",
-          routingPreference:"TRAFFIC_AWARE",
-          languageCode:"zh-TW",
-          units:"METRIC"
-        })
-      });
-      if(!res.ok){
-        if(res.status===429){
-          travelApiCooldownUntil = Date.now() + 1000 * 60 * 10; // 限流時暫停 10 分鐘
-        }
-        throw new Error("Routes API HTTP " + res.status);
-      }
-      const data = await res.json();
-      const route = data.routes && data.routes[0];
-      if(!route) return null;
-      const sec=parseDurationSeconds(route.duration);
-      const meters=Number(route.distanceMeters||0);
-      const result={
-        durationText:formatDuration(sec),
-        distanceText:formatDistance(meters),
-        durationMinutes:Math.round(sec/60),
-        distanceKm:meters/1000,
-        ts:Date.now()
-      };
-      travelCache[cacheKey]=result;
-      saveTravelCache();
-      return result;
-    }catch(e){
-      console.warn("Google 車程計算失敗", e);
-      return null;
-    }finally{
-      delete travelInFlight[cacheKey];
-    }
-  })();
-  return travelInFlight[cacheKey];
+  if(String(addrA).trim()===String(addrB).trim()) return {durationText:"0 分鐘",distanceText:"0 m",durationMinutes:0,distanceKm:0};
+  const cacheKey = String(addrA).trim() + "|" + String(addrB).trim();
+  if(cacheKey in travelCache) return travelCache[cacheKey];
+  try{
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask":"routes.duration,routes.distanceMeters"
+      },
+      body:JSON.stringify({
+        origin:{address:addrA},
+        destination:{address:addrB},
+        travelMode:"DRIVE",
+        routingPreference:"TRAFFIC_AWARE",
+        languageCode:"zh-TW",
+        units:"METRIC"
+      })
+    });
+    if(!res.ok){ throw new Error("Routes API HTTP " + res.status); }
+    const data = await res.json();
+    const route = data.routes && data.routes[0];
+    if(!route){ travelCache[cacheKey]=null; return null; }
+    const sec=parseDurationSeconds(route.duration);
+    const meters=Number(route.distanceMeters||0);
+    const result={
+      durationText:formatDuration(sec),
+      distanceText:formatDistance(meters),
+      durationMinutes:Math.round(sec/60),
+      distanceKm:meters/1000
+    };
+    travelCache[cacheKey]=result;
+    return result;
+  }catch(e){
+    console.warn("Google 車程計算失敗", e);
+    travelCache[cacheKey]=null;
+    return null;
+  }
 }
 function routeTagHtml(from,to,label="車程", extra=""){
   if(!from || !to) return `<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>`;
@@ -2513,81 +2425,38 @@ function nextRouteHtml(j){
   return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
 }
 async function updateTravelTags(){
-  const tags = Array.from(document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]"));
-  if(!tags.length) return;
-
-  // 同一組 from/to 只算一次，畫面上多個相同車程共用結果
-  const groups = new Map();
+  const tags = document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]");
   for(const tag of tags){
-    const from = normalizeTravelAddress(tag.dataset.from);
-    const to = normalizeTravelAddress(tag.dataset.to);
+    const from = tag.dataset.from;
+    const to = tag.dataset.to;
     if(!from || !to) continue;
-    const key = getTravelCacheKey(from,to);
-    if(!groups.has(key)) groups.set(key, {from,to,tags:[]});
-    groups.get(key).tags.push(tag);
-  }
-
-  for(const group of groups.values()){
-    const {from,to,tags:groupTags} = group;
-
-    groupTags.forEach(tag=>{
-      const isBox = tag.classList.contains("route-info");
-      const prefix = tag.dataset.prefix || "車程";
-      tag.textContent = isBox ? `🚗 ${prefix}：計算中…` : `${prefix}：計算中…`;
-    });
-
+    const isBox = tag.classList.contains("route-info");
+    const prefix = tag.dataset.prefix || "車程";
+    tag.textContent = isBox ? `🚗 ${prefix}：計算中…` : `${prefix}：計算中…`;
     const info = await fetchDrivingInfo(from, to);
-
-    groupTags.forEach(tag=>{
-      const isBox = tag.classList.contains("route-info");
-      const prefix = tag.dataset.prefix || "車程";
-      if(info){
-        const gap = tag.dataset.gap==="" || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
-        const warn = gap!==null && !Number.isNaN(gap) && info.durationMinutes > gap;
-        tag.classList.toggle("warn", !!warn);
-        tag.classList.toggle("ok", !warn);
-        const text = `${prefix}：${info.durationText}（${info.distanceText}）${warn?` ⚠️ 空檔${gap}分鐘，可能趕不上`:""}`;
-        if(isBox){
-          const nav = tag.dataset.nav || directionUrl(from,to);
-          tag.innerHTML = `🚗 ${escapeHtml(text)}　<a href="${nav}" target="_blank">導航</a>`;
-        }else{
-          tag.textContent = `🚗 ${text}`;
-        }
+    if(info){
+      const gap = tag.dataset.gap==="" || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
+      const warn = gap!==null && !Number.isNaN(gap) && info.durationMinutes > gap;
+      tag.classList.toggle("warn", !!warn);
+      tag.classList.toggle("ok", !warn);
+      const text = `${prefix}：${info.durationText}（${info.distanceText}）${warn?` ⚠️ 空檔${gap}分鐘，可能趕不上`:""}`;
+      if(isBox){
+        const nav = tag.dataset.nav || directionUrl(from,to);
+        tag.innerHTML = `🚗 ${escapeHtml(text)}　<a href="${nav}" target="_blank">導航</a>`;
       }else{
-        tag.classList.remove("ok");
-        tag.classList.add("warn");
-        if(isBox){
-          const nav = tag.dataset.nav || directionUrl(from,to);
-          tag.innerHTML = `🚗 ${escapeHtml(prefix)}：無法計算　<a href="${nav}" target="_blank">開 Google Maps</a>`;
-        }else{
-          tag.textContent = `🚗 ${prefix}：無法計算`;
-        }
+        tag.textContent = `🚗 ${text}`;
       }
-    });
-
-    // 慢慢算，不要瞬間打爆每日/每秒配額
-    await new Promise(r=>setTimeout(r, 250));
+    }else{
+      tag.classList.remove("ok");
+      tag.classList.add("warn");
+      if(isBox){
+        const nav = tag.dataset.nav || directionUrl(from,to);
+        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：無法計算　<a href="${nav}" target="_blank">開 Google Maps</a>`;
+      }else{
+        tag.textContent = `🚗 ${prefix}：無法計算`;
+      }
+    }
   }
-}
-
-function scheduleUpdateTravelTags(){
-  clearTimeout(travelUpdateTimer);
-  travelUpdateTimer = setTimeout(async()=>{
-    if(travelUpdateRunning){
-      travelUpdateQueued = true;
-      return;
-    }
-    travelUpdateRunning = true;
-    try{
-      await scheduleUpdateTravelTags();
-    }finally{
-      travelUpdateRunning = false;
-      if(travelUpdateQueued){
-        travelUpdateQueued = false;
-        scheduleUpdateTravelTags();
-      }
-    }
-  }, 250);
 }
 
 function renderAvailableSlots(){
@@ -2663,7 +2532,7 @@ function renderAvailableSlots(){
 
   // 非同步填入車程
   if(currentAddr){
-    scheduleUpdateTravelTags();
+    updateTravelTags();
   }
 }
 
@@ -2926,7 +2795,7 @@ function renderSchedule(){
   table.style.minWidth = "6800px";
   renderSummary();
   renderMyTodayPanel();
-  scheduleUpdateTravelTags();
+  setTimeout(updateTravelTags, 80);
 }
 
 function jobCard(j){
@@ -2946,7 +2815,7 @@ function jobCard(j){
   const statusList = Array.isArray(j.statusList) ? j.statusList : (j.status ? [j.status] : []);
   const statusOptions = ["已印單","已確認","已提醒"];
   const statusHtml = `<div class="status-checks" onclick="event.stopPropagation()">
-    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>${o==="已提醒"?`<button type="button" class="remind-msg-btn" title="預覽提醒訊息" onclick="event.stopPropagation();openRemindMsgModal(${j.id})">💬</button>`:""}`).join("")}
+    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
   </div>`;
 
   return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
@@ -3004,76 +2873,6 @@ function toggleJobStatusFlag(id, flag, checked){
   j.status = arr.join("、");
   saveJobs();
   renderJobList();
-}
-
-// ===== 預約提醒訊息（依派工資料自動帶入） =====
-function buildRemindMessage(j){
-  const d = j.date ? parseDateLocal(j.date) : null;
-  const dateText = d ? `${d.getMonth()+1}/${d.getDate()}（${getWeekdayName(j.date).replace("週","")}）` : "";
-  const timeText = j.startTime || j.time || "";
-  const workItem = j.workItem || "";
-  const amount = j.amount!==undefined && j.amount!==null && j.amount!=="" ? `${j.amount} 元` : "";
-  const payment = j.payment || "";
-  const address = j.address || "";
-
-  const lines = [];
-  lines.push("您好，這邊提醒您有預約");
-  lines.push(`📅 ${dateText}${timeText?` ${timeText}`:""}`);
-  if(workItem){ lines.push("🔧 服務內容："); lines.push(workItem); }
-  if(amount){ lines.push("💰 應收款項："); lines.push(amount); }
-  if(payment){ lines.push("💳 付款方式："); lines.push(payment); }
-  if(address){ lines.push("📍 服務地址："); lines.push(address); }
-  lines.push("—");
-  lines.push("因工程前一日已排定整日行程，");
-  lines.push("當日件無法變更時段，");
-  lines.push("以上確認後無法臨時變更喔！");
-  lines.push("如有其他問題或需改約其他日期，");
-  lines.push("請提早通知。");
-  lines.push("確認正確請再傳個貼圖～");
-  lines.push("謝謝！😊");
-  return lines.join("\n");
-}
-
-function openRemindMsgModal(id){
-  const j = jobs.find(x=>x.id===id);
-  if(!j) return;
-  closeRemindMsgModal();
-  const msg = buildRemindMessage(j);
-
-  const overlay = document.createElement("div");
-  overlay.className = "remind-modal-overlay";
-  overlay.id = "remindMsgOverlay";
-  overlay.onclick = (e)=>{ if(e.target===overlay) closeRemindMsgModal(); };
-
-  overlay.innerHTML = `
-    <div class="remind-modal-box" onclick="event.stopPropagation()">
-      <h3>提醒訊息預覽（可修改）</h3>
-      <textarea id="remindMsgTextarea">${escapeHtml(msg)}</textarea>
-      <div class="remind-modal-actions">
-        <button type="button" class="remind-close-btn" onclick="closeRemindMsgModal()">關閉</button>
-        <button type="button" class="remind-copy-btn" onclick="copyRemindMsg()">複製訊息</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-function closeRemindMsgModal(){
-  const overlay = document.getElementById("remindMsgOverlay");
-  if(overlay) overlay.remove();
-}
-
-function copyRemindMsg(){
-  const ta = document.getElementById("remindMsgTextarea");
-  if(!ta) return;
-  const text = ta.value;
-  const done = ()=>{ if(typeof showToast==="function") showToast("已複製訊息"); };
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done).catch(()=>{
-      ta.select(); document.execCommand("copy"); done();
-    });
-  }else{
-    ta.select(); document.execCommand("copy"); done();
-  }
 }
 
 function renderSummary(){
@@ -3147,7 +2946,7 @@ function renderMyTodayPanel(){
   }
 
   panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDaySection(today,"今天")}${oneDaySection(tomorrow,"明天")}`;
-  scheduleUpdateTravelTags();
+  setTimeout(updateTravelTags, 80);
 }
 
 
@@ -3840,7 +3639,7 @@ function renderJobList(){
   });
 
   document.getElementById("jobListTable").innerHTML=html;
-  scheduleUpdateTravelTags();
+  setTimeout(updateTravelTags, 80);
 }
 
 function exportCustomers(){
@@ -4397,7 +4196,7 @@ document.addEventListener("click", function(e){
     }
 
     panel.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDay(today,"今天")}${oneDay(tomorrow,"明天")}`;
-    scheduleUpdateTravelTags();
+    setTimeout(updateTravelTags, 80);
   }
 
   window.renderMyTodayPanel = renderMobileTwoDayPanel;
