@@ -1925,7 +1925,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 }
 
 
-/* ===== 2026-06 route nav display stable ===== */
+/* ===== 2026-06 restored route display style ===== */
 .route-info .nav-btn,
 .travel-tag .nav-btn{
   display:inline-block !important;
@@ -2979,14 +2979,14 @@ async function fetchDrivingInfo(addrA, addrB){
 }
 function routeTagHtml(from,to,label="車程", extra=""){
   if(!from || !to) return `<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>`;
-  return `<span class="travel-tag" data-from="${escapeHtml(from)}" data-to="${escapeHtml(to)}" ${extra}>${label}：計算中</span>`;
+  return `<span class="travel-tag" data-from="${escapeHtml(from)}" data-to="${escapeHtml(to)}" ${extra}>${label}：計算中…</span>`;
 }
 function nextRouteHtml(j){
   const next=getNextJob(j);
   if(!j.address) return "";
   if(!next) return `<div class="route-info ok">🏁 本日最後一站　<a href="${directionUrl("", j.address)}" target="_blank">從目前位置導航</a></div>`;
   const gap = minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time);
-  return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中</div>`;
+  return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
 }
 async function updateTravelTags(){
   const tags = document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]");
@@ -2996,7 +2996,7 @@ async function updateTravelTags(){
     if(!from || !to) continue;
     const isBox = tag.classList.contains("route-info");
     const prefix = tag.dataset.prefix || "車程";
-    tag.textContent = isBox ? `🚗 ${prefix}：計算中` : `${prefix}：計算中`;
+    tag.textContent = isBox ? `🚗 ${prefix}：計算中…` : `${prefix}：計算中…`;
     const info = await fetchDrivingInfo(from, to);
     if(info){
       const gap = tag.dataset.gap==="" || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
@@ -3015,9 +3015,9 @@ async function updateTravelTags(){
       tag.classList.add("warn");
       if(isBox){
         const nav = tag.dataset.nav || directionUrl(from,to);
-        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：點此導航　<a href="${nav}" target="_blank">開 Google Maps</a>`;
+        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：無法計算　<a href="${nav}" target="_blank">開 Google Maps</a>`;
       }else{
-        tag.textContent = `🚗 ${prefix}：點此導航`;
+        tag.textContent = `🚗 ${prefix}：無法計算`;
       }
     }
   }
@@ -5797,38 +5797,164 @@ document.addEventListener("click", function(e){
 
 
 <script>
-/* ===== 2026-06 route calculating safety fallback ===== */
+/* ===== 2026-06 RESTORE driving time display ===== */
 (function(){
-  function makeGoogleNavForTag(tag){
-    const href = tag.querySelector("a[href*='google.com/maps'], a[href*='maps.google']")?.href;
-    if(href) return href;
-
-    const jobId = tag.dataset && tag.dataset.jobId;
-    const job = Array.isArray(window.jobs) ? jobs.find(j => String(j.id) === String(jobId)) : null;
-    const addr = job && job.address ? job.address : "";
-    if(typeof directionUrl === "function") return directionUrl("", addr);
-    return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr || "");
+  function cleanAddrForRoute(addr){
+    if(typeof cleanMapAddress === "function") return cleanMapAddress(addr || "");
+    return String(addr || "")
+      .replace(/\([^)]*\)/g,"")
+      .replace(/（[^）]*）/g,"")
+      .replace(/\s+/g,"")
+      .trim();
   }
 
-  function fixStuckCalculating(){
-    document.querySelectorAll(".route-info, .travel-tag").forEach(tag=>{
-      const txt = (tag.textContent || "").trim();
-      if(txt.includes("計算中")){
-        const nav = makeGoogleNavForTag(tag);
-        const prefix = txt.includes("最後一站") ? "最後一站" : "下一站";
-        tag.classList.remove("ok");
-        tag.classList.add("warn");
-        tag.innerHTML = `🚗 ${prefix}：點此導航<br><a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
-      }
+  function parseDurationSec(duration){
+    if(!duration) return 0;
+    if(typeof duration === "number") return duration;
+    const m = String(duration).match(/([\d.]+)s/);
+    return m ? Math.round(Number(m[1])) : 0;
+  }
+
+  function fmtDuration(sec){
+    const min = Math.max(1, Math.round(sec / 60));
+    if(min < 60) return `${min} 分鐘`;
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h} 小時 ${m} 分鐘` : `${h} 小時`;
+  }
+
+  function fmtDistance(meters){
+    const m = Number(meters || 0);
+    if(m < 1000) return `${Math.round(m)} m`;
+    return `${(m / 1000).toFixed(1).replace(/\.0$/,"")} km`;
+  }
+
+  async function restoredFetchDrivingInfo(origin, dest){
+    const a = cleanAddrForRoute(origin);
+    const b = cleanAddrForRoute(dest);
+    if(!a || !b) return null;
+    if(a === b) return { durationText:"0 分鐘", distanceText:"0 m", durationMinutes:0, distanceKm:0 };
+
+    window.travelCache = window.travelCache || {};
+    const key = a + "|" + b;
+    if(window.travelCache[key]) return window.travelCache[key];
+
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": (window.GOOGLE_MAPS_API_KEY || (window.firebaseConfig && window.firebaseConfig.apiKey) || ""),
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"
+      },
+      body: JSON.stringify({
+        origin: { address: a },
+        destination: { address: b },
+        travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_AWARE",
+        languageCode: "zh-TW",
+        units: "METRIC"
+      })
     });
+
+    if(!res.ok) throw new Error("Routes API HTTP " + res.status);
+    const data = await res.json();
+    const route = data.routes && data.routes[0];
+    if(!route) return null;
+
+    const sec = parseDurationSec(route.duration);
+    const meters = Number(route.distanceMeters || 0);
+    const info = {
+      durationText: fmtDuration(sec),
+      distanceText: fmtDistance(meters),
+      durationMinutes: Math.round(sec / 60),
+      distanceKm: meters / 1000
+    };
+    window.travelCache[key] = info;
+    return info;
+  }
+
+  window.fetchDrivingInfo = restoredFetchDrivingInfo;
+
+  function jobListForSameDayEngineer(job){
+    return jobs
+      .filter(j => String(j.date || "") === String(job.date || "") && !j.isHold && isValidJob(j))
+      .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(job.engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function nextJob(job){
+    const list = jobListForSameDayEngineer(job);
+    const idx = list.findIndex(j => String(j.id) === String(job.id));
+    return idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
+  }
+
+  function navUrl(origin, dest){
+    if(typeof directionUrl === "function") return directionUrl(origin || "", dest || "");
+    const o = origin ? `&origin=${encodeURIComponent(origin)}` : "";
+    return `https://www.google.com/maps/dir/?api=1${o}&destination=${encodeURIComponent(dest || "")}&travelmode=driving`;
+  }
+
+  window.updateTravelTags = async function(){
+    const tags = Array.from(document.querySelectorAll(".route-info, .travel-tag"));
+    for(const tag of tags){
+      const id = tag.dataset && tag.dataset.jobId;
+      if(!id) continue;
+
+      const job = jobs.find(j => String(j.id) === String(id));
+      if(!job) continue;
+
+      const n = nextJob(job);
+      const prefix = n ? "下一站" : "最後一站";
+      const origin = n ? job.address : "";
+      const dest = n ? n.address : job.address;
+      const nav = navUrl(origin, dest);
+
+      if(n && job.address && n.address){
+        tag.innerHTML = `🚗 ${prefix}：計算中...`;
+        try{
+          const info = await restoredFetchDrivingInfo(job.address, n.address);
+          if(info){
+            tag.classList.remove("warn");
+            tag.classList.add("ok");
+            tag.innerHTML = `🚗 ${prefix}：${info.durationText}（${info.distanceText}）<br><a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
+            continue;
+          }
+        }catch(err){
+          console.warn("車程計算失敗", err);
+        }
+      }
+
+      tag.classList.remove("ok");
+      tag.classList.add("warn");
+      tag.innerHTML = `🚗 ${prefix}：<a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
+    }
+  };
+
+  function rerun(){
+    if(window.updateTravelTags) window.updateTravelTags();
   }
 
   document.addEventListener("DOMContentLoaded", function(){
-    setTimeout(fixStuckCalculating, 12000);
+    setTimeout(rerun, 500);
+    setTimeout(rerun, 1500);
+    setTimeout(rerun, 3500);
   });
   window.addEventListener("load", function(){
-    setTimeout(fixStuckCalculating, 12000);
+    setTimeout(rerun, 500);
+    setTimeout(rerun, 1500);
+    setTimeout(rerun, 3500);
   });
+
+  // renderSchedule 後也重算一次
+  const oldRenderSchedule = window.renderSchedule;
+  if(typeof oldRenderSchedule === "function"){
+    window.renderSchedule = function(){
+      const r = oldRenderSchedule.apply(this, arguments);
+      setTimeout(rerun, 300);
+      setTimeout(rerun, 1200);
+      return r;
+    };
+  }
 })();
 </script>
 
