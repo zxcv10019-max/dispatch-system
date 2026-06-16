@@ -1703,6 +1703,69 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 main account mobile full-data mode ===== */
+/* 主帳號手機版不走隱藏後台，也不要只鎖兩日派工，可正常切換所有資料頁 */
+@media(max-width:900px){
+  body.mobile-main-full:not(.login-required):not(.no-permission){
+    height:auto !important;
+    min-height:100% !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+    position:static !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .tabs button{
+    flex:1 1 50% !important;
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .toolbar,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .summary,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .engineer-code-note,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #scheduleWrap{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #schedulePage > .toolbar{
+    display:flex !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) #dispatchPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #customerPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #listPage.page.active,
+  body.mobile-main-full:not(.login-required):not(.no-permission) #adminPage.page.active{
+    display:block !important;
+    overflow-y:visible !important;
+    padding-bottom:100px !important;
+  }
+
+  body.mobile-main-full:not(.login-required):not(.no-permission) .customer-table{
+    overflow:auto !important;
+    max-height:none !important;
+  }
+}
+
 </style>
 </head>
 
@@ -5277,6 +5340,97 @@ document.addEventListener("click", function(e){
   setInterval(function(){
     if(location.search.includes("admin")) renderDesktopSupervisor();
   }, 1500);
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account mobile full-data mode ===== */
+(function(){
+  const MAIN_EMAIL_FULL = "zxcv10019@gmail.com";
+  let desiredMobilePage = "schedulePage";
+
+  function isMainMobileFull(){
+    return window.innerWidth <= 900 &&
+      currentUser &&
+      String(currentUser.email || "").toLowerCase() === MAIN_EMAIL_FULL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setTabsActive(pageId){
+    document.querySelectorAll(".tabs button").forEach(btn => btn.classList.remove("active"));
+    const map = {
+      schedulePage: "tabSchedule",
+      dispatchPage: "tabDispatch",
+      customerPage: "tabCustomer",
+      listPage: "tabList",
+      adminPage: "adminTab"
+    };
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function restoreMainMobilePage(){
+    const enabled = isMainMobileFull();
+    document.body.classList.toggle("mobile-main-full", !!enabled);
+    if(!enabled) return;
+
+    if(!document.getElementById(desiredMobilePage)){
+      desiredMobilePage = "schedulePage";
+    }
+
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const page = document.getElementById(desiredMobilePage);
+    if(page) page.classList.add("active");
+    setTabsActive(desiredMobilePage);
+
+    // 主帳號不是用 ?admin 也要能看到後台頁籤；但不強迫打開後台
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    // 如果正在派工表頁，保留主管截圖區；切其他頁就不干擾
+    if(desiredMobilePage === "schedulePage" && typeof renderMyTodayPanel === "function"){
+      try{ renderMyTodayPanel(); }catch(e){}
+    }
+  }
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m){
+      desiredMobilePage = m[1];
+      setTimeout(restoreMainMobilePage, 30);
+      setTimeout(restoreMainMobilePage, 180);
+    }
+  }, true);
+
+  const oldShowPage = window.showPage;
+  if(typeof oldShowPage === "function"){
+    window.showPage = function(id){
+      desiredMobilePage = id || desiredMobilePage;
+      const r = oldShowPage.apply(this, arguments);
+      setTimeout(restoreMainMobilePage, 30);
+      setTimeout(restoreMainMobilePage, 180);
+      return r;
+    };
+  }
+
+  const oldApplyRoleUI = window.applyRoleUI;
+  if(typeof oldApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = oldApplyRoleUI.apply(this, arguments);
+      setTimeout(restoreMainMobilePage, 50);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(restoreMainMobilePage, 300); });
+  window.addEventListener("load", function(){ setTimeout(restoreMainMobilePage, 300); });
+  window.addEventListener("resize", restoreMainMobilePage);
+  setInterval(restoreMainMobilePage, 250);
 })();
 </script>
 
