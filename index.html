@@ -629,6 +629,44 @@ body{
   width:auto !important;
   margin:0;
 }
+.remind-msg-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:20px;
+  height:20px;
+  padding:0;
+  margin-left:2px;
+  font-size:12px;
+  line-height:1;
+  border:1px solid #487eb0;
+  border-radius:50%;
+  background:#eaf2fb;
+  color:#2e5d8a;
+  cursor:pointer;
+  flex-shrink:0;
+}
+.remind-msg-btn:hover{background:#d7e9fb}
+.remind-modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;
+}
+.remind-modal-box{
+  background:#fff;border-radius:8px;max-width:420px;width:100%;
+  padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  max-height:90vh;display:flex;flex-direction:column;
+}
+.remind-modal-box h3{margin:0 0 10px;font-size:16px}
+.remind-modal-box textarea{
+  width:100%;flex:1;min-height:260px;font-size:14px;line-height:1.6;
+  font-family:inherit;resize:vertical;
+}
+.remind-modal-actions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap}
+.remind-modal-actions button{padding:8px 14px;font-size:13px}
+.remind-modal-actions .remind-copy-btn{background:#218c74}
+.remind-modal-actions .remind-copy-btn:hover{background:#33a38a}
+.remind-modal-actions .remind-close-btn{background:#888}
+.remind-modal-actions .remind-close-btn:hover{background:#aaa}
 .city-checks{
   display:flex;
   flex-wrap:wrap;
@@ -3379,7 +3417,7 @@ function jobCard(j){
   const statusList = Array.isArray(j.statusList) ? j.statusList : (j.status ? [j.status] : []);
   const statusOptions = ["已印單","已確認","已提醒"];
   const statusHtml = `<div class="status-checks" onclick="event.stopPropagation()">
-    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
+    ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>${o==="已提醒"?`<button type="button" class="remind-msg-btn" title="預覽提醒訊息" onclick="event.stopPropagation();openRemindMsgModal(${j.id})">💬</button>`:""}`).join("")}
   </div>`;
 
   return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
@@ -3437,6 +3475,76 @@ function toggleJobStatusFlag(id, flag, checked){
   j.status = arr.join("、");
   saveJobs();
   renderJobList();
+}
+
+// ===== 預約提醒訊息（依派工資料自動帶入） =====
+function buildRemindMessage(j){
+  const d = j.date ? parseDateLocal(j.date) : null;
+  const dateText = d ? `${d.getMonth()+1}/${d.getDate()}（${getWeekdayName(j.date).replace("週","")}）` : "";
+  const timeText = j.startTime || j.time || "";
+  const workItem = j.workItem || "";
+  const amount = j.amount!==undefined && j.amount!==null && j.amount!=="" ? `${j.amount} 元` : "";
+  const payment = j.payment || "";
+  const address = j.address || "";
+
+  const lines = [];
+  lines.push("您好，這邊提醒您有預約");
+  lines.push(`📅 ${dateText}${timeText?` ${timeText}`:""}`);
+  if(workItem){ lines.push("🔧 服務內容："); lines.push(workItem); }
+  if(amount){ lines.push("💰 應收款項："); lines.push(amount); }
+  if(payment){ lines.push("💳 付款方式："); lines.push(payment); }
+  if(address){ lines.push("📍 服務地址："); lines.push(address); }
+  lines.push("—");
+  lines.push("因工程前一日已排定整日行程，");
+  lines.push("當日件無法變更時段，");
+  lines.push("以上確認後無法臨時變更喔！");
+  lines.push("如有其他問題或需改約其他日期，");
+  lines.push("請提早通知。");
+  lines.push("確認正確請再傳個貼圖～");
+  lines.push("謝謝！😊");
+  return lines.join("\n");
+}
+
+function openRemindMsgModal(id){
+  const j = jobs.find(x=>x.id===id);
+  if(!j) return;
+  closeRemindMsgModal();
+  const msg = buildRemindMessage(j);
+
+  const overlay = document.createElement("div");
+  overlay.className = "remind-modal-overlay";
+  overlay.id = "remindMsgOverlay";
+  overlay.onclick = (e)=>{ if(e.target===overlay) closeRemindMsgModal(); };
+
+  overlay.innerHTML = `
+    <div class="remind-modal-box" onclick="event.stopPropagation()">
+      <h3>提醒訊息預覽（可修改）</h3>
+      <textarea id="remindMsgTextarea">${escapeHtml(msg)}</textarea>
+      <div class="remind-modal-actions">
+        <button type="button" class="remind-close-btn" onclick="closeRemindMsgModal()">關閉</button>
+        <button type="button" class="remind-copy-btn" onclick="copyRemindMsg()">複製訊息</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function closeRemindMsgModal(){
+  const overlay = document.getElementById("remindMsgOverlay");
+  if(overlay) overlay.remove();
+}
+
+function copyRemindMsg(){
+  const ta = document.getElementById("remindMsgTextarea");
+  if(!ta) return;
+  const text = ta.value;
+  const done = ()=>{ if(typeof showToast==="function") showToast("已複製訊息"); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(()=>{
+      ta.select(); document.execCommand("copy"); done();
+    });
+  }else{
+    ta.select(); document.execCommand("copy"); done();
+  }
 }
 
 function renderSummary(){
@@ -5795,168 +5903,6 @@ document.addEventListener("click", function(e){
 })();
 </script>
 
-
-<script>
-/* ===== 2026-06 RESTORE driving time display ===== */
-(function(){
-  function cleanAddrForRoute(addr){
-    if(typeof cleanMapAddress === "function") return cleanMapAddress(addr || "");
-    return String(addr || "")
-      .replace(/\([^)]*\)/g,"")
-      .replace(/（[^）]*）/g,"")
-      .replace(/\s+/g,"")
-      .trim();
-  }
-
-  function parseDurationSec(duration){
-    if(!duration) return 0;
-    if(typeof duration === "number") return duration;
-    const m = String(duration).match(/([\d.]+)s/);
-    return m ? Math.round(Number(m[1])) : 0;
-  }
-
-  function fmtDuration(sec){
-    const min = Math.max(1, Math.round(sec / 60));
-    if(min < 60) return `${min} 分鐘`;
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return m ? `${h} 小時 ${m} 分鐘` : `${h} 小時`;
-  }
-
-  function fmtDistance(meters){
-    const m = Number(meters || 0);
-    if(m < 1000) return `${Math.round(m)} m`;
-    return `${(m / 1000).toFixed(1).replace(/\.0$/,"")} km`;
-  }
-
-  async function restoredFetchDrivingInfo(origin, dest){
-    const a = cleanAddrForRoute(origin);
-    const b = cleanAddrForRoute(dest);
-    if(!a || !b) return null;
-    if(a === b) return { durationText:"0 分鐘", distanceText:"0 m", durationMinutes:0, distanceKm:0 };
-
-    window.travelCache = window.travelCache || {};
-    const key = a + "|" + b;
-    if(window.travelCache[key]) return window.travelCache[key];
-
-    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": (window.GOOGLE_MAPS_API_KEY || (window.firebaseConfig && window.firebaseConfig.apiKey) || ""),
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"
-      },
-      body: JSON.stringify({
-        origin: { address: a },
-        destination: { address: b },
-        travelMode: "DRIVE",
-        routingPreference: "TRAFFIC_AWARE",
-        languageCode: "zh-TW",
-        units: "METRIC"
-      })
-    });
-
-    if(!res.ok) throw new Error("Routes API HTTP " + res.status);
-    const data = await res.json();
-    const route = data.routes && data.routes[0];
-    if(!route) return null;
-
-    const sec = parseDurationSec(route.duration);
-    const meters = Number(route.distanceMeters || 0);
-    const info = {
-      durationText: fmtDuration(sec),
-      distanceText: fmtDistance(meters),
-      durationMinutes: Math.round(sec / 60),
-      distanceKm: meters / 1000
-    };
-    window.travelCache[key] = info;
-    return info;
-  }
-
-  window.fetchDrivingInfo = restoredFetchDrivingInfo;
-
-  function jobListForSameDayEngineer(job){
-    return jobs
-      .filter(j => String(j.date || "") === String(job.date || "") && !j.isHold && isValidJob(j))
-      .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(job.engineer))
-      .sort(sortJobsByTime);
-  }
-
-  function nextJob(job){
-    const list = jobListForSameDayEngineer(job);
-    const idx = list.findIndex(j => String(j.id) === String(job.id));
-    return idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null;
-  }
-
-  function navUrl(origin, dest){
-    if(typeof directionUrl === "function") return directionUrl(origin || "", dest || "");
-    const o = origin ? `&origin=${encodeURIComponent(origin)}` : "";
-    return `https://www.google.com/maps/dir/?api=1${o}&destination=${encodeURIComponent(dest || "")}&travelmode=driving`;
-  }
-
-  window.updateTravelTags = async function(){
-    const tags = Array.from(document.querySelectorAll(".route-info, .travel-tag"));
-    for(const tag of tags){
-      const id = tag.dataset && tag.dataset.jobId;
-      if(!id) continue;
-
-      const job = jobs.find(j => String(j.id) === String(id));
-      if(!job) continue;
-
-      const n = nextJob(job);
-      const prefix = n ? "下一站" : "最後一站";
-      const origin = n ? job.address : "";
-      const dest = n ? n.address : job.address;
-      const nav = navUrl(origin, dest);
-
-      if(n && job.address && n.address){
-        tag.innerHTML = `🚗 ${prefix}：計算中...`;
-        try{
-          const info = await restoredFetchDrivingInfo(job.address, n.address);
-          if(info){
-            tag.classList.remove("warn");
-            tag.classList.add("ok");
-            tag.innerHTML = `🚗 ${prefix}：${info.durationText}（${info.distanceText}）<br><a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
-            continue;
-          }
-        }catch(err){
-          console.warn("車程計算失敗", err);
-        }
-      }
-
-      tag.classList.remove("ok");
-      tag.classList.add("warn");
-      tag.innerHTML = `🚗 ${prefix}：<a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
-    }
-  };
-
-  function rerun(){
-    if(window.updateTravelTags) window.updateTravelTags();
-  }
-
-  document.addEventListener("DOMContentLoaded", function(){
-    setTimeout(rerun, 500);
-    setTimeout(rerun, 1500);
-    setTimeout(rerun, 3500);
-  });
-  window.addEventListener("load", function(){
-    setTimeout(rerun, 500);
-    setTimeout(rerun, 1500);
-    setTimeout(rerun, 3500);
-  });
-
-  // renderSchedule 後也重算一次
-  const oldRenderSchedule = window.renderSchedule;
-  if(typeof oldRenderSchedule === "function"){
-    window.renderSchedule = function(){
-      const r = oldRenderSchedule.apply(this, arguments);
-      setTimeout(rerun, 300);
-      setTimeout(rerun, 1200);
-      return r;
-    };
-  }
-})();
-</script>
 
 </body>
 </html>
