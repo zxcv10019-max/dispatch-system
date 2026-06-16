@@ -3048,38 +3048,46 @@ function nextRouteHtml(j){
   return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
 }
 async function updateTravelTags(){
-  const tags = document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]");
-  for(const tag of tags){
+  const allTags = Array.from(document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]"));
+  if(!allTags.length) return;
+
+  // 先處理畫面上看得到的車程，避免手機版被隱藏的大表格拖到一直顯示「計算中」。
+  function isVisible(el){
+    return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+  }
+  const tags = allTags.filter(isVisible).concat(allTags.filter(t=>!isVisible(t)));
+
+  await Promise.all(tags.map(async (tag)=>{
     const from = tag.dataset.from;
     const to = tag.dataset.to;
-    if(!from || !to) continue;
+    if(!from || !to) return;
+
     const isBox = tag.classList.contains("route-info");
-    const prefix = tag.dataset.prefix || "車程";
-    tag.textContent = isBox ? `🚗 ${prefix}：計算中…` : `${prefix}：計算中…`;
+    tag.textContent = isBox ? "🚗 車程時間：計算中…" : "車程時間：計算中…";
+
     const info = await fetchDrivingInfo(from, to);
+    const nav = tag.dataset.nav || directionUrl(from,to);
+
     if(info){
       const gap = tag.dataset.gap==="" || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
       const warn = gap!==null && !Number.isNaN(gap) && info.durationMinutes > gap;
       tag.classList.toggle("warn", !!warn);
       tag.classList.toggle("ok", !warn);
-      const text = `${prefix}：${info.durationText}（${info.distanceText}）${warn?` ⚠️ 空檔${gap}分鐘，可能趕不上`:""}`;
+
+      const warningText = warn ? `　⚠️ 空檔${gap}分鐘，可能趕不上` : "";
+      const text = `車程時間：${info.durationText}（${info.distanceText}）${warningText}`;
+
       if(isBox){
-        const nav = tag.dataset.nav || directionUrl(from,to);
         tag.innerHTML = `🚗 ${escapeHtml(text)}　<a href="${nav}" target="_blank">導航</a>`;
       }else{
-        tag.textContent = `🚗 ${text}`;
+        tag.innerHTML = `🚗 ${escapeHtml(text)}　<a href="${nav}" target="_blank">導航</a>`;
       }
     }else{
       tag.classList.remove("ok");
       tag.classList.add("warn");
-      if(isBox){
-        const nav = tag.dataset.nav || directionUrl(from,to);
-        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：點此導航<br><a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
-      }else{
-        tag.textContent = `🚗 ${prefix}：無法計算`;
-      }
+      tag.innerHTML = `🚗 車程時間：無法計算　<a href="${nav}" target="_blank">導航</a>`;
     }
-  }
+  }));
 }
 
 function renderAvailableSlots(){
