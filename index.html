@@ -1443,6 +1443,88 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 screenshot-friendly admin one-day view ===== */
+@media(max-width:900px){
+  .screenshot-board{
+    background:#fff !important;
+    border:1px solid #d9d9d9 !important;
+    border-radius:14px !important;
+    padding:12px !important;
+    margin-top:10px !important;
+  }
+  .screenshot-title{
+    text-align:center !important;
+    font-size:20px !important;
+    font-weight:bold !important;
+    color:#1f2937 !important;
+    margin:4px 0 10px !important;
+  }
+  .screenshot-subtitle{
+    text-align:center !important;
+    font-size:13px !important;
+    color:#666 !important;
+    margin-bottom:10px !important;
+  }
+  .shot-engineer{
+    border:1px solid #cfd8e3 !important;
+    border-radius:12px !important;
+    margin:10px 0 !important;
+    overflow:hidden !important;
+    background:#fff !important;
+  }
+  .shot-engineer-head{
+    background:#eaf3ff !important;
+    color:#1f3a5f !important;
+    font-weight:bold !important;
+    font-size:17px !important;
+    padding:9px 10px !important;
+    display:flex !important;
+    justify-content:space-between !important;
+    align-items:center !important;
+  }
+  .shot-count{
+    font-size:13px !important;
+    background:#fff !important;
+    border:1px solid #bdd4ef !important;
+    padding:2px 8px !important;
+    border-radius:999px !important;
+  }
+  .shot-job{
+    padding:9px 10px !important;
+    border-top:1px solid #eef1f5 !important;
+    font-size:14px !important;
+    line-height:1.5 !important;
+  }
+  .shot-job:nth-child(even){
+    background:#fafafa !important;
+  }
+  .shot-time{
+    font-weight:bold !important;
+    color:#1f4e79 !important;
+    margin-bottom:2px !important;
+  }
+  .shot-name{
+    font-weight:bold !important;
+    color:#111827 !important;
+    font-size:15px !important;
+  }
+  .shot-place{
+    color:#155a8a !important;
+    font-weight:bold !important;
+    word-break:break-word !important;
+  }
+  .shot-empty{
+    padding:10px !important;
+    color:#999 !important;
+    font-size:14px !important;
+  }
+  .mobile-date-picker-box.screenshot-picker{
+    background:#f7f7f7 !important;
+    border:1px solid #ddd !important;
+  }
+}
+
 </style>
 </head>
 
@@ -4525,6 +4607,132 @@ document.addEventListener("click", function(e){
   window.renderMyTodayPanel = renderSelectableDateMobilePanel;
   document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
   window.addEventListener("load", function(){ setTimeout(renderSelectableDateMobilePanel, 120); });
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 main account screenshot one-day format ===== */
+(function(){
+  function selectedShotDate(){
+    const saved = localStorage.getItem("dispatch_mobile_base_date") || "";
+    if(/^\d{4}-\d{2}-\d{2}$/.test(saved)) return saved;
+    return formatDateLocal(new Date());
+  }
+  function setShotDate(d){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(d)) localStorage.setItem("dispatch_mobile_base_date", d);
+  }
+  function addDays(dateStr, n){
+    const d = new Date(dateStr + "T00:00:00");
+    d.setDate(d.getDate()+n);
+    return formatDateLocal(d);
+  }
+  function engineerLabel(e){
+    return `${typeof displayEngineer==="function" ? displayEngineer(e) : ""} ${e||""}`.trim();
+  }
+  function pickerHtml(date){
+    return `<div class="mobile-date-picker-box screenshot-picker">
+      <label>截圖日期</label>
+      <input type="date" id="mobileBaseDateInput" value="${escapeHtml(date)}">
+      <button type="button" onclick="window.setMobileBaseDateToday()">今天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(-1)">前一天</button>
+      <button type="button" onclick="window.shiftMobileBaseDate(1)">後一天</button>
+    </div>`;
+  }
+
+  window.setMobileBaseDateToday = function(){
+    const d = formatDateLocal(new Date());
+    setShotDate(d);
+    const i=document.getElementById("mobileBaseDateInput");
+    if(i) i.value=d;
+    if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+  };
+  window.shiftMobileBaseDate = function(n){
+    const d = addDays(selectedShotDate(), n);
+    setShotDate(d);
+    const i=document.getElementById("mobileBaseDateInput");
+    if(i) i.value=d;
+    if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+  };
+  document.addEventListener("change", function(e){
+    if(e.target && e.target.id==="mobileBaseDateInput"){
+      setShotDate(e.target.value);
+      if(typeof renderMyTodayPanel==="function") renderMyTodayPanel();
+    }
+  });
+
+  function shortArea(addr){
+    const s = String(addr||"").trim();
+    if(!s) return "未填地址";
+    const m = s.match(/(台北市|新北市|桃園市|台中市|台南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|澎湖縣|金門縣|連江縣)([^0-9縣市]*?[區鄉鎮市])/);
+    return m ? (m[1] + m[2]) : s;
+  }
+
+  function shotJob(j, idx){
+    const time = escapeHtml(`${j.startTime||j.time||""}${j.endTime?"-"+j.endTime:""}` || "未填時間");
+    const codeName = escapeHtml(j.codeName || `${j.customerCode||""} ${j.customerName||""}`.trim() || "未填客戶");
+    const place = escapeHtml(shortArea(j.address || ""));
+    const item = j.workItem ? `｜${escapeHtml(j.workItem)}` : "";
+    return `<div class="shot-job">
+      <div class="shot-time">${idx+1}. ${time}</div>
+      <div class="shot-name">${codeName}${item}</div>
+      <div class="shot-place">去：${place}</div>
+    </div>`;
+  }
+
+  function renderScreenshotAdminPanel(){
+    const panel = document.getElementById("myTodayPanel");
+    if(!panel) return;
+    if(!currentUser || !hasAccess()){ panel.innerHTML=""; return; }
+
+    const isMain = (typeof isAdmin==="function" && isAdmin());
+    const date = selectedShotDate();
+
+    function listFor(e){
+      return jobs
+        .filter(j => String(j.date||"") === date && !j.isHold && isValidJob(j))
+        .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(e))
+        .sort(sortJobsByTime);
+    }
+
+    if(isMain){
+      const total = engineers.reduce((sum,e)=>sum+listFor(e).length,0);
+      const blocks = engineers.map(e=>{
+        const list = listFor(e);
+        return `<section class="shot-engineer">
+          <div class="shot-engineer-head"><span>${escapeHtml(engineerLabel(e))}</span><span class="shot-count">${list.length} 件</span></div>
+          ${list.map((j,i)=>shotJob(j,i)).join("") || '<div class="shot-empty">本日無派工</div>'}
+        </section>`;
+      }).join("");
+      panel.innerHTML = `<div class="screenshot-board">
+        <div class="screenshot-title">派工表｜${escapeHtml(date)}</div>
+        <div class="screenshot-subtitle">共 ${total} 件｜依工程人員分組</div>
+        ${pickerHtml(date)}
+        ${blocks}
+      </div>`;
+      return;
+    }
+
+    const e = currentEngineer || "";
+    if(!e){
+      panel.innerHTML = `<h3>派工表</h3><div class="my-today-empty">此帳號尚未綁定工程師。</div>`;
+      return;
+    }
+    const list = listFor(e);
+    panel.innerHTML = `<div class="screenshot-board">
+      <div class="screenshot-title">${escapeHtml(engineerLabel(e))}｜${escapeHtml(date)}</div>
+      <div class="screenshot-subtitle">共 ${list.length} 件</div>
+      ${pickerHtml(date)}
+      <section class="shot-engineer">
+        <div class="shot-engineer-head"><span>${escapeHtml(engineerLabel(e))}</span><span class="shot-count">${list.length} 件</span></div>
+        ${list.map((j,i)=>shotJob(j,i)).join("") || '<div class="shot-empty">本日無派工</div>'}
+      </section>
+    </div>`;
+  }
+
+  window.renderMyTodayPanel = renderScreenshotAdminPanel;
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
+  window.addEventListener("load", function(){ setTimeout(renderScreenshotAdminPanel, 150); });
 })();
 </script>
 
