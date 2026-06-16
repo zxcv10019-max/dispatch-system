@@ -1766,6 +1766,71 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+/* ===== 2026-06 FIX: main mobile screenshot only + working nav buttons ===== */
+@media(max-width:900px){
+  body.main-mobile-shot:not(.login-required):not(.no-permission){
+    height:auto !important;
+    min-height:100% !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    display:block !important;
+    background:#f3f3f3 !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs{
+    display:flex !important;
+    flex-wrap:wrap !important;
+    position:static !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .tabs button{
+    display:block !important;
+    flex:1 1 50% !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page{
+    display:none !important;
+    height:auto !important;
+    min-height:0 !important;
+    overflow:visible !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .page.active{
+    display:block !important;
+  }
+
+  /* 主帳號手機派工頁：只留截圖版，不顯示原本大表格 */
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .toolbar,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .summary,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active > .engineer-code-note,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #schedulePage.page.active #scheduleWrap{
+    display:none !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #myTodayPanel{
+    display:block !important;
+    margin:12px !important;
+    padding:14px !important;
+    border-radius:14px !important;
+    background:#fff !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #dispatchPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #customerPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #listPage.page.active,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) #adminPage.page.active{
+    display:block !important;
+    padding-bottom:100px !important;
+  }
+
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .customer-table,
+  body.main-mobile-shot:not(.login-required):not(.no-permission) .log-table-wrap{
+    overflow:auto !important;
+    max-height:none !important;
+  }
+}
+
 </style>
 </head>
 
@@ -5431,6 +5496,116 @@ document.addEventListener("click", function(e){
   window.addEventListener("load", function(){ setTimeout(restoreMainMobilePage, 300); });
   window.addEventListener("resize", restoreMainMobilePage);
   setInterval(restoreMainMobilePage, 250);
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 FIX: main mobile screenshot only + working tabs ===== */
+(function(){
+  const MAIN_EMAIL = "zxcv10019@gmail.com";
+  let currentMobilePage = "schedulePage";
+  let allowForce = true;
+
+  function isMainMobile(){
+    return window.innerWidth <= 900 &&
+      currentUser &&
+      String(currentUser.email || "").toLowerCase() === MAIN_EMAIL &&
+      !document.body.classList.contains("login-required") &&
+      !document.body.classList.contains("no-permission");
+  }
+
+  function setActiveTab(pageId){
+    const map = {
+      schedulePage: "tabSchedule",
+      dispatchPage: "tabDispatch",
+      customerPage: "tabCustomer",
+      listPage: "tabList",
+      adminPage: "adminTab"
+    };
+    document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+    const tab = document.getElementById(map[pageId]);
+    if(tab) tab.classList.add("active");
+  }
+
+  function showOnlyPage(pageId){
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    const page = document.getElementById(pageId);
+    if(page) page.classList.add("active");
+    setActiveTab(pageId);
+  }
+
+  function renderMainShotIfNeeded(){
+    if(!isMainMobile()) return;
+    document.body.classList.add("main-mobile-shot");
+
+    const adminTab = document.getElementById("adminTab");
+    if(adminTab) adminTab.style.display = "block";
+
+    showOnlyPage(currentMobilePage);
+
+    if(currentMobilePage === "schedulePage" && typeof renderMyTodayPanel === "function"){
+      try{ renderMyTodayPanel(); }catch(e){}
+    }
+  }
+
+  function userClickedTab(pageId){
+    currentMobilePage = pageId;
+    allowForce = false;
+    if(isMainMobile()){
+      document.body.classList.add("main-mobile-shot");
+      showOnlyPage(pageId);
+      if(pageId === "schedulePage" && typeof renderMyTodayPanel === "function"){
+        try{ renderMyTodayPanel(); }catch(e){}
+      }
+    }
+    setTimeout(()=>{ allowForce = true; }, 1200);
+  }
+
+  document.addEventListener("click", function(e){
+    const btn = e.target.closest && e.target.closest("button");
+    if(!btn) return;
+    const on = btn.getAttribute("onclick") || "";
+    const m = on.match(/showPage\(['"]([^'"]+)['"]\)/);
+    if(m) userClickedTab(m[1]);
+  }, true);
+
+  const originalShowPage = window.showPage;
+  if(typeof originalShowPage === "function"){
+    window.showPage = function(id){
+      currentMobilePage = id || currentMobilePage;
+      if(isMainMobile()){
+        userClickedTab(currentMobilePage);
+        return;
+      }
+      return originalShowPage.apply(this, arguments);
+    };
+  }
+
+  const originalApplyRoleUI = window.applyRoleUI;
+  if(typeof originalApplyRoleUI === "function"){
+    window.applyRoleUI = function(){
+      const r = originalApplyRoleUI.apply(this, arguments);
+      setTimeout(renderMainShotIfNeeded, 80);
+      return r;
+    };
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){ setTimeout(renderMainShotIfNeeded, 300); });
+  window.addEventListener("load", function(){ setTimeout(renderMainShotIfNeeded, 300); });
+  window.addEventListener("resize", function(){ setTimeout(renderMainShotIfNeeded, 100); });
+
+  setInterval(function(){
+    if(!isMainMobile()){
+      document.body.classList.remove("main-mobile-shot");
+      return;
+    }
+    document.body.classList.add("main-mobile-shot");
+    if(allowForce){
+      const active = document.querySelector(".page.active");
+      if(active && active.id) currentMobilePage = active.id;
+    }
+  }, 500);
 })();
 </script>
 
