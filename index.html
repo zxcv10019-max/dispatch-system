@@ -1964,6 +1964,27 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   white-space:normal !important;
 }
 
+
+/* ===== 2026-06 route box final style ===== */
+.route-info .nav-btn,
+.travel-tag .nav-btn{
+  display:inline-block !important;
+  margin-top:4px !important;
+  margin-left:0 !important;
+  padding:2px 10px !important;
+  border-radius:8px !important;
+  background:#2f3542 !important;
+  color:#fff !important;
+  text-decoration:none !important;
+  font-weight:bold !important;
+  line-height:1.5 !important;
+}
+.route-info,
+.travel-tag{
+  white-space:normal !important;
+  line-height:1.5 !important;
+}
+
 </style>
 </head>
 
@@ -5830,6 +5851,80 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", ()=>setTimeout(init, 300));
   window.addEventListener("load", ()=>setTimeout(init, 300));
   window.addEventListener("resize", ()=>setTimeout(init, 150));
+})();
+</script>
+
+
+<script>
+/* ===== 2026-06 FINAL route time display override ===== */
+(function(){
+  function getSortedJobsByEngineerDate(engineer, date){
+    return jobs
+      .filter(j => String(j.date || "") === String(date || "") && !j.isHold && isValidJob(j))
+      .filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(engineer))
+      .sort(sortJobsByTime);
+  }
+
+  function findNextJobFor(job){
+    const list = getSortedJobsByEngineerDate(job.engineer, job.date);
+    const idx = list.findIndex(x => String(x.id) === String(job.id));
+    if(idx >= 0 && idx < list.length - 1) return list[idx + 1];
+    return null;
+  }
+
+  function makeNav(origin, dest){
+    if(typeof directionUrl === "function") return directionUrl(origin || "", dest || "");
+    const d = encodeURIComponent(dest || "");
+    const o = origin ? "&origin=" + encodeURIComponent(origin) : "";
+    return `https://www.google.com/maps/dir/?api=1${o}&destination=${d}&travelmode=driving`;
+  }
+
+  window.updateTravelTags = async function(){
+    const tags = Array.from(document.querySelectorAll(".route-info, .travel-tag"));
+    if(!tags.length) return;
+
+    for(const tag of tags){
+      const jobId = tag.dataset && tag.dataset.jobId;
+      if(!jobId) continue;
+      const job = jobs.find(j => String(j.id) === String(jobId));
+      if(!job) continue;
+
+      const next = findNextJobFor(job);
+      const prefix = next ? "下一站" : "最後一站";
+      const origin = next ? (job.address || "") : "";
+      const dest = next ? (next.address || "") : (job.address || "");
+      const nav = makeNav(origin, dest);
+
+      if(next && job.address && next.address && typeof fetchDrivingInfo === "function"){
+        try{
+          const info = await fetchDrivingInfo(job.address, next.address);
+          if(info && info.durationText && info.distanceText){
+            tag.classList.remove("warn");
+            tag.classList.add("ok");
+            tag.innerHTML = `🚗 ${escapeHtml(prefix)}：${info.durationText}（${info.distanceText}）<br><a class="nav-btn" href="${nav}" target="_blank">🧭 導航</a>`;
+            continue;
+          }
+        }catch(e){}
+      }
+
+      tag.classList.remove("ok");
+      tag.classList.add("warn");
+      tag.innerHTML = `🚗 ${escapeHtml(prefix)}：<a class="nav-btn" href="${nav}" target="_blank">🧭 點此導航</a>`;
+    }
+  };
+
+  function runRouteUpdate(){
+    if(window.updateTravelTags) window.updateTravelTags();
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    setTimeout(runRouteUpdate, 800);
+    setTimeout(runRouteUpdate, 2000);
+  });
+  window.addEventListener("load", function(){
+    setTimeout(runRouteUpdate, 800);
+    setTimeout(runRouteUpdate, 2500);
+  });
 })();
 </script>
 
