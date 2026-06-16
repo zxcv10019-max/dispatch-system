@@ -1925,29 +1925,23 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 }
 
 
-/* ===== FINAL mobile admin real backend ===== */
-@media(max-width:900px){
-  body.mobile-real-admin:not(.login-required):not(.no-permission){
-    height:auto!important;min-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;display:block!important;background:#f3f3f3!important;
-  }
-  body.mobile-real-admin:not(.login-required):not(.no-permission) .tabs{display:flex!important;flex-wrap:wrap!important;position:static!important;}
-  body.mobile-real-admin:not(.login-required):not(.no-permission) .tabs button{display:block!important;flex:1 1 50%!important;}
-  body.mobile-real-admin:not(.login-required):not(.no-permission) .page{display:none!important;height:auto!important;min-height:0!important;overflow:visible!important;}
-  body.mobile-real-admin:not(.login-required):not(.no-permission) #adminPage.page.active{display:block!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;padding-bottom:28px!important;}
-  body.mobile-real-admin:not(.login-required):not(.no-permission) #myTodayPanel{display:none!important;}
-  body.mobile-real-admin #adminPage .admin-body{display:flex!important;flex-direction:column!important;gap:12px!important;padding:12px!important;height:auto!important;min-height:0!important;overflow:visible!important;}
-  body.mobile-real-admin #adminPage .role-panel{order:1!important;}
-  body.mobile-real-admin #adminPage .admin-stats{order:2!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:0!important;}
-  body.mobile-real-admin #adminPage .admin-filter{order:3!important;}
-  body.mobile-real-admin #adminPage .log-table-wrap{order:4!important;height:auto!important;max-height:70vh!important;overflow:auto!important;margin-bottom:12px!important;}
-  body.mobile-real-admin #adminPage .admin-stat-card{min-width:0!important;padding:12px 8px!important;}
-  body.mobile-real-admin #adminPage .admin-stat-card .stat-num{font-size:24px!important;}
-  body.mobile-real-admin #adminPage .admin-filter input,
-  body.mobile-real-admin #adminPage .admin-filter select,
-  body.mobile-real-admin #adminPage .admin-filter button,
-  body.mobile-real-admin #adminPage .role-row input,
-  body.mobile-real-admin #adminPage .role-row select,
-  body.mobile-real-admin #adminPage .role-row button{width:100%!important;min-width:0!important;}
+/* ===== 2026-06 route navigation display fix ===== */
+.route-info a,
+.travel-tag a{
+  display:inline-block !important;
+  padding:2px 8px !important;
+  margin-left:4px !important;
+  border-radius:999px !important;
+  background:#2f3542 !important;
+  color:#fff !important;
+  text-decoration:none !important;
+  font-weight:bold !important;
+  white-space:nowrap !important;
+}
+.route-info.warn{
+  background:#fff4e5 !important;
+  border-color:#f3c36b !important;
+  color:#7a4b00 !important;
 }
 
 </style>
@@ -2942,10 +2936,18 @@ function hasOverlap(j){
 }
 async function fetchDrivingInfo(addrA, addrB){
   if(!addrA || !addrB) return null;
-  if(String(addrA).trim()===String(addrB).trim()) return {durationText:"0 分鐘",distanceText:"0 m",durationMinutes:0,distanceKm:0};
-  const cacheKey = String(addrA).trim() + "|" + String(addrB).trim();
+
+  const rawA = String(addrA||"").trim();
+  const rawB = String(addrB||"").trim();
+  const cleanA = cleanMapAddress(rawA) || rawA;
+  const cleanB = cleanMapAddress(rawB) || rawB;
+
+  if(cleanA === cleanB) return {durationText:"0 分鐘",distanceText:"0 m",durationMinutes:0,distanceKm:0};
+
+  const cacheKey = cleanA + "|" + cleanB;
   if(cacheKey in travelCache) return travelCache[cacheKey];
-  try{
+
+  async function requestRoute(originAddress, destinationAddress){
     const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes",{
       method:"POST",
       headers:{
@@ -2954,8 +2956,8 @@ async function fetchDrivingInfo(addrA, addrB){
         "X-Goog-FieldMask":"routes.duration,routes.distanceMeters"
       },
       body:JSON.stringify({
-        origin:{address:addrA},
-        destination:{address:addrB},
+        origin:{address:originAddress},
+        destination:{address:destinationAddress},
         travelMode:"DRIVE",
         routingPreference:"TRAFFIC_AWARE",
         languageCode:"zh-TW",
@@ -2964,8 +2966,19 @@ async function fetchDrivingInfo(addrA, addrB){
     });
     if(!res.ok){ throw new Error("Routes API HTTP " + res.status); }
     const data = await res.json();
-    const route = data.routes && data.routes[0];
+    return data.routes && data.routes[0] ? data.routes[0] : null;
+  }
+
+  try{
+    let route = await requestRoute(cleanA, cleanB);
+
+    // 如果清理過的地址算不到，改用原始地址再試一次
+    if(!route && (cleanA !== rawA || cleanB !== rawB)){
+      route = await requestRoute(rawA, rawB);
+    }
+
     if(!route){ travelCache[cacheKey]=null; return null; }
+
     const sec=parseDurationSeconds(route.duration);
     const meters=Number(route.distanceMeters||0);
     const result={
@@ -3020,9 +3033,9 @@ async function updateTravelTags(){
       tag.classList.add("warn");
       if(isBox){
         const nav = tag.dataset.nav || directionUrl(from,to);
-        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：無法計算　<a href="${nav}" target="_blank">開 Google Maps</a>`;
+        tag.innerHTML = `🚗 ${escapeHtml(prefix)}：<a href="${nav}" target="_blank">點此導航</a>`;
       }else{
-        tag.textContent = `🚗 ${prefix}：無法計算`;
+        tag.textContent = `🚗 ${prefix}：點此導航`;
       }
     }
   }
@@ -5797,100 +5810,6 @@ document.addEventListener("click", function(e){
   document.addEventListener("DOMContentLoaded", ()=>setTimeout(init, 300));
   window.addEventListener("load", ()=>setTimeout(init, 300));
   window.addEventListener("resize", ()=>setTimeout(init, 150));
-})();
-</script>
-
-
-<script>
-(function(){
-  const MAIN_EMAIL="zxcv10019@gmail.com";
-  let mobilePage="schedulePage";
-
-  function isMainMobile(){
-    return window.innerWidth<=900 && window.currentUser &&
-      String(window.currentUser.email||"").toLowerCase()===MAIN_EMAIL &&
-      !document.body.classList.contains("login-required") &&
-      !document.body.classList.contains("no-permission");
-  }
-
-  function setActiveTab(pageId){
-    const map={schedulePage:"tabSchedule",dispatchPage:"tabDispatch",customerPage:"tabCustomer",listPage:"tabList",adminPage:"adminTab"};
-    document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
-    const tab=document.getElementById(map[pageId]);
-    if(tab) tab.classList.add("active");
-  }
-
-  function reorderAdmin(){
-    const body=document.querySelector("#adminPage .admin-body");
-    const role=document.querySelector("#adminPage .role-panel");
-    const stats=document.querySelector("#adminPage .admin-stats");
-    const filter=document.querySelector("#adminPage .admin-filter");
-    const logs=document.querySelector("#adminPage .log-table-wrap");
-    if(body&&role&&stats&&filter&&logs){
-      body.appendChild(role);
-      body.appendChild(stats);
-      body.appendChild(filter);
-      body.appendChild(logs);
-    }
-  }
-
-  function showMainMobilePage(pageId){
-    if(!isMainMobile()) return false;
-    mobilePage=pageId||mobilePage||"schedulePage";
-
-    document.body.classList.toggle("mobile-real-admin", mobilePage==="adminPage");
-    document.body.classList.toggle("main-mobile-shot", mobilePage!=="adminPage");
-
-    const adminTab=document.getElementById("adminTab");
-    if(adminTab) adminTab.style.display="block";
-
-    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-    const page=document.getElementById(mobilePage);
-    if(page) page.classList.add("active");
-    setActiveTab(mobilePage);
-
-    if(mobilePage==="adminPage"){
-      const my=document.getElementById("myTodayPanel");
-      if(my) my.style.display="none";
-      reorderAdmin();
-      if(typeof renderAdminLogs==="function"){try{renderAdminLogs();}catch(e){}}
-      return true;
-    }
-
-    if(mobilePage==="schedulePage"){
-      const wrap=document.getElementById("scheduleWrap");
-      if(wrap) wrap.style.display="none";
-      if(typeof renderMyTodayPanel==="function"){try{renderMyTodayPanel();}catch(e){}}
-    }
-    return true;
-  }
-
-  const oldShowPage=window.showPage;
-  window.showPage=function(id){
-    if(showMainMobilePage(id)) return;
-    if(typeof oldShowPage==="function") return oldShowPage.apply(this,arguments);
-  };
-
-  document.addEventListener("click",function(e){
-    const btn=e.target.closest&&e.target.closest("button");
-    if(!btn) return;
-    const on=btn.getAttribute("onclick")||"";
-    const m=on.match(/showPage\(['"]([^'"]+)['"]\)/);
-    if(m&&isMainMobile()){
-      e.preventDefault();e.stopPropagation();
-      showMainMobilePage(m[1]);
-    }
-  },true);
-
-  function init(){
-    if(!isMainMobile()) return;
-    const active=document.querySelector(".page.active");
-    mobilePage=active&&active.id?active.id:"schedulePage";
-    showMainMobilePage(mobilePage);
-  }
-  document.addEventListener("DOMContentLoaded",()=>setTimeout(init,300));
-  window.addEventListener("load",()=>setTimeout(init,300));
-  window.addEventListener("resize",()=>setTimeout(init,150));
 })();
 </script>
 
