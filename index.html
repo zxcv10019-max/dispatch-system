@@ -1131,14 +1131,14 @@ body.admin-scroll-mode{
   height:auto !important;
   min-height:calc(100vh - 96px) !important;
   overflow:visible !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .admin-body{
   height:auto !important;
   min-height:0 !important;
   overflow:visible !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .log-table-wrap{
@@ -1165,7 +1165,7 @@ body.admin-scroll-mode{
   #adminPage.page.active{
     height:auto !important;
     overflow:visible !important;
-    padding-bottom:140px !important;
+    padding-bottom:24px !important;
   }
 
   #adminPage .admin-body{
@@ -1190,7 +1190,7 @@ body:has(#adminPage.page.active){
   min-height:100vh !important;
   overflow-y:scroll !important;
   overflow-x:hidden !important;
-  padding-bottom:120px !important;
+  padding-bottom:24px !important;
 }
 
 /* 後台頁內容跟著整頁下滑，上方標題/帳號設定區不固定 */
@@ -1199,7 +1199,7 @@ body:has(#adminPage.page.active){
   height:auto !important;
   min-height:100vh !important;
   overflow:visible !important;
-  padding-bottom:140px !important;
+  padding-bottom:24px !important;
 }
 
 #adminPage .admin-header,
@@ -1242,7 +1242,7 @@ html.force-admin-scroll{
 body.force-admin-scroll{
   display:block !important;
   position:static !important;
-  padding-bottom:180px !important;
+  padding-bottom:24px !important;
 }
 body.force-admin-scroll .header,
 body.force-admin-scroll .tabs,
@@ -1254,9 +1254,9 @@ body.force-admin-scroll #adminPage .admin-body{
 body.force-admin-scroll #adminPage.page.active{
   display:block !important;
   height:auto !important;
-  min-height:160vh !important;
+  min-height:auto !important;
   overflow:visible !important;
-  padding-bottom:200px !important;
+  padding-bottom:24px !important;
 }
 body.force-admin-scroll #adminPage .admin-body{
   height:auto !important;
@@ -1873,7 +1873,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     height:auto !important;
     min-height:100vh !important;
     overflow:visible !important;
-    padding-bottom:140px !important;
+    padding-bottom:24px !important;
   }
 
   #adminPage .admin-body,
@@ -1881,6 +1881,46 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     height:auto !important;
     max-height:none !important;
     overflow:visible !important;
+  }
+}
+
+
+/* ===== 2026-06 FINAL admin mobile finite scroll fix ===== */
+@media(max-width:900px){
+  body.main-mobile-shot #adminPage.page.active,
+  #adminPage.page.active{
+    display:block !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    padding-bottom:24px !important;
+  }
+
+  #adminPage .admin-body{
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    padding-bottom:24px !important;
+  }
+
+  #adminPage .log-table-wrap{
+    height:auto !important;
+    max-height:70vh !important;
+    overflow:auto !important;
+    margin-bottom:12px !important;
+  }
+
+  body.main-mobile-shot,
+  html.force-admin-scroll,
+  body.force-admin-scroll{
+    min-height:100% !important;
+  }
+
+  body.force-admin-scroll #adminPage.page.active{
+    min-height:0 !important;
+    padding-bottom:24px !important;
   }
 }
 
