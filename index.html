@@ -2276,13 +2276,22 @@ function escapeHtml(text){
 }
 // Google Maps 手機版較挑地址格式：導航連結會先清掉樓層/備註，避免手機 App 判讀成錯誤地點
 function cleanMapAddress(address){
-  return String(address||"")
-    .replace(/（[^）]*）/g, "")
-    .replace(/\([^)]*\)/g, "")
-    .replace(/\d+\s*[fF]/g, "")
-    .replace(/\d+\s*樓/g, "")
-    .replace(/\s+/g, "")
-    .trim();
+  return cleanAddressForLocate(address);
+}
+
+// 定位用地址清理：只拿真正地址，不把公司備註/樓層/戶別送去定位
+function cleanAddressForLocate(address){
+  let s = String(address||"").trim();
+  if(!s) return "";
+  s = s.replace(/[（(][^）)]*[）)]/g, "");       // 清除 (A11)、(董牛山河)、（備註）
+  s = s.replace(/[【\[][^】\]]*[】\]]/g, "");  // 清除【備註】、[備註]
+  s = s.replace(/[,，、;；].*$/g, "");          // 逗號後通常是備註
+  s = s.replace(/號\s*\d+\s*[Ff樓](?:[-之]\d+)?/g, "號"); // 303號12F-2 / 303號12樓
+  s = s.replace(/號\s*[A-Za-zＡ-Ｚａ-ｚ]\s*\d*/g, "號");    // 231號A11
+  s = s.replace(/號\s*地下\s*\d*\s*樓?/g, "號");
+  s = s.replace(/(\d+)\s*樓/g, "");
+  s = s.replace(/\s+/g, "");
+  return s.trim();
 }
 function mapUrl(address){
   const q = cleanMapAddress(address) || String(address||"").trim();
@@ -5036,7 +5045,13 @@ showAdminPage = function(){
 
   function safeText(v){ return String(v||'').trim(); }
   function esc(v){ return String(v||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
-  function cleanAddr(v){ try{ return typeof cleanMapAddress==='function' ? cleanMapAddress(v) : safeText(v); }catch(e){ return safeText(v); } }
+  function cleanAddr(v){
+    try{
+      if(typeof cleanAddressForLocate==='function') return cleanAddressForLocate(v);
+      if(typeof cleanMapAddress==='function') return cleanMapAddress(v);
+      return safeText(v);
+    }catch(e){ return safeText(v); }
+  }
   function mapDirUrl(from,to){
     try{ return typeof directionUrl==='function' ? directionUrl(from,to) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'); }
     catch(e){ return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'; }
@@ -5056,26 +5071,55 @@ showAdminPage = function(){
     if(Math.abs(a)<=90 && Math.abs(b)>90) return {lon:b, lat:a, label:s};
     return {lon:a, lat:b, label:s};
   }
-  async function geocodeAddress(addr){
-    const raw = cleanAddr(addr);
-    if(!raw) return null;
-    const direct = parseLonLat(raw);
+  function geocodeCandidates(addr){
+    const original = safeText(addr);
+    const cleaned = cleanAddr(addr);
+    const list = [];
+    function add(x){ x=safeText(x); if(x && !list.includes(x)) list.push(x); }
+    add(cleaned);
+    add(original);
+    // 再做更保守的版本：定位只留到「號」，避免樓層/戶別/社區名造成失敗
+    const toNo = cleaned.match(/^(.+?號)/);
+    if(toNo) add(toNo[1]);
+    // 若有台灣縣市區路名巷弄號，優先讓 Nominatim 用乾淨地址查詢
+    return list;
+  }
+
+  async function geocodeOne(query){
+    const direct = parseLonLat(query);
     if(direct) return direct;
-    if(geoCache[raw]) return geoCache[raw];
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&q=' + encodeURIComponent(raw);
+    if(geoCache[query]) return geoCache[query];
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&q=' + encodeURIComponent(query);
     try{
       const res = await fetch(url, {method:'GET', cache:'force-cache'});
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
       if(Array.isArray(data) && data[0]){
-        const item = {lon:Number(data[0].lon), lat:Number(data[0].lat), label:data[0].display_name||raw};
+        const item = {lon:Number(data[0].lon), lat:Number(data[0].lat), label:data[0].display_name||query};
         if(Number.isFinite(item.lon) && Number.isFinite(item.lat)){
-          geoCache[raw]=item;
+          geoCache[query]=item;
           try{ localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache)); }catch(e){}
           return item;
         }
       }
-    }catch(e){ console.warn('地址轉經緯度失敗', raw, e); }
+    }catch(e){ console.warn('地址轉經緯度失敗', query, e); }
+    return null;
+  }
+
+  async function geocodeAddress(addr){
+    const candidates = geocodeCandidates(addr);
+    for(const q of candidates){
+      const result = await geocodeOne(q);
+      if(result){
+        // 原地址也指到成功結果，下次不必重新試
+        try{
+          const rawKey = cleanAddr(addr);
+          if(rawKey && !geoCache[rawKey]){ geoCache[rawKey] = result; localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache)); }
+        }catch(e){}
+        return result;
+      }
+    }
+    console.warn('地址無法定位，已嘗試：', candidates);
     return null;
   }
   window.osrmGeocodeAddress = geocodeAddress;
