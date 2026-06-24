@@ -1381,6 +1381,40 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   }
 }
 
+
+
+/* ===== Admin dashboard enhancements + mobile/admin consistency ===== */
+.admin-dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:12px;margin-bottom:16px}
+.admin-widget{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.admin-widget h3{margin:0 0 10px;font-size:16px;color:#2f3542}
+.admin-widget .mini-table{width:100%;border-collapse:collapse;min-width:0!important}
+.admin-widget .mini-table th,.admin-widget .mini-table td{padding:7px 6px;border-bottom:1px solid #f0f0f0;font-size:13px;text-align:left}
+.admin-widget .mini-table th{position:static!important;background:#f8f9fa!important;color:#333!important}
+.admin-widget .empty{color:#888;font-size:13px;padding:8px 0}
+.admin-widget input,.admin-widget select{font-size:13px;padding:7px 9px}
+.admin-dashboard-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.admin-alert{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:8px;margin:6px 0;font-size:13px;line-height:1.5}
+.admin-alert.danger{background:#fde2e2;border-color:#f5a3a3;color:#922b21}
+.admin-kpi-row{display:flex;gap:8px;flex-wrap:wrap}
+.admin-kpi{flex:1;min-width:120px;background:#f8f9fa;border:1px solid #ececec;border-radius:8px;padding:10px;text-align:center}
+.admin-kpi b{display:block;font-size:22px;color:#2f3542}
+.admin-kpi span{font-size:12px;color:#666}
+@media(max-width:900px){
+  /* 後台手機版強制與電腦版使用同一套內容，不進工程師手機簡化版 */
+  body.admin-scroll-mode .tabs{display:flex!important;visibility:visible!important;height:auto!important;max-height:none!important;pointer-events:auto!important}
+  body.admin-scroll-mode .page{visibility:visible!important;max-height:none!important;pointer-events:auto!important}
+  body.admin-scroll-mode #adminPage.page.active{display:block!important;overflow:visible!important;height:auto!important;min-height:100vh!important}
+  body.admin-scroll-mode #adminContent{display:block}
+  body.admin-scroll-mode #myTodayPanel{display:none!important}
+  body.admin-scroll-mode #scheduleWrap{display:block}
+  #adminPage .admin-body{max-width:none!important;width:100%!important;padding:12px!important}
+  .admin-dashboard-grid{grid-template-columns:1fr!important}
+  .admin-filter,.role-row,.admin-dashboard-actions{display:flex!important;flex-direction:column!important;align-items:stretch!important}
+  .admin-filter input,.admin-filter select,.admin-filter button,.role-row input,.role-row select,.role-row button,.admin-widget input,.admin-widget select,.admin-widget button{width:100%!important;min-width:0!important}
+  #adminPage .log-table-wrap{overflow-x:auto!important;overflow-y:visible!important}
+  #adminPage .log-table-wrap table{min-width:860px!important}
+}
+
 </style>
 </head>
 
@@ -1962,6 +1996,8 @@ function applyRoleUI(){
   if(currentUser){
     setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, access ? (canEdit()?"ok":"wait") : "err");
   }
+  const adminTab=document.getElementById("adminTab");
+  if(adminTab && isAdmin()) adminTab.style.display="inline-block";
   renderMyTodayPanel();
   const denyWords=["儲存派工","清空派工","新增 / 更新客戶","匯入 Excel","還原備份","清空客戶","匯入派工 Excel"];
   document.querySelectorAll("button").forEach(btn=>{
@@ -2105,6 +2141,9 @@ function syncEndTimeByStart(){
 
 
 function showPage(pageId){
+  document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage");
+  document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage");
+  document.body.classList.toggle("force-admin-scroll", pageId==="adminPage");
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById(pageId).classList.add("active");
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
@@ -3045,7 +3084,7 @@ function deleteJob(id){
   if(!requireEdit("刪除派工")) return;
   if(!confirm("確定刪除此筆派工？"))return;
   const j=jobs.find(x=>x.id===id);
-  if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer});
+  if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer,deletedJob:{...j}});
   jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();
 }
 function editJobForm(id,event){
@@ -3817,10 +3856,90 @@ async function loadAdminLogs(){
     adminLogs = snap.docs.map(d=>{ const data=d.data(); return {...data, _id:d.id}; });
     renderAdminLogs();
     renderAdminStats();
+    renderAdminDashboard();
   }catch(e){
     console.error("讀取日誌失敗", e);
     document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">❌ 讀取失敗，請確認 Firestore 規則</td></tr>';
   }
+}
+
+
+function adminDateToday(){ return formatDateLocal(new Date()); }
+function adminMonthNow(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
+function getJobText(j){ return [j.customerCode,j.customerName,j.codeName,j.orderNo,j.phone,j.city,j.district,j.address,j.workItem,j.workContent,j.engineer,j.payment].map(x=>String(x||"")).join(" ").toLowerCase(); }
+function renderAdminDashboard(){
+  renderAdminTodaySummary();
+  renderAdminWorkloadSummary();
+  renderAdminConflicts();
+  renderAdminDeletedSummary();
+  renderAdminHistory();
+}
+function renderAdminTodaySummary(){
+  const box=document.getElementById("adminTodaySummary"); if(!box) return;
+  const today=adminDateToday();
+  const todayJobs=(jobs||[]).filter(j=>j.date===today && !isHoldJob(j));
+  const holdJobs=(jobs||[]).filter(j=>isHoldJob(j));
+  const byEng={}; engineers.forEach(e=>byEng[e]=0); todayJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; });
+  const workItems={}; todayJobs.forEach(j=>{ const k=j.workItem||"未填施工項目"; workItems[k]=(workItems[k]||0)+1; });
+  box.innerHTML=`<div class="admin-kpi-row"><div class="admin-kpi"><b>${todayJobs.length}</b><span>今日正式派工</span></div><div class="admin-kpi"><b>${holdJobs.length}</b><span>目前暫押</span></div><div class="admin-kpi"><b>${Object.keys(workItems).length}</b><span>施工類型</span></div></div>`+
+    `<table class="mini-table"><thead><tr><th>工程師</th><th>今日件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`;
+}
+function renderAdminWorkloadSummary(){
+  const box=document.getElementById("adminWorkloadSummary"); if(!box) return;
+  const month=adminMonthNow();
+  const monthJobs=(jobs||[]).filter(j=>String(j.date||"").startsWith(month) && !isHoldJob(j));
+  const byEng={}; engineers.forEach(e=>byEng[e]=0);
+  const byItem={};
+  monthJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; const k=j.workItem||"未填施工項目"; byItem[k]=(byItem[k]||0)+1; });
+  const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td>${v}</td></tr>`).join("");
+  box.innerHTML=`<table class="mini-table"><thead><tr><th>工程師</th><th>${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
+    `<div style="height:8px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th>件數</th></tr></thead><tbody>${itemRows || '<tr><td colspan="2">本月尚無資料</td></tr>'}</tbody></table>`;
+}
+function renderAdminConflicts(){
+  const box=document.getElementById("adminConflictSummary"); if(!box) return;
+  const alerts=[];
+  const normal=(jobs||[]).filter(j=>j.date && !isHoldJob(j));
+  const grouped={};
+  normal.forEach(j=>{ const key=`${j.date}|${j.engineer}`; (grouped[key]=grouped[key]||[]).push(j); });
+  Object.values(grouped).forEach(list=>{
+    list.sort((a,b)=>timeIndex(a.startTime)-timeIndex(b.startTime));
+    for(let i=1;i<list.length;i++){
+      const prev=list[i-1], cur=list[i];
+      const prevEnd=timeIndex(prev.endTime||prev.startTime);
+      const curStart=timeIndex(cur.startTime);
+      if(prevEnd>=0 && curStart>=0 && curStart < prevEnd){
+        alerts.push(`<div class="admin-alert danger">${escapeHtml(cur.date)} ${escapeHtml(cur.engineer)}：${escapeHtml(prev.codeName||prev.customerName||"")} 與 ${escapeHtml(cur.codeName||cur.customerName||"")} 時間重疊</div>`);
+      }else if(prev.address && cur.address && prevEnd>=0 && curStart>=0 && (curStart-prevEnd)<=1){
+        alerts.push(`<div class="admin-alert">${escapeHtml(cur.date)} ${escapeHtml(cur.engineer)}：${escapeHtml(prev.codeName||prev.customerName||"")} → ${escapeHtml(cur.codeName||cur.customerName||"")} 中間僅 ${Math.max(0,(curStart-prevEnd)*30)} 分鐘，建議確認車程</div>`);
+      }
+    }
+  });
+  box.innerHTML=alerts.slice(0,8).join("") || '<div class="empty">目前沒有明顯時間重疊；車程距離仍以派工卡上的導航結果為準。</div>';
+}
+function renderAdminHistory(){
+  const box=document.getElementById("adminHistoryResult"); if(!box) return;
+  const kw=(document.getElementById("adminHistoryKeyword")?.value||"").trim().toLowerCase();
+  if(!kw){ box.innerHTML='輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。'; box.className='empty'; return; }
+  box.className='';
+  const rows=(jobs||[]).filter(j=>getJobText(j).includes(kw)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,30);
+  if(!rows.length){ box.innerHTML='<div class="empty">找不到符合的派工履歷。</div>'; return; }
+  box.innerHTML=`<table class="mini-table"><thead><tr><th>日期</th><th>時間</th><th>工程師</th><th>客戶 / 內容</th></tr></thead><tbody>${rows.map(j=>`<tr><td>${escapeHtml(j.date||"")}${isHoldJob(j)?' <span class="hold-badge">暫押</span>':''}</td><td>${escapeHtml(j.startTime||"")}~${escapeHtml(j.endTime||"")}</td><td>${escapeHtml(j.engineer||"")}</td><td><b>${escapeHtml(j.codeName||j.customerName||"")}</b><br>${escapeHtml(j.workItem||"")} ${escapeHtml(j.workContent||"")}<br><span style="color:#666">${escapeHtml(j.address||"")}</span></td></tr>`).join("")}</tbody></table>`;
+}
+function renderAdminDeletedSummary(){
+  const box=document.getElementById("adminDeletedSummary"); if(!box) return;
+  const dels=(adminLogs||[]).filter(l=>l.action==="delete").slice(0,8);
+  if(!dels.length){ box.innerHTML='<div class="empty">尚無刪除紀錄。之後刪除派工會保留可還原資料。</div>'; return; }
+  box.innerHTML=`<table class="mini-table"><thead><tr><th>刪除時間</th><th>派工</th><th>操作</th></tr></thead><tbody>${dels.map(l=>{const d=l.detail||{}; const has=!!d.deletedJob; return `<tr><td>${l.tsLocal?new Date(l.tsLocal).toLocaleString("zh-TW",{hour12:false}):""}</td><td>${escapeHtml(d.codeName||d.customerName||"")}<br><span style="color:#666">${escapeHtml(d.date||"")} ${escapeHtml(d.engineer||"")}</span></td><td>${has?`<button onclick="restoreDeletedJob('${escapeHtml(l._id)}')" style="background:#218c74;padding:5px 9px;font-size:12px">還原</button>`:'舊紀錄無法還原'}</td></tr>`}).join("")}</tbody></table>`;
+}
+function restoreDeletedJob(logId){
+  if(!requireEdit("還原派工")) return;
+  const log=(adminLogs||[]).find(l=>l._id===logId);
+  const old=log?.detail?.deletedJob;
+  if(!old) return alert("這筆刪除紀錄沒有完整派工資料，無法還原。");
+  const restored={...old,id:Date.now()};
+  jobs.push(restored); saveJobs(); renderSchedule(); renderJobList(); renderAdminDashboard();
+  writeLog("add", {codeName:restored.codeName||restored.customerName||"", date:restored.date, engineer:restored.engineer, startTime:restored.startTime, endTime:restored.endTime, restoredFrom:logId});
+  alert("已還原派工。");
 }
 
 // 渲染統計卡片
@@ -3950,6 +4069,7 @@ function showAdminPage(){
   document.getElementById("adminLockScreen").style.display="none";
   document.getElementById("adminContent").style.display="block";
   loadRoles();
+  renderAdminDashboard();
   loadAdminLogs();
 }
 
@@ -4003,6 +4123,35 @@ applyRoleUI();
           <button onclick="saveRole()" style="background:#218c74">儲存權限</button>
         </div>
         <div class="role-list" id="roleList">載入中…</div>
+      </div>
+
+
+      <!-- 後台總覽 / 查詢工具 -->
+      <div class="admin-dashboard-grid">
+        <div class="admin-widget">
+          <h3>今日派工總覽</h3>
+          <div id="adminTodaySummary"></div>
+        </div>
+        <div class="admin-widget">
+          <h3>本月工作量統計</h3>
+          <div id="adminWorkloadSummary"></div>
+        </div>
+        <div class="admin-widget">
+          <h3>車程 / 時間衝突提醒</h3>
+          <div id="adminConflictSummary"></div>
+        </div>
+        <div class="admin-widget">
+          <h3>維修 / 客戶履歷查詢</h3>
+          <div class="admin-dashboard-actions">
+            <input id="adminHistoryKeyword" placeholder="輸入客編、客名、訂單、地址、施工內容" onkeydown="if(event.key==='Enter')renderAdminHistory()">
+            <button onclick="renderAdminHistory()" style="background:#40739e">查詢履歷</button>
+          </div>
+          <div id="adminHistoryResult" class="empty">輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。</div>
+        </div>
+        <div class="admin-widget">
+          <h3>最近刪除 / 可還原</h3>
+          <div id="adminDeletedSummary"></div>
+        </div>
       </div>
 
       <!-- 統計卡片 -->
