@@ -1383,6 +1383,13 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 
 
 
+
+.admin-import-panel .admin-dashboard-actions button{font-size:13px}
+@media(max-width:900px){
+  #adminPage .admin-import-panel{display:block!important;visibility:visible!important}
+  #adminPage .admin-import-panel .admin-dashboard-actions button{width:auto!important;min-width:140px!important}
+}
+
 /* ===== Admin dashboard enhancements + mobile/admin consistency ===== */
 .admin-dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:12px;margin-bottom:16px}
 .admin-widget{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
@@ -3858,8 +3865,14 @@ async function loadAdminLogs(){
     renderAdminStats();
     renderAdminDashboard();
   }catch(e){
-    console.error("讀取日誌失敗", e);
-    document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">❌ 讀取失敗，請確認 Firestore 規則</td></tr>';
+    console.warn("讀取日誌失敗（adminLogs 規則未開放，不影響派工/客戶匯入與同步）", e.code || e.message);
+    adminLogs = [];
+    renderAdminStats();
+    renderAdminDashboard();
+    const body=document.getElementById("adminLogBody");
+    if(body){
+      body.innerHTML = '<tr><td colspan="4" class="admin-no-data">⚠️ 操作紀錄讀取失敗：adminLogs 的 Firestore 規則尚未開放。<br>這不影響你匯入 Excel、派工、客戶資料與同步；只是暫時看不到操作紀錄。</td></tr>';
+    }
   }
 }
 
@@ -4125,6 +4138,18 @@ applyRoleUI();
         <div class="role-list" id="roleList">載入中…</div>
       </div>
 
+
+      <!-- 後台匯入 / 備份工具 -->
+      <div class="role-panel admin-import-panel">
+        <h3>資料匯入 / 備份</h3>
+        <div class="admin-dashboard-actions">
+          <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入派工 Excel</button>
+          <button class="import-btn" onclick="document.getElementById('excelFile').click()">匯入客戶 Excel</button>
+          <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
+          <button class="import-btn" onclick="document.getElementById('backupFile').click()">📂 還原備份</button>
+        </div>
+        <div style="font-size:12px;color:#666;line-height:1.6">你可以自己從這裡匯入 Excel；我不會預先幫你把上傳的 Excel 塞進系統。匯入後仍會依照原本的派工/客戶匯入邏輯處理。</div>
+      </div>
 
       <!-- 後台總覽 / 查詢工具 -->
       <div class="admin-dashboard-grid">
