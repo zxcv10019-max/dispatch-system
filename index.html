@@ -4940,14 +4940,27 @@ showAdminPage = function(){
     if(conf){
       const alerts=[]; const grouped={};
       normal.filter(j=>j.date&&j.engineer&&j.startTime).forEach(j=>{const key=j.date+'|'+normEng(j.engineer); (grouped[key]=grouped[key]||[]).push(j);});
-      Object.values(grouped).forEach(list=>{ list.sort((a,b)=>tIdx(a.startTime)-tIdx(b.startTime)); for(let i=1;i<list.length;i++){ const p=list[i-1], c=list[i]; const pe=tIdx(p.endTime||p.startTime), cs=tIdx(c.startTime); if(pe>=0&&cs>=0&&cs<pe){alerts.push('<div class="admin-alert danger">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' 與 '+esc(c.codeName||c.customerName||'本筆')+' 時間重疊</div>')} else if(pe>=0&&cs>=0&&(cs-pe)<=1){alerts.push('<div class="admin-alert">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' → '+esc(c.codeName||c.customerName||'本筆')+' 中間僅 '+Math.max(0,(cs-pe)*30)+' 分鐘，建議確認車程</div>')} } });
+      Object.values(grouped).forEach(list=>{ list.sort((a,b)=>tIdx(a.startTime)-tIdx(b.startTime)); for(let i=1;i<list.length;i++){ const p=list[i-1], c=list[i]; const pe=tIdx(p.endTime||p.startTime), cs=tIdx(c.startTime);
+        const routeBtn = (p.address&&c.address) ? ' <a target="_blank" style="display:inline-block;margin-left:6px;background:#40739e;color:#fff;border-radius:4px;padding:2px 8px;font-size:12px;text-decoration:none;" href="https://www.google.com/maps/dir/'+encodeURIComponent(p.address)+'/'+encodeURIComponent(c.address)+'">🗺 查看車程</a>' : '';
+        if(pe>=0&&cs>=0&&cs<pe){alerts.push('<div class="admin-alert danger">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' 與 '+esc(c.codeName||c.customerName||'本筆')+' 時間重疊'+routeBtn+'</div>')} else if(pe>=0&&cs>=0&&(cs-pe)<=1){alerts.push('<div class="admin-alert">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' → '+esc(c.codeName||c.customerName||'本筆')+' 中間僅 '+Math.max(0,(cs-pe)*30)+' 分鐘，建議確認車程'+routeBtn+'</div>')} } });
       conf.innerHTML = alerts.slice(0,10).join('') || '<div class="empty">目前沒有明顯時間重疊；車程以派工卡導航資訊為準。</div>';
     }
 
     const map=document.getElementById('adminMapList');
     if(map){
       const mapJobs=todayJobs.filter(j=>j.address).sort((a,b)=>String(a.startTime||'').localeCompare(String(b.startTime||'')));
-      map.innerHTML = mapJobs.length ? mapJobs.map(j=>'<div class="admin-map-card"><b>'+esc(j.startTime||'')+' '+esc(j.codeName||j.customerName||'')+'</b><br>工程師：'+esc(j.engineer||'')+'<br>項目：'+esc(j.workItem||'')+'<br>地址：'+esc(j.address||'')+'<br><a target="_blank" href="'+(typeof mapUrl==='function'?mapUrl(j.address):('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(j.address)))+'">開啟地圖</a></div>').join('') : '<div class="empty">今日沒有可顯示的地址資料。</div>';
+      if(mapJobs.length){
+        const multiUrl = 'https://www.google.com/maps/dir/' + mapJobs.map(j=>encodeURIComponent(j.address)).join('/');
+        const multiBtn = '<div style="margin-bottom:10px"><a target="_blank" style="background:#218c74;color:#fff;border-radius:4px;padding:6px 14px;text-decoration:none;font-size:13px;font-weight:bold;" href="'+multiUrl+'">🗺 今日全部路線（'+mapJobs.length+' 個地點）</a></div>';
+        const cards = mapJobs.map(function(j,i){
+          const singleUrl = typeof mapUrl==='function' ? mapUrl(j.address) : ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(j.address));
+          const nextBtn = (i+1<mapJobs.length) ? ' <a target="_blank" style="background:#40739e;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;text-decoration:none;margin-left:4px;" href="https://www.google.com/maps/dir/'+encodeURIComponent(j.address)+'/'+encodeURIComponent(mapJobs[i+1].address)+'">→ 下一站車程</a>' : '';
+          return '<div class="admin-map-card"><b>'+esc(j.startTime||'')+' '+esc(j.codeName||j.customerName||'')+'</b><br>工程師：'+esc(j.engineer||'')+'<br>項目：'+esc(j.workItem||'')+'<br>地址：'+esc(j.address||'')+'<br><a target="_blank" href="'+singleUrl+'">開啟地圖</a>'+nextBtn+'</div>';
+        }).join('');
+        map.innerHTML = multiBtn + cards;
+      } else {
+        map.innerHTML = '<div class="empty">今日沒有可顯示的地址資料。</div>';
+      }
     }
 
     const comp=document.getElementById('adminCompletionContent');
