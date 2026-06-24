@@ -1463,6 +1463,11 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 }
 #customerHistoryResult .hist-card .hist-top{font-weight:bold;color:#0066cc;font-size:14px;margin-bottom:4px}
 #customerHistoryResult .hist-card .hist-date{color:#888;font-size:12px}
+
+/* 後台地圖：電腦依工程師分欄，手機改單欄 */
+@media(max-width:900px){
+  #adminMapList > div{grid-template-columns:1fr!important;}
+}
 </style>
 </head>
 
@@ -4688,15 +4693,43 @@ function renderAdminMap(){
   const today = adminDateToday();
   const todayJobs = (jobs||[]).filter(j=>j.date===today && !isHoldJob(j) && j.address);
   if(!todayJobs.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px">今日無有地址的派工。</div>'; return; }
-  box.innerHTML = todayJobs.map(j=>{
-    const label = escapeHtml((displayEngineer(j.engineer)||'') + ' ' + (j.startTime||'') + ' ' + (j.codeName||j.customerName||''));
-    const addr = escapeHtml(j.address);
-    const url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(j.address);
-    return '<a href="' + url + '" target="_blank" style="display:inline-block;background:#e8f4fd;border:1px solid #9ed0f5;border-radius:8px;padding:8px 12px;text-decoration:none;color:#155a8a;font-size:13px;line-height:1.5;max-width:300px">'
-      + '<div style="font-weight:bold">' + label + '</div>'
-      + '<div>📍 ' + addr + '</div>'
-      + '</a>';
-  }).join('');
+
+  // 依工程師排序：M 林川閔 → C 陳昱存 → Y 陳義強 → E 鄧長益；各工程師內再依時間排序
+  const grouped = {};
+  engineers.forEach(e => grouped[e] = []);
+  todayJobs.forEach(j => {
+    const eng = normalizeEngineerName(j.engineer || '');
+    if(!grouped[eng]) grouped[eng] = [];
+    grouped[eng].push(j);
+  });
+  Object.keys(grouped).forEach(e => grouped[e].sort((a,b)=>String(a.startTime||'').localeCompare(String(b.startTime||''))));
+
+  let html = '<div style="width:100%;display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:10px;align-items:start">';
+  engineers.forEach(e => {
+    const list = grouped[e] || [];
+    html += '<div style="background:#fff;border:1px solid #d6e4f0;border-radius:10px;padding:10px;min-height:90px">'
+      + '<div style="font-weight:bold;color:#2f3542;margin-bottom:8px;border-bottom:1px solid #eef2f7;padding-bottom:6px">'
+      + escapeHtml(displayEngineer(e) + ' ' + e) + '｜' + list.length + ' 件</div>';
+    if(!list.length){
+      html += '<div style="color:#999;font-size:13px;padding:8px 0">今日無有地址派工</div>';
+    }else{
+      html += list.map(j=>{
+        const title = escapeHtml((j.startTime||'') + ' ' + (j.codeName||j.customerName||''));
+        const item = escapeHtml(j.workItem || '');
+        const addr = escapeHtml(j.address || '');
+        const url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(j.address || '');
+        return '<div style="background:#f8fbff;border:1px solid #cfe2f3;border-radius:8px;padding:8px;margin-bottom:8px;font-size:13px;line-height:1.55">'
+          + '<div style="font-weight:bold;color:#0066cc">' + title + '</div>'
+          + '<div>項目：' + item + '</div>'
+          + '<div>地址：' + addr + '</div>'
+          + '<a href="' + url + '" target="_blank" style="color:#0066cc;text-decoration:underline">開啟地圖</a>'
+          + '</div>';
+      }).join('');
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 // ===== 完成率統計 =====
