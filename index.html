@@ -1521,6 +1521,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
     <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
     <button class="clear-btn" onclick="clearAllJobs()">清空派工</button>
+    <button class="map-btn" onclick="openTodayAllRoutes()" title="開啟今日所有派工地址的串聯路線">🗺 今日全部路線</button>
   </div>
   <div id="myTodayPanel"></div>
   <div class="summary" id="summary"></div>
@@ -5030,6 +5031,18 @@ showAdminPage = function(){
   document.addEventListener('DOMContentLoaded',()=>{ setTimeout(function(){ addReminderButtons(); refreshAdminV2(); },300); });
   setInterval(function(){ const ap=document.getElementById('adminPage'); if(ap&&ap.classList.contains('active')) refreshAdminV2(); addReminderButtons(); },1500);
 })();
+
+window.openTodayAllRoutes = function(){
+  const today = new Date().toISOString().slice(0,10);
+  const js = (typeof jobs!=='undefined'&&Array.isArray(jobs)) ? jobs : [];
+  const todayJobs = js.filter(function(j){
+    const isHold = (j.statusList&&j.statusList.includes('暫押'))||j.hold;
+    return !isHold && String(j.date||'')===today && j.address;
+  }).sort(function(a,b){ return String(a.startTime||'').localeCompare(String(b.startTime||'')); });
+  if(!todayJobs.length){ alert('今日沒有含地址的派工資料。'); return; }
+  const url = 'https://www.google.com/maps/dir/' + todayJobs.map(function(j){ return encodeURIComponent(j.address); }).join('/');
+  window.open(url, '_blank');
+};
 </script>
 
 
