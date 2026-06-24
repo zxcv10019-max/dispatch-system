@@ -1919,10 +1919,12 @@ async function saveCloudNow(){
     localDirty = false;
     savingCloud = false;
     setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
+    return true;
   }catch(err){
     savingCloud = false;
     console.error("Firestore 同步失敗", err);
-    setSyncStatus("同步失敗，請檢查 Firestore 規則/權限", "err");
+    setSyncStatus("同步失敗，資料已保留在目前畫面，請檢查 Firestore 規則/權限", "err");
+    return false;
   }
 }
 
@@ -3567,13 +3569,14 @@ function normalizeJobFromArray(row, idx){
 
 function importJobsExcel(event){
   const __importInput = event && event.target;
-  if(!requireEdit("匯入派工")){ event.target.value=""; return; }
-  const file=event.target.files[0];
+  if(!requireEdit("匯入派工")){ if(event&&event.target) event.target.value=""; return; }
+  const file=event && event.target && event.target.files ? event.target.files[0] : null;
   if(!file)return;
   if(typeof XLSX==="undefined"){
     alert("Excel 讀取套件沒有載入成功，請確認有網路後再重新整理網頁。");
     return;
   }
+
   const reader=new FileReader();
   reader.onload=async function(e){
     try{
@@ -3585,40 +3588,85 @@ function importJobsExcel(event){
         event.target.value="";
         return;
       }
+
+      const replaceOld = confirm("匯入派工資料：\n\n按「確定」＝清空舊派工後重新匯入\n按「取消」＝保留舊派工並追加匯入");
+      if(replaceOld){
+        jobs = [];
+        try{ localStorage.removeItem(JOBS_KEY); }catch(_){}
+      }
+
       let count=0, skipped=0, holdCount=0;
+      let firstDate="";
+      const importedJobs=[];
       for(let r=found.headerRow+1;r<found.rows.length;r++){
         const row=found.rows[r]||[];
         const j=normalizeJobFromArray(row,found.idx);
-        if(!j.engineer && !j.date && !j.customerCode && !j.customerName && !j.orderNo && !j.startTime){
+
+        // 完全空白列略過
+        if(!j.engineer && !j.date && !j.customerCode && !j.customerName && !j.orderNo && !j.startTime && !j.address && !j.workItem && !j.workContent){
           skipped++;
           continue;
         }
+
+        // 有日期但沒有排工時間時，預設 09:30，避免整批看起來「已匯入但沒資料」
+        if(!j.startTime && j.date){
+          j.startTime = "09:30";
+          j.time = "09:30";
+          j.endTime = j.endTime || "10:00";
+        }
+
         if(!j.startTime){
           skipped++;
           continue;
         }
-        // 沒有日期但有時間/客戶資料：視為「暫押工程時間」，保留在派工明細的暫押清單，不排進正式派工表。
+
         if(!j.date){
           j.isHold = true;
           j.holdReason = "缺排工日期，暫押工程時間";
           holdCount++;
+        }else if(!firstDate){
+          firstDate = j.date;
         }
-        jobs.push(j);
-        count++;
+
+        importedJobs.push(j);
       }
+
+      if(importedJobs.length===0){
+        alert(`沒有可匯入的派工資料。已略過 ${skipped} 筆。`);
+        event.target.value="";
+        return;
+      }
+
+      jobs = (jobs || []).concat(importedJobs);
+      count = importedJobs.length;
+
       // 匯入大量資料時，建立本次匯入 token，直到雲端回傳同一個 token 前，都不允許舊雲端快照覆蓋本機資料。
       importProtectToken = "import_" + Date.now() + "_" + Math.random().toString(36).slice(2,8);
       importProtectActive = true;
-      ignoreRemoteUntil = Date.now() + 30000;
+      ignoreRemoteUntil = Date.now() + 120000;
       localDirty = true;
       lastLocalJobsCount = (jobs||[]).length;
+
+      // 先把畫面切到本次匯入資料的日期/全部明細，再做雲端同步；避免使用者看到「已匯入但目前月份沒資料」
+      const lm=document.getElementById("listMonth"); if(lm) lm.value="";
+      const sd=document.getElementById("listStartDate"); if(sd) sd.value="";
+      const ed=document.getElementById("listEndDate"); if(ed) ed.value="";
+      const hf=document.getElementById("listHoldFilter"); if(hf) hf.value="all";
+      const cf=document.getElementById("listCustomerFilter"); if(cf) cf.value="";
+      const vd=document.getElementById("viewDate"); if(vd && firstDate) vd.value=firstDate;
+
       saveJobs();
-      await saveCloudNow();
       renderSchedule();
       renderJobList();
+      if(typeof renderAdminDashboard==="function") renderAdminDashboard();
+      if(typeof renderAdminEnhancedDashboard==="function") renderAdminEnhancedDashboard();
+
       showToast(`✅ 已匯入 ${count} 筆派工資料`);
+      let cloudOk = await saveCloudNow();
       writeLog("import", { type:"派工資料", count:count, holdCount:holdCount, sheetName:found.sheetName });
-      alert(`已匯入 ${count} 筆派工資料${holdCount?`，其中 ${holdCount} 筆為暫押派工`:""}${skipped?`，略過 ${skipped} 筆空白或缺時間資料`:""}`);
+
+      const note = cloudOk ? "" : "\n\n注意：雲端同步可能失敗，但資料已先顯示在目前畫面；請確認 Firestore 規則後再同步。";
+      alert(`已匯入 ${count} 筆派工資料${replaceOld?"（已先清空舊派工）":"（追加匯入）"}${holdCount?`，其中 ${holdCount} 筆為暫押派工`:""}${skipped?`，略過 ${skipped} 筆空白或缺時間資料`:""}。\n\n我已自動切到匯入資料的日期，並把派工明細改成「全部派工」。${note}`);
       event.target.value="";
     }catch(err){
       console.error(err);
@@ -4772,6 +4820,160 @@ showAdminPage = function(){
 };
 </script>
 
+
+
+<!-- ===== 後台 2.0 重新連動 + 一鍵提醒預覽 2026-06 ===== -->
+<style>
+.reminder-btn{background:#6f42c1!important;color:#fff!important;padding:2px 6px!important;font-size:11px!important;border-radius:4px!important}
+#reminderModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:99999;align-items:center;justify-content:center;padding:14px}
+#reminderModal .reminder-box{width:min(560px,96vw);background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);overflow:hidden}
+#reminderModal .reminder-head{background:#2f3542;color:#fff;padding:12px 16px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
+#reminderModal textarea{width:100%;min-height:420px;border:0;border-top:1px solid #ddd;border-bottom:1px solid #ddd;border-radius:0;padding:14px;font-size:15px;line-height:1.6;font-family:"Microsoft JhengHei",Arial,sans-serif;resize:vertical;white-space:pre-wrap}
+#reminderModal .reminder-actions{display:flex;gap:8px;justify-content:flex-end;padding:12px;background:#f8f9fa;flex-wrap:wrap}
+#reminderModal .close-x{background:transparent!important;color:#fff!important;font-size:18px;padding:0 4px!important}
+.admin-widget.filled-empty{min-height:54px}
+.admin-map-card{background:#fff;border:1px solid #d7e3f0;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.55;min-width:240px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.admin-map-card b{color:#0066cc}.admin-map-card a{color:#0066cc;text-decoration:underline;font-weight:bold}
+@media(max-width:900px){#reminderModal textarea{min-height:58vh;font-size:14px}.reminder-btn{padding:4px 8px!important}}
+</style>
+<div id="reminderModal">
+  <div class="reminder-box">
+    <div class="reminder-head"><span>📋 提醒訊息預覽</span><button class="close-x" onclick="closeReminderModal()">×</button></div>
+    <textarea id="reminderText"></textarea>
+    <div class="reminder-actions">
+      <button onclick="copyReminderText()" style="background:#218c74">複製內容</button>
+      <button onclick="closeReminderModal()" style="background:#6c757d">關閉</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  function safeJobs(){ try{return Array.isArray(jobs)?jobs:[]}catch(e){return []} }
+  function safeCustomers(){ try{return Array.isArray(customers)?customers:[]}catch(e){return []} }
+  function esc(v){ try{return escapeHtml(String(v||''));}catch(e){return String(v||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));} }
+  function isHold(j){ try{return isHoldJob(j)}catch(e){return !!(j&&j.isHold)} }
+  function normEng(e){ try{return normalizeEngineerName(e)}catch(x){return String(e||'')} }
+  function todayStr(){ try{return formatDateLocal(new Date())}catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')} }
+  function monthStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function tIdx(t){ try{return timeIndex(t)}catch(e){ const arr=(typeof times!=='undefined'?times:[]); return arr.indexOf(t); } }
+  function displayEng(e){ try{return displayEngineer(e)}catch(x){return e} }
+
+  window.refreshAdminV2 = function(){
+    const js=safeJobs(); const cs=safeCustomers();
+    const today=todayStr(); const month=monthStr();
+    const normal=js.filter(j=>!isHold(j));
+    const todayJobs=normal.filter(j=>String(j.date||'')===today);
+    const holdJobs=js.filter(j=>isHold(j));
+    const monthJobs=normal.filter(j=>String(j.date||'').startsWith(month));
+    const engs=(typeof engineers!=='undefined'&&Array.isArray(engineers)?engineers:['林川閔','陳昱存','陳義強','鄧長益']);
+
+    const stats=document.getElementById('adminStats');
+    if(stats){
+      stats.innerHTML = '<div class="admin-stat-card"><div class="stat-num">'+normal.length+'</div><div class="stat-label">全部正式派工</div></div>'+
+        '<div class="admin-stat-card login-stat"><div class="stat-num">'+todayJobs.length+'</div><div class="stat-label">今日派工</div></div>'+
+        '<div class="admin-stat-card add-stat"><div class="stat-num">'+holdJobs.length+'</div><div class="stat-label">暫押派工</div></div>'+
+        '<div class="admin-stat-card edit-stat"><div class="stat-num">'+cs.length+'</div><div class="stat-label">客戶資料</div></div>'+
+        '<div class="admin-stat-card del-stat"><div class="stat-num">'+monthJobs.length+'</div><div class="stat-label">本月派工</div></div>';
+    }
+
+    const todayBox=document.getElementById('adminTodaySummary');
+    if(todayBox){
+      const by={}; engs.forEach(e=>by[e]=0); todayJobs.forEach(j=>{const e=normEng(j.engineer); if(by[e]!=null) by[e]++;});
+      todayBox.innerHTML = '<div class="admin-kpi-row"><div class="admin-kpi"><b>'+todayJobs.length+'</b><span>今日正式派工</span></div><div class="admin-kpi"><b>'+holdJobs.length+'</b><span>暫押派工</span></div><div class="admin-kpi"><b>'+cs.length+'</b><span>客戶資料</span></div></div>'+
+        '<table class="mini-table"><thead><tr><th>工程師</th><th>今日件數</th></tr></thead><tbody>'+engs.map(e=>'<tr><td>'+esc(displayEng(e))+'</td><td>'+Number(by[e]||0)+'</td></tr>').join('')+'</tbody></table>';
+    }
+
+    const workBox=document.getElementById('adminWorkloadSummary');
+    if(workBox){
+      const by={}; engs.forEach(e=>by[e]=0); const items={};
+      monthJobs.forEach(j=>{const e=normEng(j.engineer); if(by[e]!=null) by[e]++; const k=j.workItem||'未填施工項目'; items[k]=(items[k]||0)+1;});
+      const rows=Object.entries(items).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+v+'</td></tr>').join('') || '<tr><td colspan="2">本月尚無資料</td></tr>';
+      workBox.innerHTML = '<table class="mini-table"><thead><tr><th>工程師</th><th>'+esc(month)+' 件數</th></tr></thead><tbody>'+engs.map(e=>'<tr><td>'+esc(displayEng(e))+'</td><td>'+Number(by[e]||0)+'</td></tr>').join('')+'</tbody></table>'+
+        '<div style="height:8px"></div><table class="mini-table"><thead><tr><th>施工項目</th><th>件數</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    }
+
+    const conf=document.getElementById('adminConflictSummary');
+    if(conf){
+      const alerts=[]; const grouped={};
+      normal.filter(j=>j.date&&j.engineer&&j.startTime).forEach(j=>{const key=j.date+'|'+normEng(j.engineer); (grouped[key]=grouped[key]||[]).push(j);});
+      Object.values(grouped).forEach(list=>{ list.sort((a,b)=>tIdx(a.startTime)-tIdx(b.startTime)); for(let i=1;i<list.length;i++){ const p=list[i-1], c=list[i]; const pe=tIdx(p.endTime||p.startTime), cs=tIdx(c.startTime); if(pe>=0&&cs>=0&&cs<pe){alerts.push('<div class="admin-alert danger">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' 與 '+esc(c.codeName||c.customerName||'本筆')+' 時間重疊</div>')} else if(pe>=0&&cs>=0&&(cs-pe)<=1){alerts.push('<div class="admin-alert">'+esc(c.date)+' '+esc(c.engineer)+'：'+esc(p.codeName||p.customerName||'上一筆')+' → '+esc(c.codeName||c.customerName||'本筆')+' 中間僅 '+Math.max(0,(cs-pe)*30)+' 分鐘，建議確認車程</div>')} } });
+      conf.innerHTML = alerts.slice(0,10).join('') || '<div class="empty">目前沒有明顯時間重疊；車程以派工卡導航資訊為準。</div>';
+    }
+
+    const map=document.getElementById('adminMapList');
+    if(map){
+      const mapJobs=todayJobs.filter(j=>j.address).sort((a,b)=>String(a.startTime||'').localeCompare(String(b.startTime||'')));
+      map.innerHTML = mapJobs.length ? mapJobs.map(j=>'<div class="admin-map-card"><b>'+esc(j.startTime||'')+' '+esc(j.codeName||j.customerName||'')+'</b><br>工程師：'+esc(j.engineer||'')+'<br>項目：'+esc(j.workItem||'')+'<br>地址：'+esc(j.address||'')+'<br><a target="_blank" href="'+(typeof mapUrl==='function'?mapUrl(j.address):('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(j.address)))+'">開啟地圖</a></div>').join('') : '<div class="empty">今日沒有可顯示的地址資料。</div>';
+    }
+
+    const comp=document.getElementById('adminCompletionContent');
+    if(comp){
+      const total=todayJobs.length;
+      comp.innerHTML = engs.map(e=>{ const list=todayJobs.filter(j=>normEng(j.engineer)===e); const done=list.filter(j=>Array.isArray(j.statusList)&&j.statusList.includes('已確認')).length; const pct=list.length?Math.round(done/list.length*100):0; return '<div class="completion-bar-wrap"><div class="completion-bar-label">'+esc(displayEng(e))+'</div><div class="completion-bar-bg"><div class="completion-bar-fill" style="width:'+pct+'%"></div></div><div class="completion-bar-val">'+done+'/'+list.length+'</div></div>'; }).join('') + (!total?'<div class="empty">今日尚無派工。</div>':'');
+    }
+
+    if(typeof renderAdminHistory==='function') { try{ renderAdminHistory(); }catch(e){} }
+    if(typeof renderAdminDeletedSummary==='function') { try{ renderAdminDeletedSummary(); }catch(e){} }
+  };
+
+  // 讓原本的後台渲染一律改成讀目前 jobs / customers
+  const oldDash = (typeof renderAdminDashboard==='function') ? renderAdminDashboard : null;
+  window.renderAdminDashboard = function(){ if(oldDash){try{oldDash()}catch(e){}} setTimeout(window.refreshAdminV2,0); };
+
+  const oldShowAdmin = (typeof showAdminPage==='function') ? showAdminPage : null;
+  window.showAdminPage = function(){ if(oldShowAdmin){try{oldShowAdmin()}catch(e){}} setTimeout(function(){ try{ if(typeof showAdminSection==='function') showAdminSection('dashboard'); }catch(e){} window.refreshAdminV2(); },50); };
+
+  const oldShowPage = (typeof showPage==='function') ? showPage : null;
+  if(oldShowPage){ window.showPage = function(pageId){ oldShowPage(pageId); if(pageId==='adminPage') setTimeout(window.refreshAdminV2,80); }; }
+  const oldRenderSchedule = (typeof renderSchedule==='function') ? renderSchedule : null;
+  if(oldRenderSchedule){ window.renderSchedule = function(){ const r=oldRenderSchedule.apply(this,arguments); setTimeout(function(){ addReminderButtons(); window.refreshAdminV2(); },60); return r; }; }
+  const oldRenderJobList = (typeof renderJobList==='function') ? renderJobList : null;
+  if(oldRenderJobList){ window.renderJobList = function(){ const r=oldRenderJobList.apply(this,arguments); setTimeout(window.refreshAdminV2,30); return r; }; }
+  const oldSaveJobs = (typeof saveJobs==='function') ? saveJobs : null;
+  if(oldSaveJobs){ window.saveJobs = function(){ const r=oldSaveJobs.apply(this,arguments); setTimeout(window.refreshAdminV2,30); return r; }; }
+
+  window.addReminderButtons = function(){
+    document.querySelectorAll('.job').forEach(card=>{
+      if(card.querySelector('.reminder-btn')) return;
+      const drag=card.getAttribute('ondragstart')||'';
+      const m=drag.match(/dragStart\((\d+)\)/); if(!m) return;
+      const id=m[1]; const actions=card.querySelector('.actions'); if(!actions) return;
+      const btn=document.createElement('button'); btn.className='reminder-btn'; btn.type='button'; btn.textContent='提醒'; btn.title='提醒訊息預覽';
+      btn.setAttribute('onclick','showReminderPreview('+id+',event)');
+      actions.insertBefore(btn, actions.firstChild);
+    });
+  };
+
+  window.findJobById = function(id){ return safeJobs().find(j=>String(j.id)===String(id)); };
+  function weekday(dateStr){ const d=new Date(String(dateStr||'').replace(/-/g,'/')); const arr=['日','一','二','三','四','五','六']; return isNaN(d)?'':arr[d.getDay()]; }
+  function md(dateStr){ const p=String(dateStr||'').split('-'); return p.length>=3 ? (Number(p[1])+'/'+Number(p[2])) : String(dateStr||''); }
+  function money(v){ const s=String(v||'').trim(); if(!s) return ''; const n=Number(s.replace(/,/g,'')); return isNaN(n)?s:(n.toLocaleString('zh-TW')+' 元'); }
+  function reminderMessage(j){
+    const dateLine = (j.date? md(j.date)+'（'+weekday(j.date)+'）':'') + (j.startTime ? ' '+j.startTime : '');
+    return '您好，這邊提醒您有預約\n\n'
+      + '📅 ' + dateLine.trim() + '\n\n'
+      + '🔧 服務內容：\n' + (j.workItem||'') + '\n\n'
+      + '💰 應收款項：\n' + money(j.amount) + '\n\n'
+      + '💳 付款方式：\n' + (j.payment||'') + '\n\n'
+      + '📍 服務地址：\n' + (j.address||'') + '\n\n'
+      + '—\n\n'
+      + '因工程前一日已排定整日行程，\n'
+      + '當日件無法變更時段，\n'
+      + '以上確認後無法臨時變更喔！\n\n'
+      + '如有其他問題或需改約其他日期，\n'
+      + '請提早通知。\n\n'
+      + '確認正確請再傳個貼圖～\n'
+      + '謝謝！😊';
+  }
+  window.showReminderPreview = function(id,ev){ if(ev){ev.preventDefault();ev.stopPropagation();} const j=window.findJobById(id); if(!j){alert('找不到這筆派工資料');return;} const modal=document.getElementById('reminderModal'); const txt=document.getElementById('reminderText'); if(txt) txt.value=reminderMessage(j); if(modal) modal.style.display='flex'; setTimeout(()=>txt&&txt.focus(),60); };
+  window.closeReminderModal=function(){ const m=document.getElementById('reminderModal'); if(m) m.style.display='none'; };
+  window.copyReminderText=async function(){ const txt=document.getElementById('reminderText'); if(!txt) return; txt.select(); try{ await navigator.clipboard.writeText(txt.value); alert('已複製提醒內容'); }catch(e){ document.execCommand('copy'); alert('已複製提醒內容'); } };
+
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') window.closeReminderModal(); });
+  document.addEventListener('DOMContentLoaded',()=>{ setTimeout(function(){ addReminderButtons(); refreshAdminV2(); },300); });
+  setInterval(function(){ const ap=document.getElementById('adminPage'); if(ap&&ap.classList.contains('active')) refreshAdminV2(); addReminderButtons(); },1500);
+})();
+</script>
 
 </body>
 </html>
