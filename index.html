@@ -5771,5 +5771,68 @@ showAdminPage = function(){
 })();
 </script>
 
+
+
+<!-- ===== 車程正式版：首次自動即時更新 + 5分鐘智慧快取（手機/電腦共用） ===== -->
+<style>
+.realtime-route-btn{background:#eef2f7!important;color:#334155!important;border:1px solid #cbd5e1!important;border-radius:999px!important;padding:2px 8px!important;font-size:11px!important;margin-left:4px!important;cursor:pointer!important;white-space:nowrap!important}
+.realtime-route-btn:hover{background:#e2e8f0!important}
+.realtime-route-meta{display:inline-block;margin-left:5px;color:#64748b;font-size:11px;white-space:nowrap}
+.realtime-route-stale{color:#a16207!important}
+.route-cache-actions{background:#475569!important;color:#fff!important;border-radius:999px!important;padding:6px 12px!important;font-size:12px!important}
+@media(max-width:900px){.realtime-route-btn{font-size:12px!important;padding:3px 8px!important}.realtime-route-meta{font-size:12px!important;display:block;margin:4px 0 0}}
+</style>
+<script>
+(function(){
+  const FRESH_MS = 5 * 60 * 1000; // 5分鐘內視為即時資料
+  const PAIR_KEY = 'paigong_osrm_route_pair_cache_v2';
+  const GAS_KEY = 'paigong_google_gas_route_cache_v1';
+  let routeQueue = [];
+  let routeBusy = false;
+  const runningKeys = new Set();
+
+  function safe(v){return String(v==null?'':v).trim();}
+  function esc(v){return String(v==null?'':v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');}
+  function clean(v){try{if(typeof cleanAddressForLocate==='function')return cleanAddressForLocate(v);if(typeof cleanMapAddress==='function')return cleanMapAddress(v);}catch(e){}return safe(v);}
+  function allJobs(){try{if(Array.isArray(window.jobs))return window.jobs;}catch(e){}try{if(Array.isArray(jobs))return jobs;}catch(e){}return [];}
+  function findJob(id){id=String(id||'');return allJobs().find(j=>String(j&&j.id)===id)||null;}
+  function readJson(k){try{return JSON.parse(localStorage.getItem(k)||'{}')||{};}catch(e){return {};}}
+  function writeJson(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+  function pairKey(from,to){return clean(from)+' → '+clean(to);}
+  function gasKey(from,to){return clean(from)+'|'+clean(to);}
+  function mapUrl(from,to){try{if(typeof directionUrl==='function')return directionUrl(from,to);}catch(e){}return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving';}
+  function valid(info){return info && info.status==='success' && (safe(info.durationText)||Number.isFinite(Number(info.durationMinutes)));}
+  function normInfo(info,from,to){return {status:'success',fromClean:clean(from),toClean:clean(to),durationText:safe(info.durationText)||((Number(info.durationMinutes)||0)+' 分鐘'),distanceText:safe(info.distanceText)||((Number(info.distanceKm)||0)+' km'),durationMinutes:Number(info.durationMinutes||0),distanceKm:Number(info.distanceKm||0),updatedAt:info.updatedAt||new Date().toISOString(),source:info.source||'route'};}
+  function isFresh(info){if(!info||!info.updatedAt)return false;const t=new Date(info.updatedAt).getTime();return Number.isFinite(t) && (Date.now()-t)<=FRESH_MS;}
+  function fmtTime(iso){if(!iso)return '';const d=new Date(iso);if(isNaN(d))return '';return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+  function cacheFromJob(jobId,from,to){const j=jobId?findJob(jobId):null;if(!j||!j.routeCache)return null;const c=j.routeCache;return (c.fromClean===clean(from)&&c.toClean===clean(to)&&valid(c))?c:null;}
+  function cacheFromStorage(from,to){const pc=readJson(PAIR_KEY);const gc=readJson(GAS_KEY);const c=pc[pairKey(from,to)]||gc[gasKey(from,to)]||null;return valid(c)?c:null;}
+  function getCached(from,to,jobId){return cacheFromJob(jobId,from,to)||cacheFromStorage(from,to);}
+  function saveCache(from,to,info,jobId){if(!valid(info))return null;const obj=normInfo(info,from,to);const pc=readJson(PAIR_KEY);pc[pairKey(from,to)]=obj;writeJson(PAIR_KEY,pc);const j=jobId?findJob(jobId):null;if(j){const old=j.routeCache||{};const changed=old.fromClean!==obj.fromClean||old.toClean!==obj.toClean||old.durationText!==obj.durationText||old.distanceText!==obj.distanceText||old.updatedAt!==obj.updatedAt;if(changed){j.routeCache=obj;clearTimeout(window.__routeAutoSaveTimer);window.__routeAutoSaveTimer=setTimeout(()=>{try{if(typeof saveJobs==='function')saveJobs();}catch(e){}},500);}}
+    return obj;
+  }
+  function isBox(tag){return tag.classList.contains('route-info')||tag.classList.contains('osrm-route-box');}
+  function buttonHtml(jobId,label){return jobId?'<button type="button" class="realtime-route-btn" onclick="recalcRouteCache(\''+esc(jobId)+'\',event)">'+esc(label||'即時更新')+'</button>':'<button type="button" class="realtime-route-btn" onclick="calcOneRouteFromButton(this,event)">'+esc(label||'即時更新')+'</button>';}
+  function renderCached(tag,info,from,to){const box=isBox(tag);const prefix=tag.dataset.prefix||'車程';const gap=tag.dataset.gap===''||tag.dataset.gap==null?null:Number(tag.dataset.gap);const mins=Number(info.durationMinutes||0);const warn=gap!==null&&!Number.isNaN(gap)&&mins>gap;tag.classList.remove('err','ok','warn');tag.classList.add(box?'osrm-route-box':'osrm-route-inline',warn?'warn':'ok');const nav=tag.dataset.nav||mapUrl(from,to);const jobId=tag.dataset.jobId||'';const fresh=isFresh(info);const meta=info.updatedAt?'<span class="realtime-route-meta '+(fresh?'':'realtime-route-stale')+'">'+(fresh?'即時於 ':'快取於 ')+esc(fmtTime(info.updatedAt))+'</span>':'';const warnText=warn?' ⚠️ 空檔'+gap+'分鐘，可能趕不上':'';tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：'+esc(info.durationText||'已計算')+(info.distanceText?'（'+esc(info.distanceText)+'）':'')+warnText+' <a href="'+nav+'" target="_blank">導航</a> '+buttonHtml(jobId,'即時更新')+meta;}
+  function renderWorking(tag,keepOld){const box=isBox(tag);const prefix=tag.dataset.prefix||'車程';tag.classList.remove('ok','warn','err');tag.classList.add(box?'osrm-route-box':'osrm-route-inline');if(keepOld && tag.innerHTML){tag.innerHTML += ' <span class="realtime-route-meta">背景更新中…</span>';return;}tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：即時更新中…';}
+  function renderPending(tag){const box=isBox(tag);const prefix=tag.dataset.prefix||'車程';const nav=tag.dataset.nav||mapUrl(tag.dataset.from||'',tag.dataset.to||'');const jobId=tag.dataset.jobId||'';tag.classList.remove('ok','warn','err');tag.classList.add(box?'osrm-route-box':'osrm-route-inline');tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：即時更新中… '+buttonHtml(jobId,'即時更新')+' <a href="'+nav+'" target="_blank">開地圖</a>';}
+  function renderErr(tag,msg,from,to){const box=isBox(tag);const prefix=tag.dataset.prefix||'車程';const nav=tag.dataset.nav||mapUrl(from,to);const jobId=tag.dataset.jobId||'';tag.classList.remove('ok','warn');tag.classList.add('err',box?'osrm-route-box':'osrm-route-inline');tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：'+esc(msg||'無法計算')+' <a href="'+nav+'" target="_blank">開地圖</a> '+buttonHtml(jobId,'再試一次');}
+  function tagKey(tag){return clean(tag.dataset.from||'')+'|'+clean(tag.dataset.to||'')+'|'+(tag.dataset.jobId||'');}
+  function enqueue(tag,force){const from=clean(tag.dataset.from||'');const to=clean(tag.dataset.to||'');if(!from||!to)return;const key=tagKey(tag);if(!force && runningKeys.has(key))return;runningKeys.add(key);routeQueue.push({tag,force:!!force,key});processQueue();}
+  async function processQueue(){if(routeBusy)return;routeBusy=true;while(routeQueue.length){const item=routeQueue.shift();try{await calculateTag(item.tag,item.force);}catch(e){console.warn('自動即時車程失敗',e);}finally{runningKeys.delete(item.key);}await new Promise(r=>setTimeout(r,350));}routeBusy=false;}
+  async function calculateTag(tag,force){const from=clean(tag.dataset.from||'');const to=clean(tag.dataset.to||'');if(!from||!to)return;const jobId=tag.dataset.jobId||'';const cached=getCached(from,to,jobId);if(!force && cached && isFresh(cached)){renderCached(tag,cached,from,to);return;}if(cached && !force){renderCached(tag,cached,from,to);renderWorking(tag,true);}else{renderWorking(tag,false);}let info=null;try{if(typeof window.fetchDrivingInfo==='function')info=await window.fetchDrivingInfo(from,to);}catch(e){console.warn('即時車程查詢失敗',e);}if(valid(info)){const saved=saveCache(from,to,info,jobId)||normInfo(info,from,to);renderCached(tag,saved,from,to);}else{if(cached){renderCached(tag,cached,from,to);}else{const msg=info&&info.status==='geocode_fail'?'地址無法定位':'無法計算路線';renderErr(tag,msg,from,to);}}
+  }
+  function handleTag(tag,force){const from=clean(tag.dataset.from||'');const to=clean(tag.dataset.to||'');if(!from||!to)return;const jobId=tag.dataset.jobId||'';const cached=getCached(from,to,jobId);if(force){enqueue(tag,true);return;}if(cached){renderCached(tag,cached,from,to);if(!isFresh(cached))enqueue(tag,false);}else{renderPending(tag);enqueue(tag,false);}}
+  window.updateTravelTags = async function(force){const tags=Array.from(document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to], .osrm-route-box[data-from][data-to], .osrm-route-inline[data-from][data-to]'));for(const tag of tags){handleTag(tag,!!force);}}
+  window.calcOneRouteFromButton=function(btn,ev){if(ev){ev.preventDefault();ev.stopPropagation();}const tag=btn.closest('.travel-tag,.route-info,.osrm-route-box,.osrm-route-inline');if(tag)handleTag(tag,true);};
+  window.recalcRouteCache=function(jobId,ev){if(ev){ev.preventDefault();ev.stopPropagation();}const selector='.route-info[data-job-id="'+String(jobId).replaceAll('"','\\"')+'"], .osrm-route-box[data-job-id="'+String(jobId).replaceAll('"','\\"')+'"]';document.querySelectorAll(selector).forEach(tag=>handleTag(tag,true));};
+  window.batchCalculateVisibleRoutes=function(){if(!confirm('要即時更新目前畫面上的車程嗎？\n會一筆一筆背景更新，不會清掉原本快取。'))return;window.updateTravelTags(true);};
+  function addButton(){const toolbar=document.querySelector('#schedulePage .toolbar')||document.querySelector('.toolbar');if(!toolbar)return;let b=document.getElementById('batchRouteCalcBtn');if(!b){b=document.createElement('button');b.id='batchRouteCalcBtn';b.type='button';b.className='route-cache-actions';toolbar.appendChild(b);}b.textContent='即時更新畫面車程';b.onclick=window.batchCalculateVisibleRoutes;}
+  const oldRender=window.renderSchedule;if(oldRender&&!oldRender.__autoRealtimeRouteWrapped){const w=function(){const r=oldRender.apply(this,arguments);setTimeout(()=>{try{window.updateTravelTags(false);}catch(e){}},180);return r;};w.__autoRealtimeRouteWrapped=true;window.renderSchedule=w;}
+  const oldAdmin=window.refreshAdminV2;if(oldAdmin&&!oldAdmin.__autoRealtimeRouteWrapped){const w=function(){const r=oldAdmin.apply(this,arguments);setTimeout(()=>{try{window.updateTravelTags(false);}catch(e){}},200);return r;};w.__autoRealtimeRouteWrapped=true;window.refreshAdminV2=w;}
+  setTimeout(()=>{addButton();try{if(typeof renderSchedule==='function')renderSchedule();}catch(e){}try{window.updateTravelTags(false);}catch(e){}},1200);
+})();
+</script>
+
 </body>
 </html>
