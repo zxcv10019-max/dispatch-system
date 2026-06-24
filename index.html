@@ -1276,7 +1276,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 
 /* ===== 2026-06 mobile engineer-only two-day dispatch view ===== */
 @media(max-width:900px){
-  body:not(.login-required):not(.no-permission){
+  body.engineer-lock-mode{
     height:auto !important;
     min-height:100% !important;
     overflow-y:auto !important;
@@ -1285,30 +1285,30 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     background:#f3f3f3 !important;
   }
 
-  /* 手機版工程帳號只顯示兩日派工，不顯示其他資料/頁籤 */
-  body:not(.login-required):not(.no-permission) .tabs{
+  /* 手機版工程帳號（viewer）只顯示兩日派工，不顯示其他資料/頁籤；admin / editor 不受影響，跟電腦版一樣 */
+  body.engineer-lock-mode .tabs{
     display:none !important;
   }
 
-  body:not(.login-required):not(.no-permission) .page{
+  body.engineer-lock-mode .page{
     display:none !important;
   }
 
-  body:not(.login-required):not(.no-permission) #schedulePage{
+  body.engineer-lock-mode #schedulePage{
     display:block !important;
     height:auto !important;
     min-height:0 !important;
     overflow:visible !important;
   }
 
-  body:not(.login-required):not(.no-permission) #schedulePage > .toolbar,
-  body:not(.login-required):not(.no-permission) #schedulePage > .summary,
-  body:not(.login-required):not(.no-permission) #schedulePage > .engineer-code-note,
-  body:not(.login-required):not(.no-permission) #scheduleWrap{
+  body.engineer-lock-mode #schedulePage > .toolbar,
+  body.engineer-lock-mode #schedulePage > .summary,
+  body.engineer-lock-mode #schedulePage > .engineer-code-note,
+  body.engineer-lock-mode #scheduleWrap{
     display:none !important;
   }
 
-  body:not(.login-required):not(.no-permission) #myTodayPanel{
+  body.engineer-lock-mode #myTodayPanel{
     display:block !important;
     margin:12px !important;
     padding:14px !important;
@@ -1887,7 +1887,7 @@ async function applyRemoteData(data){
 
   isApplyingRemote = true;
   if(remoteJobs) jobs = remoteJobs;
-  if(remoteCustomers) customers = remoteCustomers;
+  if(remoteCustomers){ customers = remoteCustomers; sortCustomersByCode(); }
   localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || []));
   localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || []));
   updateCustomerCodeList();
@@ -1956,6 +1956,8 @@ function applyRoleUI(){
   const readOnly = access && !canEdit();
   document.body.classList.toggle("no-permission", loggedIn && !access);
   document.body.classList.toggle("viewer-mode", !!readOnly);
+  // 手機版「兩日派工」鎖定畫面只給工程帳號（viewer）用，admin / editor 後台要跟電腦版一樣完整
+  document.body.classList.toggle("engineer-lock-mode", currentRole === "viewer");
   if(currentUser){
     setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, access ? (canEdit()?"ok":"wait") : "err");
   }
@@ -2122,7 +2124,15 @@ function saveJobs(){
   localStorage.setItem(JOBS_KEY,JSON.stringify(jobs));
   queueCloudSave();
 }
+// 客戶資料依「客戶編號」A-Z 排序（數字也會依大小排，例如 A2 會排在 A10 前面）
+function compareCustomerCode(a,b){
+  return String(a||"").localeCompare(String(b||""), 'zh-Hant', {numeric:true, sensitivity:'base'});
+}
+function sortCustomersByCode(){
+  customers.sort((a,b)=>compareCustomerCode(a.customerNo, b.customerNo));
+}
 function saveCustomers(){
+  sortCustomersByCode();
   localDirty = true;
   lastLocalCustomersCount = (customers||[]).length;
   localStorage.setItem(CUSTOMERS_KEY,JSON.stringify(customers));
@@ -3124,7 +3134,7 @@ function renderCustomers(){
   const list=customers.filter(c=>{
     const text=`${c.customerNo||""} ${c.personName||""} ${c.fullName||""} ${c.shortName||""} ${c.mobile||""} ${c.deliveryAddress||""}`.toLowerCase();
     return terms.length===0 || terms.every(t=>text.includes(t));
-  });
+  }).sort((a,b)=>compareCustomerCode(a.customerNo, b.customerNo));
 
   const countEl=document.getElementById("customerSearchCount");
   if(countEl){
@@ -4202,7 +4212,7 @@ document.addEventListener("click", function(e){
   window.renderMyTodayPanel = renderMobileTwoDayPanel;
 
   function forceMobileOnlyView(){
-    if(window.innerWidth <= 900 && document.body && !document.body.classList.contains("login-required") && !document.body.classList.contains("no-permission")){
+    if(window.innerWidth <= 900 && document.body && document.body.classList.contains("engineer-lock-mode")){
       document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
       const schedule = document.getElementById("schedulePage");
       if(schedule) schedule.classList.add("active");
