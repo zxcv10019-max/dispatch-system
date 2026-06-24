@@ -2286,10 +2286,12 @@ function cleanAddressForLocate(address){
   s = s.replace(/[（(][^）)]*[）)]/g, "");       // 清除 (A11)、(董牛山河)、（備註）
   s = s.replace(/[【\[][^】\]]*[】\]]/g, "");  // 清除【備註】、[備註]
   s = s.replace(/[,，、;；].*$/g, "");          // 逗號後通常是備註
+  s = s.replace(/["'’‘]/g, "");               // 清除匯入時混入的引號
   s = s.replace(/號\s*\d+\s*[Ff樓](?:[-之]\d+)?/g, "號"); // 303號12F-2 / 303號12樓
   s = s.replace(/號\s*[A-Za-zＡ-Ｚａ-ｚ]\s*\d*/g, "號");    // 231號A11
   s = s.replace(/號\s*地下\s*\d*\s*樓?/g, "號");
   s = s.replace(/(\d+)\s*樓/g, "");
+  s = s.replace(/(\d+)[-－之]\d+號/g, "$1號"); // 57-18號 / 57之18號 -> 57號
   s = s.replace(/\s+/g, "");
   return s.trim();
 }
@@ -5076,12 +5078,32 @@ showAdminPage = function(){
     const cleaned = cleanAddr(addr);
     const list = [];
     function add(x){ x=safeText(x); if(x && !list.includes(x)) list.push(x); }
+    function roadOnly(x){
+      x = safeText(x);
+      if(!x) return '';
+      // 保留到路/街/道/巷/弄：OSM 找不到門牌時，至少可定位到道路中心附近
+      const m = x.match(/^(.+?(?:大道|路|街|道|巷|弄))/);
+      return m ? m[1] : '';
+    }
+    function districtOnly(x){
+      x = safeText(x);
+      const m = x.match(/^(.+?[縣市].+?[區鄉鎮市])/);
+      return m ? m[1] : '';
+    }
+    const normalizedNo = cleaned.replace(/(\d+)[-－之]\d+號/g, '$1號');
     add(cleaned);
-    add(original);
-    // 再做更保守的版本：定位只留到「號」，避免樓層/戶別/社區名造成失敗
-    const toNo = cleaned.match(/^(.+?號)/);
+    add(normalizedNo);
+    // 只留到「號」，避免樓層/戶別/社區名造成失敗
+    const toNo = normalizedNo.match(/^(.+?號)/);
     if(toNo) add(toNo[1]);
-    // 若有台灣縣市區路名巷弄號，優先讓 Nominatim 用乾淨地址查詢
+    // OSM 對台灣門牌不完整：加上路名/區域 fallback，至少不會整段失敗
+    add(roadOnly(normalizedNo));
+    add(roadOnly(cleaned));
+    add(districtOnly(normalizedNo));
+    // 原始地址最後再試，避免備註干擾
+    add(original);
+    // 英文 Taiwan 對 Nominatim 有時比較好搜
+    [...list].forEach(q=>add(q + ' Taiwan'));
     return list;
   }
 
