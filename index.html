@@ -4869,7 +4869,7 @@ showAdminPage = function(){
 .admin-map-card b{color:#0066cc}.admin-map-card a{color:#0066cc;text-decoration:underline;font-weight:bold}
 @media(max-width:900px){#reminderModal textarea{min-height:58vh;font-size:14px}.reminder-btn{padding:4px 8px!important}}
 </style>
-<div id="reminderModal">
+<div id="reminderModal" onclick="if(event.target.id==='reminderModal')closeReminderModal()">
   <div class="reminder-box">
     <div class="reminder-head"><span>📋 提醒訊息預覽</span><button class="close-x" onclick="closeReminderModal()">×</button></div>
     <textarea id="reminderText"></textarea>
@@ -4971,7 +4971,7 @@ showAdminPage = function(){
       const drag=card.getAttribute('ondragstart')||'';
       const m=drag.match(/dragStart\((\d+)\)/); if(!m) return;
       const id=m[1]; const actions=card.querySelector('.actions'); if(!actions) return;
-      const btn=document.createElement('button'); btn.className='reminder-btn'; btn.type='button'; btn.textContent='提醒'; btn.title='提醒訊息預覽';
+      const btn=document.createElement('button'); btn.className='reminder-btn'; btn.type='button'; btn.textContent='📋提醒'; btn.title='提醒訊息預覽';
       btn.setAttribute('onclick','showReminderPreview('+id+',event)');
       actions.insertBefore(btn, actions.firstChild);
     });
@@ -5010,349 +5010,149 @@ showAdminPage = function(){
 
 
 
-<!-- ===== 免 API Google Maps 嵌入式路線視窗：只顯示地圖車程，不抓取車程數字 ===== -->
+
+
+<!-- ===== 免 Google API 車程：Nominatim 地址轉經緯度 + OSRM 路線計算 ===== -->
 <style>
-.embed-map-btn{
-  display:inline-block;
-  margin-top:4px;
-  padding:3px 8px;
-  border-radius:999px;
-  border:1px solid #9ed0f5;
-  background:#eef7ff;
-  color:#155a8a;
-  font-size:12px;
-  font-weight:bold;
-  cursor:pointer;
-  text-decoration:none;
-}
-.embed-map-btn:hover{background:#dff0ff;}
-.embed-map-panel{
-  display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.45);
-  z-index:99999;
-  align-items:center;
-  justify-content:center;
-  padding:18px;
-}
-.embed-map-panel.active{display:flex;}
-.embed-map-card{
-  width:min(920px,96vw);
-  max-height:92vh;
-  background:#fff;
-  border-radius:12px;
-  box-shadow:0 10px 28px rgba(0,0,0,.28);
-  overflow:hidden;
-  display:flex;
-  flex-direction:column;
-}
-.embed-map-head{
-  background:#2f3542;
-  color:#fff;
-  padding:12px 14px;
-  display:flex;
-  justify-content:space-between;
-  gap:8px;
-  align-items:center;
-  font-weight:bold;
-}
-.embed-map-head button{
-  background:#fff;
-  color:#2f3542;
-  border-radius:999px;
-  padding:5px 12px;
-  font-weight:bold;
-}
-.embed-map-body{padding:12px;}
-.embed-map-note{
-  font-size:13px;
-  color:#555;
-  line-height:1.5;
-  margin-bottom:8px;
-}
-#freeEmbedMapFrame{
-  width:100%;
-  height:520px;
-  border:0;
-  border-radius:8px;
-  background:#f3f3f3;
-}
-@media(max-width:900px){#freeEmbedMapFrame{height:420px}.embed-map-card{width:98vw}.embed-map-body{padding:8px}}
-</style>
-<div id="freeEmbedMapPanel" class="embed-map-panel" onclick="if(event.target.id==='freeEmbedMapPanel')closeEmbedMap()">
-  <div class="embed-map-card">
-    <div class="embed-map-head">
-      <span id="freeEmbedMapTitle">Google 地圖車程</span>
-      <button onclick="closeEmbedMap()">關閉</button>
-    </div>
-    <div class="embed-map-body">
-      <div class="embed-map-note">這是免 API 的 Google Maps 嵌入模式，可直接查看路線與預估車程；但網頁無法讀取地圖裡的分鐘數。</div>
-      <iframe id="freeEmbedMapFrame" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-    </div>
-  </div>
-</div>
-<script>
-// ===== 免 API 地圖路線：覆寫原本需要 Routes API 的車程顯示 =====
-(function(){
-  function safeText(v){ return String(v||'').trim(); }
-  function cleanAddr(v){
-    try{ return (typeof cleanMapAddress==='function' ? cleanMapAddress(v) : safeText(v)); }
-    catch(e){ return safeText(v); }
-  }
-  function escAttr(v){
-    return String(v||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
-  }
-  function makeEmbedUrl(origin,destination){
-    const from = cleanAddr(origin);
-    const to = cleanAddr(destination);
-    let q = '';
-    if(from && to) q = from + ' to ' + to;
-    else q = to || from;
-    return 'https://maps.google.com/maps?q=' + encodeURIComponent(q) + '&output=embed&t=';
-  }
-  window.freeEmbedMapUrl = makeEmbedUrl;
-  window.openEmbedMap = function(origin,destination,title){
-    const panel = document.getElementById('freeEmbedMapPanel');
-    const frame = document.getElementById('freeEmbedMapFrame');
-    const head = document.getElementById('freeEmbedMapTitle');
-    if(!panel || !frame) return;
-    frame.src = makeEmbedUrl(origin,destination);
-    if(head) head.textContent = title || (destination ? 'Google 地圖車程 / 路線' : 'Google 地圖');
-    panel.classList.add('active');
-  };
-  window.closeEmbedMap = function(){
-    const panel = document.getElementById('freeEmbedMapPanel');
-    const frame = document.getElementById('freeEmbedMapFrame');
-    if(panel) panel.classList.remove('active');
-    if(frame) frame.src = 'about:blank';
-  };
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape') window.closeEmbedMap && window.closeEmbedMap(); });
-  document.addEventListener('click', function(e){
-    const btn = e.target.closest && e.target.closest('.embed-route-btn');
-    if(!btn) return;
-    e.preventDefault();
-    window.openEmbedMap(btn.dataset.origin || '', btn.dataset.destination || '', btn.dataset.title || 'Google 地圖車程 / 路線');
-  });
-
-  function routeButtonHtml(origin,destination,label){
-    if(!destination && !origin) return '<span style="font-size:11px;color:#999">未填地址</span>';
-    return '<button type="button" class="embed-map-btn embed-route-btn" data-origin="'+escAttr(origin)+'" data-destination="'+escAttr(destination)+'" data-title="'+escAttr(label||'Google 地圖車程 / 路線')+'">🗺️ '+escAttr(label||'查看地圖車程')+'</button>';
-  }
-
-  window.routeTagHtml = function(from,to,label='車程',extra=''){
-    if(!from || !to) return '<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>';
-    return '<span class="travel-tag no-api-route" '+(extra||'')+'>'+routeButtonHtml(from,to,label || '查看地圖車程')+'</span>';
-  };
-
-  window.nextRouteHtml = function(j){
-    if(!j || !j.address) return '';
-    const next = (typeof getNextJob==='function') ? getNextJob(j) : null;
-    if(!next){
-      return '<div class="route-info ok">🏁 本日最後一站　'+routeButtonHtml('', j.address, '從目前位置查看地圖')+'</div>';
-    }
-    return '<div class="route-info ok">🚗 下一站：'+routeButtonHtml(j.address, next.address, '查看地圖車程')+'</div>';
-  };
-
-  window.updateTravelTags = function(){
-    document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to]').forEach(function(tag){
-      const from = tag.dataset.from || '';
-      const to = tag.dataset.to || '';
-      const label = tag.dataset.prefix || '查看地圖車程';
-      tag.classList.remove('warn');
-      tag.classList.add('ok');
-      tag.innerHTML = routeButtonHtml(from,to,label);
-      tag.removeAttribute('data-from');
-      tag.removeAttribute('data-to');
-    });
-  };
-
-  const originalRenderAdminMap = window.renderAdminMap;
-  window.renderAdminMap = function(){
-    const box = document.getElementById('adminMapList');
-    if(!box){ if(originalRenderAdminMap) originalRenderAdminMap(); return; }
-    const today = (typeof adminDateToday==='function') ? adminDateToday() : new Date().toISOString().slice(0,10);
-    const isHold = (typeof isHoldJob==='function') ? isHoldJob : function(j){return !!j.isHold || !j.date;};
-    const norm = (typeof normalizeEngineerName==='function') ? normalizeEngineerName : function(e){return e||'';};
-    const disp = (typeof displayEngineer==='function') ? displayEngineer : function(e){return e||'';};
-    const engs = (typeof engineers!=='undefined' && engineers.length) ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
-    const listAll = (window.jobs || jobs || []).filter(function(j){return j && j.date===today && !isHold(j) && j.address;});
-    if(!listAll.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px">今日無有地址的派工。</div>'; return; }
-    const grouped = {}; engs.forEach(function(e){ grouped[e]=[]; });
-    listAll.forEach(function(j){ const e=norm(j.engineer||''); if(!grouped[e]) grouped[e]=[]; grouped[e].push(j); });
-    Object.keys(grouped).forEach(function(e){ grouped[e].sort(function(a,b){ return String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')); }); });
-    let html='<div style="width:100%;display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:10px;align-items:start">';
-    engs.forEach(function(e){
-      const list=grouped[e]||[];
-      html+='<div style="background:#fff;border:1px solid #d6e4f0;border-radius:10px;padding:10px;min-height:90px">'
-        + '<div style="font-weight:bold;color:#2f3542;margin-bottom:8px;border-bottom:1px solid #eef2f7;padding-bottom:6px">'
-        + escAttr(disp(e)+' '+e)+'｜'+list.length+' 件</div>';
-      if(!list.length){ html+='<div style="color:#999;font-size:13px;padding:8px 0">今日無有地址派工</div>'; }
-      else{
-        html += list.map(function(j,idx){
-          const prev = idx>0 ? list[idx-1] : null;
-          const title = escAttr((j.startTime||j.time||'')+' '+(j.codeName||j.customerName||''));
-          const item = escAttr(j.workItem||'');
-          const addr = escAttr(j.address||'');
-          const single = routeButtonHtml('', j.address, '查看位置');
-          const route = prev && prev.address ? routeButtonHtml(prev.address, j.address, '上一站→本站車程') : '';
-          return '<div style="background:#f8fbff;border:1px solid #cfe2f3;border-radius:8px;padding:8px;margin-bottom:8px;font-size:13px;line-height:1.55">'
-            + '<div style="font-weight:bold;color:#0066cc">'+title+'</div>'
-            + '<div>項目：'+item+'</div>'
-            + '<div>地址：'+addr+'</div>'
-            + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">'+single+route+'</div>'
-            + '</div>';
-        }).join('');
-      }
-      html+='</div>';
-    });
-    html+='</div>';
-    box.innerHTML=html;
-  };
-
-  const oldRefresh = window.refreshAdminV2;
-  window.refreshAdminV2 = function(){
-    if(oldRefresh){ try{ oldRefresh(); }catch(e){ console.warn(e); } }
-    const map = document.getElementById('adminMapList');
-    const mapSection = document.getElementById('adminMapSection');
-    if(map && mapSection && mapSection.style.display !== 'none') setTimeout(window.renderAdminMap,0);
-    setTimeout(window.updateTravelTags, 0);
-  };
-})();
-</script>
-
-</body>
-</html>
-<!-- ===== GAS 車程文字模式：用 Google Apps Script 當後端，前台只顯示時間文字 ===== -->
-<style>
-.gas-route-box{margin-top:4px;font-size:11px;line-height:1.45;border-radius:6px;padding:4px 6px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;display:block}
-.gas-route-box.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
-.gas-route-box.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
-.gas-route-box.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
-.gas-route-box a{color:inherit;text-decoration:underline;font-weight:bold;margin-left:4px}
-.gas-route-inline{display:inline-block;padding:2px 7px;border-radius:10px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;font-size:11px;margin-left:3px;line-height:1.5}
-.gas-route-inline.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
-.gas-route-inline.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
-.gas-route-inline.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
-.gas-set-btn{background:#40739e!important;color:#fff!important;border:0;border-radius:999px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px}
+.osrm-route-box{margin-top:4px;font-size:11px;line-height:1.45;border-radius:6px;padding:4px 6px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;display:block}
+.osrm-route-box.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.osrm-route-box.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.osrm-route-box.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
+.osrm-route-box a{color:inherit;text-decoration:underline;font-weight:bold;margin-left:4px}
+.osrm-route-inline{display:inline-block;padding:2px 7px;border-radius:10px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;font-size:11px;margin-left:3px;line-height:1.5}
+.osrm-route-inline.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.osrm-route-inline.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.osrm-route-inline.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
+.osrm-small-btn{display:inline-block;background:#40739e!important;color:#fff!important;border:0;border-radius:999px;padding:2px 7px;font-size:11px;cursor:pointer;margin-left:4px;text-decoration:none!important}
+@media(max-width:900px){.osrm-route-box{font-size:13px;padding:7px 8px}.osrm-route-inline{font-size:12px}}
 </style>
 <script>
-// ===== GAS 車程模式：取代 iframe / Routes API，直接顯示「XX分鐘（XXkm）」文字 =====
+// ===== OSRM 車程模式：完全不使用 Google API Key =====
 (function(){
-  const GAS_ROUTE_URL_KEY = 'paigong_gas_route_web_app_url';
-  const gasRouteCache = {};
+  const GEO_CACHE_KEY = 'paigong_osm_geocode_cache_v1';
+  const routeCache = {};
+  let geoCache = {};
+  try{ geoCache = JSON.parse(localStorage.getItem(GEO_CACHE_KEY)||'{}') || {}; }catch(e){ geoCache = {}; }
 
   function safeText(v){ return String(v||'').trim(); }
   function esc(v){ return String(v||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
   function cleanAddr(v){ try{ return typeof cleanMapAddress==='function' ? cleanMapAddress(v) : safeText(v); }catch(e){ return safeText(v); } }
-  function getGasUrl(){ return safeText(localStorage.getItem(GAS_ROUTE_URL_KEY)||''); }
-  function setGasUrl(url){ localStorage.setItem(GAS_ROUTE_URL_KEY, safeText(url)); }
-  function mapDirUrl(from,to){ try{ return typeof directionUrl==='function' ? directionUrl(from,to) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'); }catch(e){ return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'; } }
-  function parseDurationMinutes(text){
-    const s = String(text||'');
-    let mins = 0;
-    const h = s.match(/(\d+(?:\.\d+)?)\s*(小時|hour|hours|hr|hrs)/i);
-    const m = s.match(/(\d+(?:\.\d+)?)\s*(分鐘|分|minute|minutes|min|mins)/i);
-    if(h) mins += Math.round(parseFloat(h[1])*60);
-    if(m) mins += Math.round(parseFloat(m[1]));
-    if(!mins){ const n=s.match(/\d+/); if(n) mins=parseInt(n[0],10); }
-    return mins || null;
+  function mapDirUrl(from,to){
+    try{ return typeof directionUrl==='function' ? directionUrl(from,to) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'); }
+    catch(e){ return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'; }
   }
-  function buildGasUrl(from,to){
-    const base = getGasUrl();
-    if(!base) return '';
-    const sep = base.includes('?') ? '&' : '?';
-    return base + sep + 'from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+  function fmtMin(sec){
+    const m = Math.max(1, Math.round(Number(sec||0)/60));
+    if(m >= 60){ const h=Math.floor(m/60), r=m%60; return h+'小時'+(r?(' '+r+'分鐘'):''); }
+    return m+' 分鐘';
   }
-
-  window.setGasRouteWebAppUrl = function(){
-    const old = getGasUrl();
-    const input = prompt('請貼上 Google Apps Script Web App 網址：\n例：https://script.google.com/macros/s/xxxxx/exec', old);
-    if(input===null) return;
-    if(!safeText(input)){ localStorage.removeItem(GAS_ROUTE_URL_KEY); alert('已清除 GAS 車程網址'); return; }
-    setGasUrl(input);
-    alert('已儲存 GAS 車程網址，會重新計算畫面上的車程。');
-    if(typeof updateTravelTags==='function') updateTravelTags();
-    if(typeof refreshAdminV2==='function') refreshAdminV2();
-  };
-  window.getGasRouteWebAppUrl = getGasUrl;
+  function fmtKm(meters){ return (Number(meters||0)/1000).toFixed(1)+' km'; }
+  function parseLonLat(s){
+    const m = String(s||'').trim().match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if(!m) return null;
+    const a=Number(m[1]), b=Number(m[2]);
+    if(!Number.isFinite(a)||!Number.isFinite(b)) return null;
+    // OSRM 需要 lon,lat。台灣常見 lon 約 120、lat 約 24；若看起來像 lat,lon 就自動交換。
+    if(Math.abs(a)<=90 && Math.abs(b)>90) return {lon:b, lat:a, label:s};
+    return {lon:a, lat:b, label:s};
+  }
+  async function geocodeAddress(addr){
+    const raw = cleanAddr(addr);
+    if(!raw) return null;
+    const direct = parseLonLat(raw);
+    if(direct) return direct;
+    if(geoCache[raw]) return geoCache[raw];
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tw&q=' + encodeURIComponent(raw);
+    try{
+      const res = await fetch(url, {method:'GET', cache:'force-cache'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      if(Array.isArray(data) && data[0]){
+        const item = {lon:Number(data[0].lon), lat:Number(data[0].lat), label:data[0].display_name||raw};
+        if(Number.isFinite(item.lon) && Number.isFinite(item.lat)){
+          geoCache[raw]=item;
+          try{ localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache)); }catch(e){}
+          return item;
+        }
+      }
+    }catch(e){ console.warn('地址轉經緯度失敗', raw, e); }
+    return null;
+  }
+  window.osrmGeocodeAddress = geocodeAddress;
 
   window.fetchDrivingInfo = async function(addrA, addrB){
     const from = cleanAddr(addrA), to = cleanAddr(addrB);
     if(!from || !to) return null;
-    if(from===to) return {durationText:'0 分鐘',distanceText:'0 m',durationMinutes:0,distanceKm:0};
-    const cacheKey = from + '|' + to;
-    if(cacheKey in gasRouteCache) return gasRouteCache[cacheKey];
-    const url = buildGasUrl(from,to);
-    if(!url){ gasRouteCache[cacheKey] = {status:'no_url'}; return gasRouteCache[cacheKey]; }
+    if(from === to) return {status:'success', durationText:'0 分鐘', distanceText:'0 km', durationMinutes:0, distanceKm:0};
+    const cacheKey = from+'|'+to;
+    if(cacheKey in routeCache) return routeCache[cacheKey];
+    const a = await geocodeAddress(from);
+    const b = await geocodeAddress(to);
+    if(!a || !b){ routeCache[cacheKey] = {status:'geocode_fail'}; return routeCache[cacheKey]; }
+    const url = 'https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=false';
     try{
       const res = await fetch(url, {method:'GET', cache:'no-store'});
       if(!res.ok) throw new Error('HTTP '+res.status);
       const data = await res.json();
-      if(data && (data.status==='success' || data.duration || data.distance)){
-        const durationText = data.duration || data.durationText || '';
-        const distanceText = data.distance || data.distanceText || '';
+      if(data && data.code === 'Ok' && data.routes && data.routes[0]){
+        const r = data.routes[0];
         const result = {
           status:'success',
-          durationText: durationText || '已取得',
-          distanceText: distanceText || '',
-          durationMinutes: Number(data.durationMinutes || data.minutes || parseDurationMinutes(durationText) || 0),
-          distanceKm: Number(data.distanceKm || 0)
+          durationText:fmtMin(r.duration),
+          distanceText:fmtKm(r.distance),
+          durationMinutes:Math.max(1, Math.round(Number(r.duration||0)/60)),
+          distanceKm:Number((Number(r.distance||0)/1000).toFixed(1))
         };
-        gasRouteCache[cacheKey] = result;
+        routeCache[cacheKey] = result;
         return result;
       }
-      gasRouteCache[cacheKey] = {status:'fail', message:(data && (data.message||data.error)) || '查詢失敗'};
-      return gasRouteCache[cacheKey];
+      routeCache[cacheKey] = {status:'route_fail'};
+      return routeCache[cacheKey];
     }catch(e){
-      console.warn('GAS 車程查詢失敗', e);
-      gasRouteCache[cacheKey] = {status:'fail', message:e.message || '查詢失敗'};
-      return gasRouteCache[cacheKey];
+      console.warn('OSRM 車程查詢失敗', e);
+      routeCache[cacheKey] = {status:'network_fail'};
+      return routeCache[cacheKey];
     }
   };
 
   window.routeTagHtml = function(from,to,label='車程',extra=''){
     if(!from || !to) return '<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>';
-    return '<span class="travel-tag gas-route-inline" data-from="'+esc(cleanAddr(from))+'" data-to="'+esc(cleanAddr(to))+'" data-prefix="'+esc(label||'車程')+'" '+(extra||'')+'>'+esc(label||'車程')+'：讀取中…</span>';
+    return '<span class="travel-tag osrm-route-inline" data-from="'+esc(cleanAddr(from))+'" data-to="'+esc(cleanAddr(to))+'" data-prefix="'+esc(label||'車程')+'" '+(extra||'')+'>'+esc(label||'車程')+'：計算中…</span>';
   };
 
   window.nextRouteHtml = function(j){
     if(!j || !j.address) return '';
     const next = (typeof getNextJob==='function') ? getNextJob(j) : null;
-    if(!next){ return '<div class="route-info gas-route-box ok">🏁 本日最後一站　<a href="'+mapDirUrl('', j.address)+'" target="_blank">從目前位置導航</a></div>'; }
+    if(!next){ return '<div class="route-info osrm-route-box ok">🏁 本日最後一站　<a href="'+mapDirUrl('', j.address)+'" target="_blank">從目前位置導航</a></div>'; }
     const gap = (typeof minutesBetween==='function') ? minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time) : '';
-    return '<div class="route-info gas-route-box" data-from="'+esc(cleanAddr(j.address))+'" data-to="'+esc(cleanAddr(next.address))+'" data-gap="'+(gap===null?'':esc(gap))+'" data-prefix="下一站" data-nav="'+mapDirUrl(j.address,next.address)+'">🚗 下一站：讀取中…</div>';
+    return '<div class="route-info osrm-route-box" data-from="'+esc(cleanAddr(j.address))+'" data-to="'+esc(cleanAddr(next.address))+'" data-gap="'+(gap===null?'':esc(gap))+'" data-prefix="下一站" data-nav="'+mapDirUrl(j.address,next.address)+'">🚗 下一站：計算中…</div>';
   };
 
   window.updateTravelTags = async function(){
-    const tags = Array.from(document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to], .gas-route-box[data-from][data-to], .gas-route-inline[data-from][data-to]'));
+    const tags = Array.from(document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to], .osrm-route-box[data-from][data-to], .osrm-route-inline[data-from][data-to]'));
     for(const tag of tags){
       const from = tag.dataset.from || '';
       const to = tag.dataset.to || '';
       if(!from || !to) continue;
-      const isBox = tag.classList.contains('route-info') || tag.classList.contains('gas-route-box');
+      const isBox = tag.classList.contains('route-info') || tag.classList.contains('osrm-route-box');
       const prefix = tag.dataset.prefix || '車程';
       tag.classList.remove('ok','warn','err');
-      tag.classList.add(isBox?'gas-route-box':'gas-route-inline');
-      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：讀取中…';
+      tag.classList.add(isBox?'osrm-route-box':'osrm-route-inline');
+      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：計算中…';
       const info = await window.fetchDrivingInfo(from,to);
-      if(!info || info.status==='no_url'){
+      if(!info || info.status !== 'success'){
         tag.classList.add('err');
-        tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：尚未設定 GAS 車程網址 <button type="button" class="gas-set-btn" onclick="setGasRouteWebAppUrl()">設定</button>';
-        continue;
-      }
-      if(info.status!=='success'){
-        tag.classList.add('err');
-        tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：查詢失敗 <button type="button" class="gas-set-btn" onclick="setGasRouteWebAppUrl()">設定</button>';
+        const msg = info && info.status === 'geocode_fail' ? '地址無法定位' : '無法計算路線';
+        const nav = tag.dataset.nav || mapDirUrl(from,to);
+        tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：' + msg + ' <a href="'+nav+'" target="_blank">開地圖</a>';
         continue;
       }
       const gap = tag.dataset.gap==='' || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
       const warn = gap!==null && !Number.isNaN(gap) && Number(info.durationMinutes||0) > gap;
       tag.classList.add(warn ? 'warn' : 'ok');
-      const distance = info.distanceText ? '（'+esc(info.distanceText)+'）' : '';
       const warnText = warn ? ' ⚠️ 空檔'+gap+'分鐘，可能趕不上' : '';
       const nav = tag.dataset.nav || mapDirUrl(from,to);
-      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：' + esc(info.durationText||'') + distance + warnText + ' <a href="'+nav+'" target="_blank">導航</a>';
+      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：' + esc(info.durationText) + '（' + esc(info.distanceText) + '）' + warnText + ' <a href="'+nav+'" target="_blank">導航</a>';
     }
   };
 
@@ -5366,7 +5166,7 @@ showAdminPage = function(){
     const engs = (typeof engineers!=='undefined' && engineers.length) ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
     const allJobs = (window.jobs || (typeof jobs!=='undefined'?jobs:[]) || []);
     const listAll = allJobs.filter(function(j){return j && j.date===today && !isHold(j) && j.address;});
-    if(!listAll.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px">今日無有地址的派工。</div>'; return true; }
+    if(!listAll.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px">今日沒有可顯示的地址資料。</div>'; return true; }
     const grouped = {}; engs.forEach(function(e){ grouped[e]=[]; });
     listAll.forEach(function(j){ const e=norm(j.engineer||''); if(!grouped[e]) grouped[e]=[]; grouped[e].push(j); });
     Object.keys(grouped).forEach(function(e){ grouped[e].sort(function(a,b){ return String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')); }); });
@@ -5385,7 +5185,7 @@ showAdminPage = function(){
             + '<div>項目：'+esc(j.workItem||'')+'</div>'
             + '<div>地址：'+esc(j.address||'')+'</div>'
             + '<div style="margin-top:4px"><a target="_blank" href="'+mapDirUrl('',j.address)+'">開啟地圖</a></div>'
-            + (prev && prev.address ? '<div class="gas-route-box" data-from="'+esc(cleanAddr(prev.address))+'" data-to="'+esc(cleanAddr(j.address))+'" data-prefix="上一站→本站">上一站→本站：讀取中…</div>' : '')
+            + (prev && prev.address ? '<div class="osrm-route-box" data-from="'+esc(cleanAddr(prev.address))+'" data-to="'+esc(cleanAddr(j.address))+'" data-prefix="上一站→本站">上一站→本站：計算中…</div>' : '')
             + '</div>';
         }).join('');
       }
@@ -5396,7 +5196,6 @@ showAdminPage = function(){
     setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },80);
     return true;
   }
-
   window.renderAdminMap = function(){ renderGroupedAdminMap(); };
 
   const oldRefresh = window.refreshAdminV2;
@@ -5406,8 +5205,18 @@ showAdminPage = function(){
     setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },100);
   };
 
+  const oldRenderSchedule = window.renderSchedule;
+  if(oldRenderSchedule && !oldRenderSchedule.__osrmWrapped){
+    const wrapped = function(){ const r=oldRenderSchedule.apply(this,arguments); setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },120); return r; };
+    wrapped.__osrmWrapped = true;
+    window.renderSchedule = wrapped;
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },800);
   });
 })();
 </script>
+
+</body>
+</html>
