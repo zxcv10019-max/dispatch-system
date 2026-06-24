@@ -3489,6 +3489,7 @@ function normalizeJobFromArray(row, idx){
 }
 
 function importJobsExcel(event){
+  const __importInput = event && event.target;
   if(!requireEdit("匯入派工")){ event.target.value=""; return; }
   const file=event.target.files[0];
   if(!file)return;
@@ -3552,6 +3553,7 @@ function importJobsExcel(event){
 }
 
 function importExcel(event){
+  const __importInput = event && event.target;
   if(!requireEdit("匯入客戶")){ event.target.value=""; return; }
   const file=event.target.files[0];
   if(!file)return;
@@ -3956,13 +3958,16 @@ function restoreDeletedJob(logId){
 }
 
 // 渲染統計卡片
-function renderAdminStats(){
-  const total = adminLogs.length;
-  const logins = adminLogs.filter(l=>l.action==="login").length;
-  const adds = adminLogs.filter(l=>l.action==="add").length;
-  const edits = adminLogs.filter(l=>["edit","drag","resize"].includes(l.action)).length;
-  const dels = adminLogs.filter(l=>["delete","clear"].includes(l.action)).length;
-  document.getElementById("adminStats").innerHTML = `
+function renderAdminStats(sourceLogs){
+  const list = Array.isArray(sourceLogs) ? sourceLogs : (Array.isArray(adminLogs) ? adminLogs : []);
+  const total = list.length;
+  const logins = list.filter(l=>l.action==="login").length;
+  const adds = list.filter(l=>l.action==="add").length;
+  const edits = list.filter(l=>["edit","drag","resize"].includes(l.action)).length;
+  const dels = list.filter(l=>["delete","clear"].includes(l.action)).length;
+  const statsEl = document.getElementById("adminStats");
+  if(!statsEl) return;
+  statsEl.innerHTML = `
     <div class="admin-stat-card"><div class="stat-num">${total}</div><div class="stat-label">全部紀錄</div></div>
     <div class="admin-stat-card login-stat"><div class="stat-num">${logins}</div><div class="stat-label">登入次數</div></div>
     <div class="admin-stat-card add-stat"><div class="stat-num">${adds}</div><div class="stat-label">新增派工</div></div>
@@ -3987,6 +3992,8 @@ function renderAdminLogs(){
     if(endF && dateStr > endF) return false;
     return true;
   });
+
+  renderAdminStats(filtered);
 
   if(!filtered.length){
     document.getElementById("adminLogBody").innerHTML = '<tr><td colspan="4" class="admin-no-data">沒有符合條件的紀錄</td></tr>';
@@ -4143,8 +4150,10 @@ applyRoleUI();
       <div class="role-panel admin-import-panel">
         <h3>資料匯入 / 備份</h3>
         <div class="admin-dashboard-actions">
-          <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入派工 Excel</button>
-          <button class="import-btn" onclick="document.getElementById('excelFile').click()">匯入客戶 Excel</button>
+          <button class="import-btn" onclick="document.getElementById('adminJobExcelFile').click()">匯入派工 Excel</button>
+          <input type="file" id="adminJobExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importJobsExcel(event)">
+          <button class="import-btn" onclick="document.getElementById('adminCustomerExcelFile').click()">匯入客戶 Excel</button>
+          <input type="file" id="adminCustomerExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(event)">
           <button style="background:#6c757d" onclick="backupAllData()">💾 備份全部資料</button>
           <button class="import-btn" onclick="document.getElementById('backupFile').click()">📂 還原備份</button>
         </div>
