@@ -1422,6 +1422,47 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   #adminPage .log-table-wrap table{min-width:860px!important}
 }
 
+
+/* ===== 後台子導覽列 ===== */
+.admin-subnav{
+  display:flex;flex-wrap:wrap;gap:4px;padding:10px 16px;
+  background:#f8f9fa;border-bottom:1px solid #e2e8f0;
+  position:sticky;top:0;z-index:100;
+}
+.admin-subnav-btn{
+  background:#fff;color:#2f3542;border:1px solid #d1d9e0;
+  border-radius:20px;padding:6px 14px;font-size:13px;font-weight:bold;cursor:pointer;
+}
+.admin-subnav-btn:hover{background:#e9ecef}
+.admin-subnav-btn.active{background:#2f3542;color:#fff;border-color:#2f3542}
+
+/* ===== 隱藏 / 顯示後台各分區 ===== */
+.admin-section{display:none}
+.admin-section.active{display:block}
+
+/* ===== 完成率統計 ===== */
+.completion-bar-wrap{display:flex;align-items:center;gap:8px;margin:6px 0}
+.completion-bar-label{width:80px;font-size:13px;font-weight:bold;color:#2f3542}
+.completion-bar-bg{flex:1;background:#e9ecef;border-radius:999px;height:16px;overflow:hidden}
+.completion-bar-fill{height:100%;background:#218c74;border-radius:999px;transition:width .4s}
+.completion-bar-val{width:50px;font-size:13px;text-align:right;color:#555}
+
+/* ===== 休假紀錄 ===== */
+.leave-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid #f0f0f0;font-size:13px}
+.leave-item:hover{background:#fafafa}
+.leave-badge{display:inline-block;background:#e8f4fd;color:#155a8a;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:bold}
+.leave-badge.leave{background:#fdebd0;color:#a04000}
+.leave-badge.pub{background:#d5f5e3;color:#1e8449}
+.leave-badge.comp{background:#e8daef;color:#6c3483}
+.leave-badge.trip{background:#d1f2eb;color:#0e6655}
+
+/* ===== 客戶歷史紀錄 ===== */
+#customerHistoryResult .hist-card{
+  border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin:8px 0;
+  background:#fff;font-size:13px;line-height:1.6
+}
+#customerHistoryResult .hist-card .hist-top{font-weight:bold;color:#0066cc;font-size:14px;margin-bottom:4px}
+#customerHistoryResult .hist-card .hist-date{color:#888;font-size:12px}
 </style>
 </head>
 
@@ -3597,7 +3638,8 @@ function importExcel(event){
     saveCustomers();
     renderCustomers();
 
-    document.getElementById("importStatus").innerHTML=
+    const importStatusEl = document.getElementById("importStatus");
+    if(importStatusEl) importStatusEl.innerHTML=
       `已匯入 ${count} 筆客戶資料。來源工作表：${escapeHtml(found.sheetName)}，標題列：第 ${found.headerRow+1} 列。<br>`+
       `顯示欄位只保留：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址。<br>`+
       `行動電話欄已合併 Excel 的「行動電話」與「聯絡電話一」。`;
@@ -3967,6 +4009,22 @@ function renderAdminStats(sourceLogs){
   const dels = list.filter(l=>["delete","clear"].includes(l.action)).length;
   const statsEl = document.getElementById("adminStats");
   if(!statsEl) return;
+  // 若 adminLogs 未載入（Firestore rules 未開放），改顯示本機 jobs 統計
+  if(total === 0){
+    const today = adminDateToday();
+    const totalJobs = (jobs||[]).filter(j=>!isHoldJob(j)).length;
+    const todayJobs2 = (jobs||[]).filter(j=>j.date===today && !isHoldJob(j)).length;
+    const holdJobs2 = (jobs||[]).filter(j=>isHoldJob(j)).length;
+    const totalCustomers = (customers||[]).length;
+    statsEl.innerHTML = `
+      <div class="admin-stat-card"><div class="stat-num">${totalJobs}</div><div class="stat-label">全部派工筆數</div></div>
+      <div class="admin-stat-card login-stat"><div class="stat-num">${todayJobs2}</div><div class="stat-label">今日派工</div></div>
+      <div class="admin-stat-card add-stat"><div class="stat-num">${holdJobs2}</div><div class="stat-label">暫押派工</div></div>
+      <div class="admin-stat-card edit-stat"><div class="stat-num">${totalCustomers}</div><div class="stat-label">客戶資料</div></div>
+      <div class="admin-stat-card" style="border-left:3px solid #aaa"><div class="stat-num" style="color:#aaa;font-size:14px">—</div><div class="stat-label">操作紀錄待載入</div></div>
+    `;
+    return;
+  }
   statsEl.innerHTML = `
     <div class="admin-stat-card"><div class="stat-num">${total}</div><div class="stat-label">全部紀錄</div></div>
     <div class="admin-stat-card login-stat"><div class="stat-num">${logins}</div><div class="stat-label">登入次數</div></div>
@@ -4122,6 +4180,19 @@ applyRoleUI();
 
   <!-- 有權限時顯示 -->
   <div id="adminContent" style="display:none">
+
+    <!-- 後台功能導覽列 -->
+    <div class="admin-subnav" id="adminSubnav">
+      <button class="admin-subnav-btn active" onclick="showAdminSection('dashboard')">📊 總覽</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('map')">🗺️ 地圖</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('completion')">✅ 完成率</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('leave')">🏖️ 休假</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('customerHistory')">📋 客戶紀錄</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('logs')">📝 操作紀錄</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('roles')">👤 權限</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('import')">📂 匯入備份</button>
+    </div>
+
     <div class="admin-body">
 
       <!-- 權限管理 -->
@@ -4191,7 +4262,69 @@ applyRoleUI();
       <!-- 統計卡片 -->
       <div class="admin-stats" id="adminStats"></div>
 
-      <!-- 篩選列 -->
+      <!-- ⭐ 地圖模式 -->
+      <div class="role-panel" id="adminMapPanel" style="display:none">
+        <h3>🗺️ 地圖模式｜今日派工地址分佈</h3>
+        <div style="font-size:13px;color:#555;margin-bottom:8px">今日所有派工地址，點擊可在 Google Maps 開啟導航。</div>
+        <div id="adminMapList" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+
+      <!-- ⭐ 完成率統計 -->
+      <div class="role-panel" id="adminCompletionPanel" style="display:none">
+        <h3>✅ 完成率統計</h3>
+        <div id="adminCompletionContent"></div>
+      </div>
+
+      <!-- ⭐ 工程師休假管理 -->
+      <div class="role-panel" id="adminLeavePanel" style="display:none">
+        <h3>🏖️ 工程師休假管理</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
+          <div>
+            <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">工程師</label>
+            <select id="leaveEngineer" style="padding:7px 10px;font-size:13px">
+              <option value="林川閔">M 林川閔</option>
+              <option value="陳昱存">C 陳昱存</option>
+              <option value="陳義強">Y 陳義強</option>
+              <option value="鄧長益">E 鄧長益</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">休假日期</label>
+            <input type="date" id="leaveDate" style="padding:7px 10px;font-size:13px">
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">類型</label>
+            <select id="leaveType" style="padding:7px 10px;font-size:13px">
+              <option value="請假">請假</option>
+              <option value="休假">休假</option>
+              <option value="公假">公假</option>
+              <option value="補休">補休</option>
+              <option value="出差">出差</option>
+            </select>
+          </div>
+          <button onclick="addLeaveRecord()" style="background:#218c74;padding:7px 14px">新增休假</button>
+        </div>
+        <div id="leaveList"></div>
+      </div>
+
+      <!-- ⭐ 客戶歷史紀錄（進階版） -->
+      <div class="role-panel" id="adminCustomerHistoryPanel" style="display:none">
+        <h3>📋 客戶歷史紀錄（進階查詢）</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <input id="customerHistoryKw" placeholder="輸入客編、客名、電話、地址" style="flex:1;min-width:200px;padding:8px;font-size:13px" onkeydown="if(event.key==='Enter')renderCustomerHistory()">
+          <select id="customerHistoryEngineer" style="padding:8px;font-size:13px">
+            <option value="">全部工程師</option>
+            <option value="林川閔">M 林川閔</option>
+            <option value="陳昱存">C 陳昱存</option>
+            <option value="陳義強">Y 陳義強</option>
+            <option value="鄧長益">E 鄧長益</option>
+          </select>
+          <button onclick="renderCustomerHistory()" style="background:#40739e">查詢</button>
+        </div>
+        <div id="customerHistoryResult"></div>
+      </div>
+
+      <!-- 篩選列（修改紀錄搜尋） -->
       <div class="admin-filter">
         <label>帳號篩選</label>
         <input id="adminFilterEmail" placeholder="輸入 email 搜尋" style="min-width:200px" oninput="renderAdminLogs()">
@@ -4409,6 +4542,247 @@ document.addEventListener("click", function(e){
   window.addEventListener("resize", forceMobileOnlyView);
   setInterval(forceMobileOnlyView, 1000);
 })();
+</script>
+
+
+<script>
+// ===== 後台子導覽切換 =====
+const ADMIN_SECTION_MAP = {
+  dashboard: ['adminDashboardSection'],
+  map: ['adminMapPanel'],
+  completion: ['adminCompletionPanel'],
+  leave: ['adminLeavePanel'],
+  customerHistory: ['adminCustomerHistoryPanel'],
+  logs: ['adminLogsSection'],
+  roles: ['adminRolesSection'],
+  import: ['adminImportSection']
+};
+
+function showAdminSection(section){
+  // 更新導覽按鈕
+  document.querySelectorAll('.admin-subnav-btn').forEach(btn => btn.classList.remove('active'));
+  const idx = Object.keys(ADMIN_SECTION_MAP).indexOf(section);
+  const btns = document.querySelectorAll('.admin-subnav-btn');
+  if(btns[idx]) btns[idx].classList.add('active');
+
+  // 先隱藏所有分區
+  Object.values(ADMIN_SECTION_MAP).flat().forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ el.style.display='none'; }
+  });
+  // 顯示目標
+  const ids = ADMIN_SECTION_MAP[section] || [];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ el.style.display='block'; }
+  });
+  // 觸發對應渲染
+  if(section==='map') renderAdminMap();
+  if(section==='completion') renderCompletionStats();
+  if(section==='leave') renderLeaveList();
+  if(section==='customerHistory') renderCustomerHistory();
+}
+
+// ===== 地圖模式 =====
+function renderAdminMap(){
+  const box = document.getElementById('adminMapList'); if(!box) return;
+  const today = adminDateToday();
+  const todayJobs = (jobs||[]).filter(j=>j.date===today && !isHoldJob(j) && j.address);
+  if(!todayJobs.length){ box.innerHTML='<div class="empty" style="color:#888;font-size:13px">今日無有地址的派工。</div>'; return; }
+  box.innerHTML = todayJobs.map(j=>{
+    const label = escapeHtml(`${j.engineer} ${j.startTime||''} ${j.codeName||j.customerName||''}`);
+    const addr = escapeHtml(j.address);
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(j.address)}`;
+    return `<a href="${url}" target="_blank" style="display:inline-block;background:#e8f4fd;border:1px solid #9ed0f5;border-radius:8px;padding:8px 12px;text-decoration:none;color:#155a8a;font-size:13px;line-height:1.5;max-width:300px">
+      <div style="font-weight:bold">${label}</div>
+      <div>📍 ${addr}</div>
+    </a>`;
+  }).join('');
+}
+
+// ===== 完成率統計 =====
+function renderCompletionStats(){
+  const box = document.getElementById('adminCompletionContent'); if(!box) return;
+  const month = adminMonthNow();
+  const monthJobs = (jobs||[]).filter(j=>String(j.date||'').startsWith(month) && !isHoldJob(j));
+  const today = adminDateToday();
+  let html = `<div style="margin-bottom:12px;font-size:13px;color:#555">本月（${month}）已有 ${monthJobs.length} 件派工。工程師完成件數統計：</div>`;
+  const totalAll = monthJobs.length || 1;
+  engineers.forEach(e=>{
+    const cnt = monthJobs.filter(j=>normalizeEngineerName(j.engineer)===e).length;
+    const pct = Math.round(cnt/totalAll*100);
+    html += `<div class="completion-bar-wrap">
+      <div class="completion-bar-label">${escapeHtml(displayEngineer(e))} ${escapeHtml(e)}</div>
+      <div class="completion-bar-bg"><div class="completion-bar-fill" style="width:${pct}%"></div></div>
+      <div class="completion-bar-val">${cnt} 件</div>
+    </div>`;
+  });
+  // 施工項目統計
+  const byItem = {};
+  monthJobs.forEach(j=>{ const k=j.workItem||'未填'; byItem[k]=(byItem[k]||0)+1; });
+  const itemRows = Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>{
+    const pct = Math.round(v/monthJobs.length*100);
+    return `<div class="completion-bar-wrap">
+      <div class="completion-bar-label" style="width:120px;font-size:12px">${escapeHtml(k)}</div>
+      <div class="completion-bar-bg"><div class="completion-bar-fill" style="width:${pct}%;background:#40739e"></div></div>
+      <div class="completion-bar-val">${v}</div>
+    </div>`;
+  }).join('');
+  html += `<div style="margin-top:16px;font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:8px">施工項目分佈</div>${itemRows}`;
+  box.innerHTML = html;
+}
+
+// ===== 工程師休假管理 =====
+let leaveRecords = JSON.parse(localStorage.getItem('admin_leave_records') || '[]');
+
+function saveLeaveRecords(){ localStorage.setItem('admin_leave_records', JSON.stringify(leaveRecords)); }
+
+function addLeaveRecord(){
+  const eng = document.getElementById('leaveEngineer').value;
+  const date = document.getElementById('leaveDate').value;
+  const type = document.getElementById('leaveType').value;
+  if(!date){ alert('請選擇休假日期'); return; }
+  leaveRecords.push({ id: Date.now(), engineer: eng, date, type });
+  leaveRecords.sort((a,b)=>a.date.localeCompare(b.date));
+  saveLeaveRecords();
+  renderLeaveList();
+  // 同步到派工表（在派工資料中新增一筆「請假」派工，日期相同）
+  if(confirm(`是否同時在派工表中為 ${eng} 新增「${type}」記錄？`)){
+    const leaveJob = {
+      id: Date.now() + Math.floor(Math.random()*9999),
+      engineer: eng,
+      date: date,
+      startTime: '09:30', time: '09:30',
+      endTime: '18:00',
+      codeName: eng + ' ' + type,
+      customerCode: '', customerName: eng,
+      workItem: type, workContent: type,
+      phone: '', city: '', district: '', address: '',
+      orderNo: '', amount: '', payment: '',
+      isHold: false
+    };
+    jobs.push(leaveJob);
+    saveJobs();
+    renderSchedule();
+    renderJobList();
+    alert('已新增至派工表。');
+  }
+}
+
+function deleteLeaveRecord(id){
+  leaveRecords = leaveRecords.filter(r=>r.id!==id);
+  saveLeaveRecords();
+  renderLeaveList();
+}
+
+function renderLeaveList(){
+  const box = document.getElementById('leaveList'); if(!box) return;
+  if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
+  const typeCls = { '請假':'leave', '休假':'leave', '公假':'pub', '補休':'comp', '出差':'trip' };
+  box.innerHTML = leaveRecords.map(r=>{
+    const cls = typeCls[r.type] || '';
+    return `<div class="leave-item">
+      <span class="leave-badge ${cls}">${escapeHtml(r.type)}</span>
+      <span style="font-weight:bold">${escapeHtml(r.engineer)}</span>
+      <span>${escapeHtml(r.date)}</span>
+      <button onclick="deleteLeaveRecord(${r.id})" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto">刪除</button>
+    </div>`;
+  }).join('');
+}
+
+// ===== 客戶歷史紀錄進階查詢 =====
+function renderCustomerHistory(){
+  const box = document.getElementById('customerHistoryResult'); if(!box) return;
+  const kw = (document.getElementById('customerHistoryKw')?.value||'').trim().toLowerCase();
+  const eng = document.getElementById('customerHistoryEngineer')?.value||'';
+  if(!kw){ box.innerHTML='<div style="color:#888;font-size:13px">輸入關鍵字後查詢。</div>'; return; }
+  let list = (jobs||[]).filter(j=>{
+    const text = [j.customerCode,j.customerName,j.codeName,j.phone,j.address,j.orderNo,j.workContent].map(x=>String(x||'')).join(' ').toLowerCase();
+    return text.includes(kw);
+  });
+  if(eng) list = list.filter(j=>normalizeEngineerName(j.engineer)===eng);
+  list = list.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  if(!list.length){ box.innerHTML='<div style="color:#888;font-size:13px">查無符合記錄。</div>'; return; }
+  box.innerHTML = list.slice(0,50).map(j=>{
+    const code = escapeHtml(j.codeName||j.customerName||'');
+    const date = escapeHtml(j.date||'');
+    const eng2 = escapeHtml(j.engineer||'');
+    const time = escapeHtml(`${j.startTime||''}~${j.endTime||''}`);
+    const addr = j.address ? `📍 ${escapeHtml(j.address)}` : '';
+    const item = j.workItem ? `🔧 ${escapeHtml(j.workItem)}` : '';
+    const content2 = j.workContent ? `📝 ${escapeHtml(j.workContent)}` : '';
+    return `<div class="hist-card">
+      <div class="hist-top">${code}</div>
+      <div class="hist-date">${date} ${time} ｜ 工程師：${eng2}</div>
+      ${addr ? `<div>${addr}</div>` : ''}
+      ${item ? `<div>${item}</div>` : ''}
+      ${content2 ? `<div>${content2}</div>` : ''}
+    </div>`;
+  }).join('');
+  if(list.length>50) box.innerHTML += `<div style="color:#888;font-size:13px;padding:8px">（僅顯示前 50 筆，共 ${list.length} 筆）</div>`;
+}
+
+// ===== 初始化後台分區包裝 =====
+// 用 data attributes 標記現有 HTML 元素分屬哪個 section
+(function setupAdminSections(){
+  // 確保初始顯示總覽 section 的面板，隱藏其他
+  const allPanels = ['adminMapPanel','adminCompletionPanel','adminLeavePanel','adminCustomerHistoryPanel'];
+  allPanels.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+})();
+
+// 覆寫 showAdminPage，加入 subnav 初始化
+const _origShowAdminPage = showAdminPage;
+function showAdminPage(){
+  _origShowAdminPage();
+  // 預設顯示總覽
+  setTimeout(()=>{ showAdminSection('dashboard'); }, 50);
+}
+
+// 包裝主要 div id 供 showAdminSection 使用
+document.addEventListener('DOMContentLoaded', function(){
+  // 為現有元素加上包裝 id
+  function wrapWithId(el, newId){
+    if(!el || document.getElementById(newId)) return;
+    el.id = newId;
+  }
+  // 日誌區
+  const filterEl = document.querySelector('#adminPage .admin-filter');
+  const statsEl = document.querySelector('#adminPage .admin-stats');
+  const logsEl = document.querySelector('#adminPage .log-table-wrap');
+  const rolesEl = document.querySelector('#adminPage .role-panel');
+  const importEl = document.querySelector('#adminPage .admin-import-panel');
+  const dashEl = document.querySelector('#adminPage .admin-dashboard-grid');
+  if(filterEl && !filterEl.closest('[id]').id) wrapWithId(filterEl, 'adminLogsFilter');
+  // 建立 wrapper divs
+  ['adminLogsSection','adminRolesSection','adminImportSection','adminDashboardSection'].forEach(id=>{
+    if(!document.getElementById(id)){
+      const div = document.createElement('div');
+      div.id = id;
+      div.style.display = 'none';
+      if(id==='adminLogsSection' && filterEl){
+        filterEl.parentNode.insertBefore(div, filterEl);
+        div.appendChild(filterEl);
+        if(statsEl) div.appendChild(statsEl);
+        if(logsEl) div.appendChild(logsEl);
+      }
+      if(id==='adminRolesSection' && rolesEl){
+        rolesEl.parentNode.insertBefore(div, rolesEl);
+        div.appendChild(rolesEl);
+      }
+      if(id==='adminImportSection' && importEl){
+        importEl.parentNode.insertBefore(div, importEl);
+        div.appendChild(importEl);
+      }
+      if(id==='adminDashboardSection' && dashEl){
+        dashEl.parentNode.insertBefore(div, dashEl);
+        div.appendChild(dashEl);
+        // 也把 stats 和 adminStats div 放進 dashboard section
+        const as = document.getElementById('adminStats');
+        if(as && as.parentNode !== div) div.appendChild(as);
+      }
+    }
+  });
+});
 </script>
 
 </body>
