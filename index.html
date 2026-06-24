@@ -5223,3 +5223,191 @@ showAdminPage = function(){
 
 </body>
 </html>
+<!-- ===== GAS 車程文字模式：用 Google Apps Script 當後端，前台只顯示時間文字 ===== -->
+<style>
+.gas-route-box{margin-top:4px;font-size:11px;line-height:1.45;border-radius:6px;padding:4px 6px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;display:block}
+.gas-route-box.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.gas-route-box.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.gas-route-box.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
+.gas-route-box a{color:inherit;text-decoration:underline;font-weight:bold;margin-left:4px}
+.gas-route-inline{display:inline-block;padding:2px 7px;border-radius:10px;background:#eef7ff;border:1px solid #b7d8f5;color:#155a8a;font-size:11px;margin-left:3px;line-height:1.5}
+.gas-route-inline.ok{background:#e8f7ee;border-color:#8fd19e;color:#1a5c2a}
+.gas-route-inline.warn{background:#ffecec;border-color:#f5a3a3;color:#9b1c1c;font-weight:bold}
+.gas-route-inline.err{background:#fff3cd;border-color:#ffe08a;color:#7a5b00}
+.gas-set-btn{background:#40739e!important;color:#fff!important;border:0;border-radius:999px;padding:3px 8px;font-size:11px;cursor:pointer;margin-left:4px}
+</style>
+<script>
+// ===== GAS 車程模式：取代 iframe / Routes API，直接顯示「XX分鐘（XXkm）」文字 =====
+(function(){
+  const GAS_ROUTE_URL_KEY = 'paigong_gas_route_web_app_url';
+  const gasRouteCache = {};
+
+  function safeText(v){ return String(v||'').trim(); }
+  function esc(v){ return String(v||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
+  function cleanAddr(v){ try{ return typeof cleanMapAddress==='function' ? cleanMapAddress(v) : safeText(v); }catch(e){ return safeText(v); } }
+  function getGasUrl(){ return safeText(localStorage.getItem(GAS_ROUTE_URL_KEY)||''); }
+  function setGasUrl(url){ localStorage.setItem(GAS_ROUTE_URL_KEY, safeText(url)); }
+  function mapDirUrl(from,to){ try{ return typeof directionUrl==='function' ? directionUrl(from,to) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'); }catch(e){ return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving'; } }
+  function parseDurationMinutes(text){
+    const s = String(text||'');
+    let mins = 0;
+    const h = s.match(/(\d+(?:\.\d+)?)\s*(小時|hour|hours|hr|hrs)/i);
+    const m = s.match(/(\d+(?:\.\d+)?)\s*(分鐘|分|minute|minutes|min|mins)/i);
+    if(h) mins += Math.round(parseFloat(h[1])*60);
+    if(m) mins += Math.round(parseFloat(m[1]));
+    if(!mins){ const n=s.match(/\d+/); if(n) mins=parseInt(n[0],10); }
+    return mins || null;
+  }
+  function buildGasUrl(from,to){
+    const base = getGasUrl();
+    if(!base) return '';
+    const sep = base.includes('?') ? '&' : '?';
+    return base + sep + 'from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+  }
+
+  window.setGasRouteWebAppUrl = function(){
+    const old = getGasUrl();
+    const input = prompt('請貼上 Google Apps Script Web App 網址：\n例：https://script.google.com/macros/s/xxxxx/exec', old);
+    if(input===null) return;
+    if(!safeText(input)){ localStorage.removeItem(GAS_ROUTE_URL_KEY); alert('已清除 GAS 車程網址'); return; }
+    setGasUrl(input);
+    alert('已儲存 GAS 車程網址，會重新計算畫面上的車程。');
+    if(typeof updateTravelTags==='function') updateTravelTags();
+    if(typeof refreshAdminV2==='function') refreshAdminV2();
+  };
+  window.getGasRouteWebAppUrl = getGasUrl;
+
+  window.fetchDrivingInfo = async function(addrA, addrB){
+    const from = cleanAddr(addrA), to = cleanAddr(addrB);
+    if(!from || !to) return null;
+    if(from===to) return {durationText:'0 分鐘',distanceText:'0 m',durationMinutes:0,distanceKm:0};
+    const cacheKey = from + '|' + to;
+    if(cacheKey in gasRouteCache) return gasRouteCache[cacheKey];
+    const url = buildGasUrl(from,to);
+    if(!url){ gasRouteCache[cacheKey] = {status:'no_url'}; return gasRouteCache[cacheKey]; }
+    try{
+      const res = await fetch(url, {method:'GET', cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      if(data && (data.status==='success' || data.duration || data.distance)){
+        const durationText = data.duration || data.durationText || '';
+        const distanceText = data.distance || data.distanceText || '';
+        const result = {
+          status:'success',
+          durationText: durationText || '已取得',
+          distanceText: distanceText || '',
+          durationMinutes: Number(data.durationMinutes || data.minutes || parseDurationMinutes(durationText) || 0),
+          distanceKm: Number(data.distanceKm || 0)
+        };
+        gasRouteCache[cacheKey] = result;
+        return result;
+      }
+      gasRouteCache[cacheKey] = {status:'fail', message:(data && (data.message||data.error)) || '查詢失敗'};
+      return gasRouteCache[cacheKey];
+    }catch(e){
+      console.warn('GAS 車程查詢失敗', e);
+      gasRouteCache[cacheKey] = {status:'fail', message:e.message || '查詢失敗'};
+      return gasRouteCache[cacheKey];
+    }
+  };
+
+  window.routeTagHtml = function(from,to,label='車程',extra=''){
+    if(!from || !to) return '<span style="font-size:10px;color:#aaa;margin-left:3px;">（未填地址）</span>';
+    return '<span class="travel-tag gas-route-inline" data-from="'+esc(cleanAddr(from))+'" data-to="'+esc(cleanAddr(to))+'" data-prefix="'+esc(label||'車程')+'" '+(extra||'')+'>'+esc(label||'車程')+'：讀取中…</span>';
+  };
+
+  window.nextRouteHtml = function(j){
+    if(!j || !j.address) return '';
+    const next = (typeof getNextJob==='function') ? getNextJob(j) : null;
+    if(!next){ return '<div class="route-info gas-route-box ok">🏁 本日最後一站　<a href="'+mapDirUrl('', j.address)+'" target="_blank">從目前位置導航</a></div>'; }
+    const gap = (typeof minutesBetween==='function') ? minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time) : '';
+    return '<div class="route-info gas-route-box" data-from="'+esc(cleanAddr(j.address))+'" data-to="'+esc(cleanAddr(next.address))+'" data-gap="'+(gap===null?'':esc(gap))+'" data-prefix="下一站" data-nav="'+mapDirUrl(j.address,next.address)+'">🚗 下一站：讀取中…</div>';
+  };
+
+  window.updateTravelTags = async function(){
+    const tags = Array.from(document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to], .gas-route-box[data-from][data-to], .gas-route-inline[data-from][data-to]'));
+    for(const tag of tags){
+      const from = tag.dataset.from || '';
+      const to = tag.dataset.to || '';
+      if(!from || !to) continue;
+      const isBox = tag.classList.contains('route-info') || tag.classList.contains('gas-route-box');
+      const prefix = tag.dataset.prefix || '車程';
+      tag.classList.remove('ok','warn','err');
+      tag.classList.add(isBox?'gas-route-box':'gas-route-inline');
+      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：讀取中…';
+      const info = await window.fetchDrivingInfo(from,to);
+      if(!info || info.status==='no_url'){
+        tag.classList.add('err');
+        tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：尚未設定 GAS 車程網址 <button type="button" class="gas-set-btn" onclick="setGasRouteWebAppUrl()">設定</button>';
+        continue;
+      }
+      if(info.status!=='success'){
+        tag.classList.add('err');
+        tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：查詢失敗 <button type="button" class="gas-set-btn" onclick="setGasRouteWebAppUrl()">設定</button>';
+        continue;
+      }
+      const gap = tag.dataset.gap==='' || tag.dataset.gap==null ? null : Number(tag.dataset.gap);
+      const warn = gap!==null && !Number.isNaN(gap) && Number(info.durationMinutes||0) > gap;
+      tag.classList.add(warn ? 'warn' : 'ok');
+      const distance = info.distanceText ? '（'+esc(info.distanceText)+'）' : '';
+      const warnText = warn ? ' ⚠️ 空檔'+gap+'分鐘，可能趕不上' : '';
+      const nav = tag.dataset.nav || mapDirUrl(from,to);
+      tag.innerHTML = (isBox?'🚗 ':'') + esc(prefix) + '：' + esc(info.durationText||'') + distance + warnText + ' <a href="'+nav+'" target="_blank">導航</a>';
+    }
+  };
+
+  function renderGroupedAdminMap(){
+    const box = document.getElementById('adminMapList');
+    if(!box) return false;
+    const today = (typeof adminDateToday==='function') ? adminDateToday() : new Date().toISOString().slice(0,10);
+    const isHold = (typeof isHoldJob==='function') ? isHoldJob : function(j){return !!j.isHold || !j.date;};
+    const norm = (typeof normalizeEngineerName==='function') ? normalizeEngineerName : function(e){return e||'';};
+    const disp = (typeof displayEngineer==='function') ? displayEngineer : function(e){return e||'';};
+    const engs = (typeof engineers!=='undefined' && engineers.length) ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
+    const allJobs = (window.jobs || (typeof jobs!=='undefined'?jobs:[]) || []);
+    const listAll = allJobs.filter(function(j){return j && j.date===today && !isHold(j) && j.address;});
+    if(!listAll.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px">今日無有地址的派工。</div>'; return true; }
+    const grouped = {}; engs.forEach(function(e){ grouped[e]=[]; });
+    listAll.forEach(function(j){ const e=norm(j.engineer||''); if(!grouped[e]) grouped[e]=[]; grouped[e].push(j); });
+    Object.keys(grouped).forEach(function(e){ grouped[e].sort(function(a,b){ return String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')); }); });
+    let html='<div style="width:100%;display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:10px;align-items:start">';
+    engs.forEach(function(e){
+      const list=grouped[e]||[];
+      html+='<div style="background:#fff;border:1px solid #d6e4f0;border-radius:10px;padding:10px;min-height:90px">'
+        + '<div style="font-weight:bold;color:#2f3542;margin-bottom:8px;border-bottom:1px solid #eef2f7;padding-bottom:6px">'
+        + esc(disp(e)+' '+e)+'｜'+list.length+' 件</div>';
+      if(!list.length){ html+='<div style="color:#999;font-size:13px;padding:8px 0">今日無有地址派工</div>'; }
+      else{
+        html += list.map(function(j,idx){
+          const prev = idx>0 ? list[idx-1] : null;
+          return '<div style="background:#f8fbff;border:1px solid #cfe2f3;border-radius:8px;padding:8px;margin-bottom:8px;font-size:13px;line-height:1.55">'
+            + '<div style="font-weight:bold;color:#0066cc">'+esc((j.startTime||j.time||'')+' '+(j.codeName||j.customerName||''))+'</div>'
+            + '<div>項目：'+esc(j.workItem||'')+'</div>'
+            + '<div>地址：'+esc(j.address||'')+'</div>'
+            + '<div style="margin-top:4px"><a target="_blank" href="'+mapDirUrl('',j.address)+'">開啟地圖</a></div>'
+            + (prev && prev.address ? '<div class="gas-route-box" data-from="'+esc(cleanAddr(prev.address))+'" data-to="'+esc(cleanAddr(j.address))+'" data-prefix="上一站→本站">上一站→本站：讀取中…</div>' : '')
+            + '</div>';
+        }).join('');
+      }
+      html+='</div>';
+    });
+    html+='</div>';
+    box.innerHTML=html;
+    setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },80);
+    return true;
+  }
+
+  window.renderAdminMap = function(){ renderGroupedAdminMap(); };
+
+  const oldRefresh = window.refreshAdminV2;
+  window.refreshAdminV2 = function(){
+    if(oldRefresh){ try{ oldRefresh(); }catch(e){ console.warn(e); } }
+    renderGroupedAdminMap();
+    setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },100);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){ if(typeof updateTravelTags==='function') updateTravelTags(); },800);
+  });
+})();
+</script>
