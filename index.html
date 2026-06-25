@@ -2235,7 +2235,7 @@ document.getElementById("fAddress").addEventListener("input",()=>{
   clearTimeout(addrDebounce);
   addrDebounce = setTimeout(()=>{ renderAvailableSlots(); suggestEngineerByAddress(); }, 800);
 });document.getElementById("fEngineer").addEventListener("change", renderAvailableSlots);
-document.getElementById("fDate").addEventListener("change", renderAvailableSlots);
+document.getElementById("fDate").addEventListener("change", function(){ renderAvailableSlots(); suggestEngineerByAddress(); });
 document.getElementById("fStartTime").addEventListener("change", syncEndTimeByStart);
 document.getElementById("fEndTime").addEventListener("change", renderAvailableSlots);
 
@@ -2406,6 +2406,7 @@ function fillCustomerByCode(){
   syncCityChecks();
   updateCodeName();
   renderAvailableSlots();
+  suggestEngineerByAddress();
 }
 
 function openFormMap(){
