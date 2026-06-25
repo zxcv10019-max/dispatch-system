@@ -1505,6 +1505,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   <button id="tabDispatch" onclick="showPage('dispatchPage')">新增派工資料</button>
   <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
   <button id="tabList" onclick="showPage('listPage')">派工明細</button>
+  <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
   <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
 </div>
 
@@ -1558,7 +1559,8 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       <div class="field"><label>縣市</label><input id="fCity" class="readonly" readonly></div>
       <div class="field"><label>區域</label><input id="fDistrict" class="readonly" readonly></div>
       <div class="field-wide field"><label>在哪個城市（可直接勾選）</label><div id="cityCheckList" class="city-checks"></div></div>
-      <div class="field-wide field"><label>地址</label><input id="fAddress"></div>
+      <div class="field-wide field"><label>地址</label><input id="fAddress" oninput="suggestEngineerByAddress()"></div>
+      <div id="engineerSuggestion" style="display:none;margin-top:6px;padding:10px 14px;background:#fffbe6;border:1px solid #f0c040;border-radius:7px;font-size:13px;"></div>
 
       <div class="field">
         <label>施工項目</label>
@@ -1607,6 +1609,46 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       <div style="font-weight:bold;margin-bottom:10px;color:#2f3542;font-size:14px;">📅 <span id="availableSlotTitle"></span> 各工程師可安排時間段</div>
       <div id="availableSlotList"></div>
     </div>
+  </div>
+</div>
+
+<div id="leavePage" class="page">
+  <div class="form-card" style="max-width:700px">
+    <h3>🏖️ 工程師休假管理</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">工程師</label>
+        <select id="lpEngineer" style="padding:7px 10px;font-size:13px">
+          <option value="林川閔">M 林川閔</option>
+          <option value="陳昱存">C 陳昱存</option>
+          <option value="陳義強">Y 陳義強</option>
+          <option value="鄧長益">E 鄧長益</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">休假日期</label>
+        <input type="date" id="lpDate" style="padding:7px 10px;font-size:13px">
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">類型</label>
+        <select id="lpType" style="padding:7px 10px;font-size:13px" onchange="lpTypeChange()">
+          <option value="請假">請假</option>
+          <option value="休假">休假</option>
+          <option value="公假">公假</option>
+          <option value="補休">補休</option>
+          <option value="出差">出差</option>
+        </select>
+      </div>
+      <div id="lpTripArea" style="display:none">
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">出差地區</label>
+        <select id="lpTripRegion" style="padding:7px 10px;font-size:13px">
+          <option value="北部">北部</option>
+          <option value="南部">南部</option>
+        </select>
+      </div>
+      <button onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
+    </div>
+    <div id="lpList"></div>
   </div>
 </div>
 
@@ -2191,7 +2233,7 @@ document.getElementById("fAddress").addEventListener("input",()=>{
   document.getElementById("fDistrict").value=p.district;
   syncCityChecks();
   clearTimeout(addrDebounce);
-  addrDebounce = setTimeout(()=>{ renderAvailableSlots(); }, 800);
+  addrDebounce = setTimeout(()=>{ renderAvailableSlots(); suggestEngineerByAddress(); }, 800);
 });document.getElementById("fEngineer").addEventListener("change", renderAvailableSlots);
 document.getElementById("fDate").addEventListener("change", renderAvailableSlots);
 document.getElementById("fStartTime").addEventListener("change", syncEndTimeByStart);
@@ -2232,6 +2274,7 @@ function showPage(pageId){
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+  if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");renderLeaveListLP();}
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
     if(tab) tab.classList.add("active");
@@ -2402,6 +2445,56 @@ function getFormJob(){
     amount:document.getElementById("fAmount").value.trim(),
     payment:document.getElementById("fPayment").value
   };
+}
+
+// ===== 新增派工：根據當日路線建議工程師 =====
+function suggestEngineerByAddress(){
+  const addr = (document.getElementById('fAddress')||{}).value || '';
+  const date = (document.getElementById('fDate')||{}).value || '';
+  const box = document.getElementById('engineerSuggestion');
+  if(!box) return;
+  if(addr.length < 3 || !date){ box.style.display='none'; return; }
+
+  // 從地址取縣市（前3~4字）
+  const addrCity = addr.replace(/^(.*?(縣|市)).*$/, '$1');
+
+  // 取當日各工程師的縣市分佈
+  const todayJobs = (jobs||[]).filter(j=>j&&j.date===date&&!j.isHold&&!(j.statusList&&j.statusList.includes('暫押')));
+  const engineerNames = ['林川閔','陳昱存','陳義強','鄧長益'];
+  const scores = {};
+
+  engineerNames.forEach(function(eng){
+    const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); });
+    let score = 0;
+    let sameCity = false;
+    myJobs.forEach(function(j){
+      const jCity = (j.city||j.address||'').replace(/^(.*?(縣|市)).*$/, '$1');
+      if(jCity && addrCity && jCity === addrCity){ score += 3; sameCity = true; }
+      else if(jCity && addrCity && (jCity.slice(0,2)===addrCity.slice(0,2))){ score += 1; }
+    });
+    scores[eng] = { score, count: myJobs.length, sameCity };
+  });
+
+  // 排序：同縣市優先，行程少次之
+  const sorted = engineerNames.slice().sort(function(a,b){
+    if(scores[b].score !== scores[a].score) return scores[b].score - scores[a].score;
+    return scores[a].count - scores[b].count;
+  });
+
+  const top = sorted[0];
+  const labels = {'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'};
+
+  let html = '<b>💡 建議工程師（參考）</b><br><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">';
+  sorted.forEach(function(eng, i){
+    const s = scores[eng];
+    const tag = s.sameCity ? '✅ 同縣市' : (s.count === 0 ? '空閒' : '');
+    const bg = i===0 ? '#218c74' : '#aaa';
+    html += '<span style="background:'+bg+';color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;" onclick="document.getElementById('fEngineer').value=''+eng+''">'+labels[eng]+' '+eng+(tag?' <small>('+tag+')</small>':'')+'</span>';
+  });
+  html += '</div><div style="color:#888;font-size:11px;margin-top:5px;">點選名字可直接填入工程師欄位</div>';
+
+  box.innerHTML = html;
+  box.style.display = 'block';
 }
 
 function addJobFromForm(){
@@ -4826,6 +4919,60 @@ function renderLeaveList(){
   }).join('');
 }
 
+// ===== 獨立休假管理頁籤 JS =====
+function lpTypeChange(){
+  const t = (document.getElementById('lpType')||{}).value;
+  const area = document.getElementById('lpTripArea');
+  if(area) area.style.display = (t==='出差') ? 'block' : 'none';
+}
+
+function addLeaveRecordLP(){
+  const eng = (document.getElementById('lpEngineer')||{}).value;
+  const date = (document.getElementById('lpDate')||{}).value;
+  const type = (document.getElementById('lpType')||{}).value;
+  const region = (document.getElementById('lpTripRegion')||{}).value;
+  if(!date){ alert('請選擇休假日期'); return; }
+  const fullType = (type==='出差') ? '出差（'+region+'）' : type;
+  leaveRecords.push({ id: Date.now(), engineer: eng, date, type: fullType });
+  leaveRecords.sort((a,b)=>a.date.localeCompare(b.date));
+  saveLeaveRecords();
+  renderLeaveListLP();
+  if(confirm('是否同時在派工表中為 ' + eng + ' 新增「' + fullType + '」記錄？')){
+    const leaveJob = {
+      id: Date.now() + Math.floor(Math.random()*9999),
+      engineer: eng, date, startTime:'09:30', time:'09:30', endTime:'18:00',
+      codeName: eng + ' ' + fullType, customerCode:'', customerName: eng,
+      workItem: fullType, workContent: fullType,
+      phone:'', city:'', district:'', address:'', orderNo:'', amount:'', payment:'', isHold:false
+    };
+    jobs.push(leaveJob);
+    saveJobs(); renderSchedule(); renderJobList();
+    alert('已新增至派工表。');
+  }
+}
+
+function renderLeaveListLP(){
+  const box = document.getElementById('lpList'); if(!box) return;
+  if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
+  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
+  const getTripCls = t => t&&t.startsWith('出差') ? 'trip' : (typeCls[t]||'');
+  box.innerHTML = leaveRecords.map(r=>{
+    const cls = getTripCls(r.type);
+    return '<div class="leave-item">'
+      + '<span class="leave-badge ' + cls + '">' + escapeHtml(r.type) + '</span>'
+      + '<span style="font-weight:bold">' + escapeHtml(r.engineer) + '</span>'
+      + '<span>' + escapeHtml(r.date) + '</span>'
+      + '<button onclick="deleteLeaveRecordLP(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto;color:#fff;border:none;border-radius:4px;cursor:pointer">刪除</button>'
+      + '</div>';
+  }).join('');
+}
+
+function deleteLeaveRecordLP(id){
+  leaveRecords = leaveRecords.filter(r=>r.id!==id);
+  saveLeaveRecords();
+  renderLeaveListLP();
+}
+
 // ===== 客戶歷史紀錄進階查詢 =====
 function renderCustomerHistory(){
   const box = document.getElementById('customerHistoryResult'); if(!box) return;
@@ -5199,11 +5346,10 @@ window.openTodayAllRoutes = function(){
     const p=prevJob(j);
     const from=p&&p.address?routeAddress(p.address):COMPANY_START_ADDRESS;
     const to=routeAddress(j.address);
-    const prefix=p?'上一站到本站':'出發到第一站';
-    let gap='';
-    try{if(p&&typeof minutesBetween==='function')gap=minutesBetween(p.endTime||p.startTime||p.time,j.startTime||j.time);}catch(e){}
-    let html='<div class="route-info google-route-final" data-job-id="'+esc(j.id)+'" data-from="'+esc(from)+'" data-to="'+esc(to)+'" data-gap="'+(gap==null?'':esc(gap))+'" data-prefix="'+esc(prefix)+'" data-nav="'+mapUrl(from,to)+'">🚗 '+esc(prefix)+'：Google 即時路況更新中…</div>';
-    if(!nextJob(j))html+='<div class="route-info ok">🏁 本日最後一站　<a href="'+mapUrl('',j.address)+'" target="_blank">從目前位置導航</a></div>';
+    const navUrl=mapUrl(from,to);
+    const label=p?'上一站導航':'出發導航';
+    let html='<div style="margin-top:4px"><a href="'+navUrl+'" target="_blank" style="display:inline-block;background:#40739e;color:#fff;border-radius:5px;padding:3px 10px;font-size:12px;text-decoration:none;">🚗 '+esc(label)+'</a></div>';
+    if(!nextJob(j))html+='<div style="margin-top:4px"><a href="'+mapUrl('',j.address)+'" target="_blank" style="display:inline-block;background:#218c74;color:#fff;border-radius:5px;padding:3px 10px;font-size:12px;text-decoration:none;">📍 從目前位置導航</a></div>';
     return html;
   };
   window.routeTagHtml=function(from,to,label='車程',extra=''){
@@ -5235,9 +5381,9 @@ window.openTodayAllRoutes = function(){
         const count=engineerMap[eng].length;
         const addrs=engineerMap[eng].map(function(j){ return encodeURIComponent(typeof routeAddress==='function'?routeAddress(j.address):j.address); });
         const url='https://www.google.com/maps/dir/'+addrs.join('/');
-        return '<a href="'+url+'" target="_blank" onclick="document.getElementById(&quot;routePickerModal&quot;).remove()" style="display:block;margin-bottom:10px;padding:10px 16px;background:#40739e;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;">👷 '+eng+' <span style="opacity:0.8;font-size:12px;">（'+count+' 個地點）</span></a>';
+        return '<a href="'+url+'" target="_blank" onclick="document.getElementById('routePickerModal').remove()" style="display:block;margin-bottom:10px;padding:10px 16px;background:#40739e;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;">👷 '+eng+' <span style="opacity:0.8;font-size:12px;">（'+count+' 個地點）</span></a>';
       }).join('')+
-      '<button onclick="document.getElementById(&quot;routePickerModal&quot;).remove()" style="margin-top:8px;width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;font-size:13px;">取消</button>';
+      '<button onclick="document.getElementById('routePickerModal').remove()" style="margin-top:8px;width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;font-size:13px;">取消</button>';
     modal.appendChild(box);
     modal.addEventListener('click',function(e){ if(e.target===modal)modal.remove(); });
     document.body.appendChild(modal);
@@ -5296,154 +5442,6 @@ window.openTodayAllRoutes = function(){
       if(!hasGate && (!hasPage || visibleText()<5)) showGuard();
     }catch(e){showGuard();}
   },3500);
-})();
-</script>
-
-
-
-<!-- ===== 導航-only + 新增派工地點推薦工程師 2026-06-25 ===== -->
-<style>
-.engineer-suggest-panel{
-  margin-top:12px;padding:12px;background:#f7fbff;border:1px solid #b7d8f5;border-radius:8px;font-size:13px;line-height:1.6;color:#24435c
-}
-.engineer-suggest-panel b{color:#1f4e79}
-.engineer-suggest-panel .suggest-btn{display:inline-block;margin:4px 6px 0 0;padding:4px 9px;border-radius:999px;background:#eef7ff;border:1px solid #9ed0f5;color:#155a8a;cursor:pointer;font-weight:bold}
-.engineer-suggest-panel .muted{color:#666;font-size:12px}
-.route-info,.travel-tag{background:#eef7ff!important;border-color:#b7d8f5!important;color:#155a8a!important;font-weight:normal!important}
-</style>
-<script>
-(function(){
-  'use strict';
-  const HOME_START_ADDRESS = '台中市西區五權路2-106號';
-  function esc(v){
-    if(typeof escapeHtml==='function') return escapeHtml(v||'');
-    return String(v||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
-  }
-  function addrForNav(v){
-    try{return typeof routeAddress==='function' ? routeAddress(v||'') : String(v||'');}
-    catch(e){return String(v||'');}
-  }
-  window.routeTagHtml=function(from,to,label,extra){
-    if(!to) return '';
-    const href = (typeof directionUrl==='function') ? directionUrl(addrForNav(from),addrForNav(to)) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(addrForNav(from||''))+'&destination='+encodeURIComponent(addrForNav(to))+'&travelmode=driving&dir_action=navigate');
-    const text = label || '導航';
-    return `<a class="travel-tag" ${extra||''} href="${href}" target="_blank">🧭 ${esc(text)}</a>`;
-  };
-  window.nextRouteHtml=function(j){
-    if(!j || !j.address) return '';
-    let next=null;
-    try{ next = (typeof getNextJob==='function') ? getNextJob(j) : null; }catch(e){ next=null; }
-    if(next && next.address){
-      const nav = (typeof directionUrl==='function') ? directionUrl(addrForNav(j.address),addrForNav(next.address)) : ('https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(addrForNav(j.address))+'&destination='+encodeURIComponent(addrForNav(next.address))+'&travelmode=driving&dir_action=navigate');
-      return `<div class="route-info">🚗 下一站　<a href="${nav}" target="_blank">導航</a></div>`;
-    }
-    const nav = (typeof directionUrl==='function') ? directionUrl('',addrForNav(j.address)) : ('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(addrForNav(j.address))+'&travelmode=driving&dir_action=navigate');
-    return `<div class="route-info ok">🏁 本日最後一站　<a href="${nav}" target="_blank">從目前位置導航</a></div>`;
-  };
-  window.updateTravelTags=function(){
-    document.querySelectorAll('.travel-tag,.route-info').forEach(function(el){
-      el.innerHTML = el.innerHTML
-        .replace(/：?\s*(計算中…|無法計算|即時更新|即時於\s*\d{1,2}:\d{2})/g,'')
-        .replace(/\d+\s*分鐘(?:\s*\([^)]*\))?/g,'')
-        .replace(/到此車程/g,'導航')
-        .replace(/下一站車程/g,'導航');
-    });
-    document.querySelectorAll('th').forEach(function(th){
-      if((th.textContent||'').trim()==='下一站車程') th.textContent='導航';
-    });
-  };
-  window.getRouteEstimate=async function(){return null;};
-  window.refreshRouteInfo=function(){window.updateTravelTags();};
-
-  function normalize(s){return String(s||'').replace(/\s+/g,'').trim();}
-  function getDateValue(){return (document.getElementById('fDate')||{}).value || (typeof todayStr==='function'?todayStr():new Date().toISOString().slice(0,10));}
-  function getCity(){return normalize((document.getElementById('fCity')||{}).value);}
-  function getDistrict(){return normalize((document.getElementById('fDistrict')||{}).value);}
-  function getAddress(){return normalize((document.getElementById('fAddress')||{}).value);}
-  function cityDistrictFromAddress(addr){
-    const m=String(addr||'').match(/(台北市|新北市|桃園市|台中市|臺中市|台南市|臺南市|高雄市|基隆市|新竹市|嘉義市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣|澎湖縣|金門縣|連江縣)([^縣市]{1,6}[區鄉鎮市])?/);
-    return {city:m?normalize(m[1]):'',district:m&&m[2]?normalize(m[2]):''};
-  }
-  function scoreEngineer(eng,date,city,district,address){
-    const list=(window.jobs||[]).filter(function(j){return j && j.engineer===eng && (!date || j.date===date) && !j.hold;});
-    let sameDistrict=0,sameCity=0,sameAddrKeyword=0,nearJobs=[];
-    const keyRoad=(address.match(/([^縣市區鄉鎮]{1,12}(路|街|大道|巷))/)||[])[1]||'';
-    list.forEach(function(j){
-      const a=normalize(j.address||'');
-      const info=cityDistrictFromAddress(a);
-      const jc=normalize(j.city)||info.city;
-      const jd=normalize(j.district)||info.district;
-      if(district && jd && jd===district){sameDistrict++; nearJobs.push(j);}
-      else if(city && jc && jc===city){sameCity++; nearJobs.push(j);}
-      if(keyRoad && a.indexOf(keyRoad)>=0) sameAddrKeyword++;
-    });
-    return {eng,score:sameDistrict*100+sameAddrKeyword*70+sameCity*35+list.length, sameDistrict,sameCity,sameAddrKeyword,total:list.length,nearJobs:nearJobs.slice(0,3)};
-  }
-  function ensureSuggestPanel(){
-    let panel=document.getElementById('engineerSuggestPanel');
-    if(panel) return panel;
-    panel=document.createElement('div');
-    panel.id='engineerSuggestPanel';
-    panel.className='engineer-suggest-panel';
-    panel.innerHTML='輸入日期與地址後，這裡會依地點提供適合工程師參考。';
-    const anchor=document.getElementById('availableSlotPanel') || document.querySelector('#dispatchPage .form-grid');
-    if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(panel, anchor.nextSibling);
-    return panel;
-  }
-  window.updateEngineerSuggestion=function(){
-    const panel=ensureSuggestPanel();
-    const date=getDateValue();
-    let city=getCity(), district=getDistrict();
-    const address=getAddress();
-    const parsed=cityDistrictFromAddress(address);
-    city=city||parsed.city; district=district||parsed.district;
-    if(!city && !district && !address){
-      panel.innerHTML='📍 輸入客戶地址後，會依「同日同區 / 同市」派工分布，提供適合工程師參考。';
-      return;
-    }
-    const arr=(window.engineers||['林川閔','陳昱存','陳義強','鄧長益']).map(function(e){return scoreEngineer(e,date,city,district,address);}).sort(function(a,b){return b.score-a.score;});
-    const best=arr[0];
-    if(!best || best.score<=0){
-      panel.innerHTML=`📍 <b>地點參考</b>：${esc(city)}${esc(district)}<br><span class="muted">當天沒有明顯同區/同市派工，工程師可平均安排；若要保守，請選當天件數較少者。</span>`+
-        arr.map(function(x){return `<span class="suggest-btn" onclick="document.getElementById('fEngineer').value='${esc(x.eng)}'; if(typeof updateAvailableSlots==='function') updateAvailableSlots();">${esc(typeof displayEngineer==='function'?displayEngineer(x.eng):x.eng[0])} ${esc(x.eng)}：${x.total}件</span>`;}).join('');
-      return;
-    }
-    const reasons=[];
-    if(best.sameDistrict) reasons.push(`同區 ${best.sameDistrict} 件`);
-    if(best.sameCity) reasons.push(`同市 ${best.sameCity} 件`);
-    if(best.sameAddrKeyword) reasons.push(`相近路段 ${best.sameAddrKeyword} 件`);
-    const near = best.nearJobs.length ? '<br><span class="muted">參考派工：'+best.nearJobs.map(function(j){return `${esc(j.startTime||'')} ${esc(j.codeName||j.customerName||'')}（${esc(j.district||cityDistrictFromAddress(j.address).district||j.city||'')}）`;}).join('、')+'</span>' : '';
-    panel.innerHTML=`📍 <b>建議參考工程師：${esc(typeof displayEngineer==='function'?displayEngineer(best.eng):'')} ${esc(best.eng)}</b><br>`+
-      `<span class="muted">依 ${esc(date)} 的派工地點判斷：${reasons.join('、') || '當天件數分布'}。僅供排程參考。</span>${near}<br>`+
-      arr.map(function(x,i){return `<span class="suggest-btn" onclick="document.getElementById('fEngineer').value='${esc(x.eng)}'; if(typeof updateAvailableSlots==='function') updateAvailableSlots();">${i===0?'✅ ':''}${esc(typeof displayEngineer==='function'?displayEngineer(x.eng):x.eng[0])} ${esc(x.eng)}｜同區${x.sameDistrict} / 同市${x.sameCity} / ${x.total}件</span>`;}).join('');
-  };
-  function hookSuggestEvents(){
-    ensureSuggestPanel();
-    ['fDate','fCity','fDistrict','fAddress','fCustomerCode','fCustomerName'].forEach(function(id){
-      const el=document.getElementById(id);
-      if(el && !el.__suggestHooked){
-        ['input','change','blur'].forEach(function(ev){el.addEventListener(ev,function(){setTimeout(window.updateEngineerSuggestion,80);});});
-        el.__suggestHooked=true;
-      }
-    });
-    const oldFill=window.fillCustomerByCode;
-    if(oldFill && !oldFill.__suggestWrapped){
-      const wrapped=function(){const r=oldFill.apply(this,arguments); setTimeout(window.updateEngineerSuggestion,120); return r;};
-      wrapped.__suggestWrapped=true; window.fillCustomerByCode=wrapped;
-    }
-  }
-  ['renderSchedule','renderMyTodayPanel','renderJobList'].forEach(function(fn){
-    const old=window[fn];
-    if(old && !old.__navOnlyWrapped){
-      const wrapped=function(){const r=old.apply(this,arguments); setTimeout(window.updateTravelTags,50); return r;};
-      wrapped.__navOnlyWrapped=true; window[fn]=wrapped;
-    }
-  });
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){hookSuggestEvents(); window.updateEngineerSuggestion(); setTimeout(window.updateTravelTags,200);});
-  }else{
-    hookSuggestEvents(); window.updateEngineerSuggestion(); setTimeout(window.updateTravelTags,200);
-  }
 })();
 </script>
 
