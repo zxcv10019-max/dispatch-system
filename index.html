@@ -2544,6 +2544,7 @@ function clearDispatchForm(){
   document.getElementById("fPayment").value="";
   editingJobId=null;
   const btn=document.getElementById("saveJobBtn"); if(btn) btn.textContent="儲存派工";
+  const sug=document.getElementById("engineerSuggestion"); if(sug) sug.style.display="none";
   syncCityChecks();
   renderAvailableSlots();
 }
@@ -4963,19 +4964,22 @@ function renderLeaveListLP(){
 }
 
 function deleteLeaveRecordLP(id){
-  const rec = leaveRecords.find(r=>r.id===id);
-  leaveRecords = leaveRecords.filter(r=>r.id!==id);
+  const numId = Number(id); // 確保型別一致
+  const rec = leaveRecords.find(r=>Number(r.id)===numId);
+  leaveRecords = leaveRecords.filter(r=>Number(r.id)!==numId);
   saveLeaveRecords();
-  // 同步刪除對應派工資料（相同工程師、日期、workItem 吻合）
+  // 同步刪除對應派工資料（相同工程師、日期、workItem 或 codeName 吻合）
   if(rec){
     const before = jobs.length;
     jobs = jobs.filter(function(j){
-      const sameEng = (j.engineer||'').includes(rec.engineer) || rec.engineer.includes(j.engineer||'');
+      const sameEng = String(j.engineer||'').trim() === String(rec.engineer||'').trim();
       const sameDate = j.date === rec.date;
-      const sameType = (j.workItem||'') === rec.type || (j.workContent||'') === rec.type;
+      const sameType = (j.workItem||'')=== rec.type || (j.workContent||'')===rec.type
+        || (j.codeName||'').includes(rec.type) || (j.codeName||'').includes(rec.engineer);
       return !(sameEng && sameDate && sameType);
     });
     if(jobs.length < before){ saveJobs(); renderSchedule(); renderJobList(); }
+    else { alert('休假紀錄已刪除，但找不到對應的派工資料（可能已手動刪除）。'); }
   }
   renderLeaveListLP();
 }
