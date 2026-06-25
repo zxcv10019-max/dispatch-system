@@ -2777,7 +2777,7 @@ function renderAvailableSlots(){
 
   // 非同步填入車程
   if(currentAddr){
-    updateTravelTags();
+    // updateTravelTags(); // 已停用車程計算
   }
 }
 
@@ -3040,7 +3040,7 @@ function renderSchedule(){
   table.style.minWidth = "6800px";
   renderSummary();
   renderMyTodayPanel();
-  setTimeout(updateTravelTags, 80);
+  // setTimeout(updateTravelTags, 80); // 已停用
 }
 
 function jobCard(j){
@@ -3191,7 +3191,7 @@ function renderMyTodayPanel(){
   }
 
   panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDaySection(today,"今天")}${oneDaySection(tomorrow,"明天")}`;
-  setTimeout(updateTravelTags, 80);
+  // setTimeout(updateTravelTags, 80); // 已停用
 }
 
 
@@ -3933,7 +3933,7 @@ function renderJobList(){
   });
 
   document.getElementById("jobListTable").innerHTML=html;
-  setTimeout(updateTravelTags, 80);
+  // setTimeout(updateTravelTags, 80); // 已停用
 }
 
 function exportCustomers(){
@@ -4739,7 +4739,7 @@ document.addEventListener("click", function(e){
     }
 
     panel.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDay(today,"今天")}${oneDay(tomorrow,"明天")}`;
-    setTimeout(updateTravelTags, 80);
+    // setTimeout(updateTravelTags, 80); // 已停用
   }
 
   window.renderMyTodayPanel = renderMobileTwoDayPanel;
@@ -5403,15 +5403,17 @@ window.openTodayAllRoutes = function(){
   };
   const oldRender=window.renderSchedule;
   if(oldRender&&!oldRender.__routeFinalStable){
-    const wrapped=function(){const r=oldRender.apply(this,arguments);setTimeout(()=>{try{window.updateTravelTags();}catch(e){}},200);return r;};
+    const wrapped=function(){const r=oldRender.apply(this,arguments);// updateTravelTags 已停用
+return r;};
     wrapped.__routeFinalStable=true;window.renderSchedule=wrapped;
   }
   const oldMobile=window.renderMyTodayPanel;
   if(oldMobile&&!oldMobile.__routeFinalStable){
-    const wrapped=function(){const r=oldMobile.apply(this,arguments);setTimeout(()=>{try{window.updateTravelTags();}catch(e){}},200);return r;};
+    const wrapped=function(){const r=oldMobile.apply(this,arguments);// updateTravelTags 已停用
+return r;};
     wrapped.__routeFinalStable=true;window.renderMyTodayPanel=wrapped;
   }
-  setTimeout(()=>{try{window.updateTravelTags();}catch(e){}},800);
+  // setTimeout(()=>{try{window.updateTravelTags();}catch(e){}},800); // 已停用
 })();
 </script>
 
