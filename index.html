@@ -5893,5 +5893,275 @@ window.openTodayAllRoutes = function(){
 })();
 </script>
 
+
+
+<!-- ===== FINAL ROUTE ACCURACY FIX 2026-06-25 =====
+修正重點：
+1) 車程不再吃舊 OSRM / GAS 快取，避免顯示 17 分這種無即時路況數字。
+2) 統一使用 Google Routes API + TRAFFIC_AWARE_OPTIMAL + departureTime=now。
+3) 每日第一站起點固定：台中市西區五權路2-106號。
+4) 每次按「即時更新」都重新抓 Google 即時路況，不用舊快取。
+-->
+<style>
+.route-info.google-live-route,
+.travel-tag.google-live-route{
+  background:#e8f7ee!important;
+  border-color:#8fd19e!important;
+  color:#1a5c2a!important;
+}
+.route-info.google-live-route.warn,
+.travel-tag.google-live-route.warn{
+  background:#ffecec!important;
+  border-color:#f5a3a3!important;
+  color:#9b1c1c!important;
+  font-weight:bold!important;
+}
+.google-live-meta{
+  display:inline-block;
+  margin-left:4px;
+  color:#666;
+  font-size:11px;
+  font-weight:normal;
+}
+.google-live-btn{
+  background:#218c74!important;
+  color:#fff!important;
+  border-radius:999px!important;
+  padding:2px 8px!important;
+  font-size:11px!important;
+  margin-left:4px!important;
+}
+@media(max-width:900px){.google-live-meta{display:block;margin:4px 0 0}.google-live-btn{font-size:12px!important;padding:3px 8px!important}}
+</style>
+<script>
+(function(){
+  const COMPANY_START_ADDRESS = '台中市西區五權路2-106號';
+  const SOURCE = 'google_routes_live_v4';
+  const CACHE_KEY = 'paigong_google_routes_live_cache_v4';
+  const OLD_CACHE_KEYS = [
+    'paigong_osrm_route_pair_cache_v2',
+    'paigong_google_gas_route_cache_v1',
+    'paigong_route_pair_cache_v1'
+  ];
+  const originalFetchDrivingInfo = window.fetchDrivingInfo;
+
+  function safe(v){return String(v==null?'':v).trim();}
+  function esc(v){return String(v==null?'':v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');}
+  function clean(v){
+    try{ if(typeof cleanAddressForLocate==='function') return cleanAddressForLocate(v); }catch(e){}
+    try{ if(typeof cleanMapAddress==='function') return cleanMapAddress(v); }catch(e){}
+    return safe(v);
+  }
+  function allJobs(){try{ if(Array.isArray(window.jobs)) return window.jobs; }catch(e){} try{ if(Array.isArray(jobs)) return jobs; }catch(e){} return [];}
+  function findJob(id){id=String(id||''); return allJobs().find(j=>String(j&&j.id)===id)||null;}
+  function key(from,to){return clean(from)+'|'+clean(to);}
+  function readCache(){try{return JSON.parse(localStorage.getItem(CACHE_KEY)||'{}')||{};}catch(e){return {};}}
+  function writeCache(c){try{localStorage.setItem(CACHE_KEY,JSON.stringify(c));}catch(e){}}
+  function clearOldRouteCache(){
+    OLD_CACHE_KEYS.forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
+    try{
+      allJobs().forEach(j=>{
+        if(j && j.routeCache && j.routeCache.source !== SOURCE) delete j.routeCache;
+      });
+      if(typeof saveJobs==='function') setTimeout(()=>{try{saveJobs();}catch(e){}},500);
+    }catch(e){}
+  }
+  clearOldRouteCache();
+
+  function parseSec(duration){
+    const m=String(duration||'').match(/([0-9.]+)s/);
+    return m?Math.round(Number(m[1])):0;
+  }
+  function durationText(sec){
+    const mins=Math.max(0,Math.round(Number(sec||0)/60));
+    if(mins<60) return mins+' 分鐘';
+    const h=Math.floor(mins/60), m=mins%60;
+    return m ? h+' 小時 '+m+' 分鐘' : h+' 小時';
+  }
+  function distanceText(meters){
+    const km=Number(meters||0)/1000;
+    if(km<1) return Math.round(Number(meters||0))+' m';
+    return km.toFixed(km>=10?0:1)+' km';
+  }
+  function fmtTime(iso){const d=new Date(iso||Date.now()); if(isNaN(d))return ''; return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+  function mapUrl(from,to){
+    return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(from||'')+'&destination='+encodeURIComponent(to||'')+'&travelmode=driving';
+  }
+  function getApiKey(){
+    try{ if(typeof GOOGLE_MAPS_API_KEY!=='undefined' && GOOGLE_MAPS_API_KEY) return GOOGLE_MAPS_API_KEY; }catch(e){}
+    try{ if(typeof firebaseConfig!=='undefined' && firebaseConfig.apiKey) return firebaseConfig.apiKey; }catch(e){}
+    return '';
+  }
+  async function fetchGoogleRoutesLive(from,to){
+    from=clean(from); to=clean(to);
+    if(!from || !to) return null;
+    if(from===to) return {status:'success',source:SOURCE,durationText:'0 分鐘',distanceText:'0 m',durationMinutes:0,distanceKm:0,updatedAt:new Date().toISOString()};
+    const apiKey=getApiKey();
+    if(!apiKey) return {status:'no_api_key'};
+
+    const body={
+      origin:{address:from},
+      destination:{address:to},
+      travelMode:'DRIVE',
+      routingPreference:'TRAFFIC_AWARE_OPTIMAL',
+      departureTime:new Date(Date.now()+60*1000).toISOString(),
+      computeAlternativeRoutes:true,
+      languageCode:'zh-TW',
+      regionCode:'TW',
+      units:'METRIC'
+    };
+    const res=await fetch('https://routes.googleapis.com/directions/v2:computeRoutes',{
+      method:'POST',
+      cache:'no-store',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Goog-Api-Key':apiKey,
+        'X-Goog-FieldMask':'routes.duration,routes.staticDuration,routes.distanceMeters,routes.description'
+      },
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error('Google Routes API HTTP '+res.status);
+    const data=await res.json();
+    const routes=(data && Array.isArray(data.routes)) ? data.routes : [];
+    if(!routes.length) return {status:'route_fail'};
+
+    // Google Maps 介面會顯示目前最佳路線。Routes API 的第一筆通常就是最佳；
+    // 若第一筆缺 duration，才用 duration 最短者補上。
+    let r=routes[0];
+    if(!r || !r.duration){
+      r=routes.filter(x=>x&&x.duration).sort((a,b)=>parseSec(a.duration)-parseSec(b.duration))[0] || routes[0];
+    }
+    const sec=parseSec(r.duration);
+    const meters=Number(r.distanceMeters||0);
+    return {
+      status:'success',
+      source:SOURCE,
+      durationText:durationText(sec),
+      distanceText:distanceText(meters),
+      durationMinutes:Math.max(0,Math.round(sec/60)),
+      distanceKm:Number((meters/1000).toFixed(1)),
+      updatedAt:new Date().toISOString()
+    };
+  }
+
+  // 最終覆蓋：所有車程優先走 Google Routes 即時路況；失敗才退回舊函式。
+  window.fetchDrivingInfo = async function(from,to,force){
+    try{
+      const live=await fetchGoogleRoutesLive(from,to);
+      if(live && live.status==='success') return live;
+    }catch(e){ console.warn('Google Routes 即時車程失敗，改用備援',e); }
+    if(typeof originalFetchDrivingInfo==='function'){
+      const fb=await originalFetchDrivingInfo(from,to,true);
+      if(fb && fb.status==='success') fb.source=fb.source||'fallback';
+      return fb;
+    }
+    return null;
+  };
+
+  function sortJobs(a,b){
+    const ai=(typeof timeIndex==='function')?timeIndex(a.startTime||a.time):0;
+    const bi=(typeof timeIndex==='function')?timeIndex(b.startTime||b.time):0;
+    if(ai!==bi) return ai-bi;
+    return Number(a.id||0)-Number(b.id||0);
+  }
+  function getPreviousJob(j){
+    if(!j||!j.date||!j.engineer) return null;
+    const cur=(typeof timeIndex==='function')?timeIndex(j.startTime||j.time):-1;
+    const arr=allJobs().filter(x=>x&&x.id!==j.id&&!x.isHold&&x.date===j.date&&x.engineer===j.engineer&&x.address).sort(sortJobs);
+    let prev=null;
+    for(const x of arr){
+      const xi=(typeof timeIndex==='function')?timeIndex(x.startTime||x.time):-1;
+      if(xi<cur) prev=x;
+    }
+    return prev;
+  }
+  function getNextJobLocal(j){
+    if(typeof getNextJob==='function') try{return getNextJob(j);}catch(e){}
+    if(!j||!j.date||!j.engineer) return null;
+    const cur=(typeof timeIndex==='function')?timeIndex(j.startTime||j.time):-1;
+    return allJobs().filter(x=>x&&x.id!==j.id&&!x.isHold&&x.date===j.date&&x.engineer===j.engineer&&x.address).sort(sortJobs).find(x=>((typeof timeIndex==='function')?timeIndex(x.startTime||x.time):-1)>cur)||null;
+  }
+  function fromForJob(j){
+    const prev=getPreviousJob(j);
+    return prev && prev.address ? clean(prev.address) : COMPANY_START_ADDRESS;
+  }
+  function prefixForJob(j){return getPreviousJob(j) ? '下一站' : '出發到第一站';}
+  function button(jobId,label){return '<button type="button" class="google-live-btn" onclick="recalcRouteCache(\''+esc(jobId||'')+'\',event)">'+esc(label||'即時更新')+'</button>';}
+  function render(tag,info,from,to){
+    const box=tag.classList.contains('route-info')||tag.classList.contains('osrm-route-box');
+    const prefix=tag.dataset.prefix||'車程';
+    const gap=tag.dataset.gap===''||tag.dataset.gap==null?null:Number(tag.dataset.gap);
+    const mins=Number(info.durationMinutes||0);
+    const warn=gap!==null&&!Number.isNaN(gap)&&mins>gap;
+    const nav=tag.dataset.nav||mapUrl(from,to);
+    const jobId=tag.dataset.jobId||'';
+    tag.classList.remove('err','ok','warn','osrm-route-box','osrm-route-inline');
+    tag.classList.add('google-live-route', warn?'warn':'ok');
+    const warnText=warn?' ⚠️ 空檔'+gap+'分鐘，可能趕不上':'';
+    const src=info.source===SOURCE?'Google即時':'備援';
+    tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：'+esc(info.durationText||'已計算')+(info.distanceText?'（'+esc(info.distanceText)+'）':'')+warnText+' <a href="'+nav+'" target="_blank">導航</a> '+button(jobId,'即時更新')+'<span class="google-live-meta">'+src+' '+esc(fmtTime(info.updatedAt))+'</span>';
+  }
+  function working(tag){const box=tag.classList.contains('route-info')||tag.classList.contains('osrm-route-box'); const p=tag.dataset.prefix||'車程'; tag.innerHTML=(box?'🚗 ':'')+esc(p)+'：Google 即時路況更新中…';}
+  function error(tag,msg,from,to){const box=tag.classList.contains('route-info')||tag.classList.contains('osrm-route-box'); const p=tag.dataset.prefix||'車程'; const nav=tag.dataset.nav||mapUrl(from,to); const jobId=tag.dataset.jobId||''; tag.classList.remove('ok','warn'); tag.classList.add('err'); tag.innerHTML=(box?'🚗 ':'')+esc(p)+'：'+esc(msg||'無法計算')+' <a href="'+nav+'" target="_blank">開 Google Maps</a> '+button(jobId,'再試一次');}
+  async function calcTag(tag){
+    const from=clean(tag.dataset.from||''); const to=clean(tag.dataset.to||'');
+    if(!from||!to) return;
+    working(tag);
+    try{
+      const info=await window.fetchDrivingInfo(from,to,true);
+      if(info && info.status==='success'){
+        const c=readCache(); c[key(from,to)]=info; writeCache(c);
+        const jobId=tag.dataset.jobId||''; const j=jobId?findJob(jobId):null;
+        if(j){ j.routeCache=Object.assign({},info,{fromClean:from,toClean:to}); try{ if(typeof saveJobs==='function') setTimeout(()=>saveJobs(),300); }catch(e){} }
+        render(tag,info,from,to);
+      }else error(tag,'無法取得 Google 即時路況',from,to);
+    }catch(e){console.warn(e); error(tag,'Google 即時路況失敗',from,to);}
+  }
+  window.updateTravelTags = async function(force){
+    const tags=Array.from(document.querySelectorAll('.travel-tag[data-from][data-to], .route-info[data-from][data-to], .osrm-route-box[data-from][data-to], .osrm-route-inline[data-from][data-to]'));
+    for(const tag of tags) await calcTag(tag);
+  };
+  window.calcOneRouteFromButton=function(btn,ev){if(ev){ev.preventDefault();ev.stopPropagation();} const tag=btn.closest('.travel-tag,.route-info,.osrm-route-box,.osrm-route-inline'); if(tag) calcTag(tag);};
+  window.recalcRouteCache=function(jobId,ev){if(ev){ev.preventDefault();ev.stopPropagation();} const selector='.route-info[data-job-id="'+String(jobId).replaceAll('"','\\"')+'"], .osrm-route-box[data-job-id="'+String(jobId).replaceAll('"','\\"')+'"], .travel-tag[data-job-id="'+String(jobId).replaceAll('"','\\"')+'"];'; document.querySelectorAll(selector.replace(/;$/,'' )).forEach(tag=>calcTag(tag));};
+
+  // 這裡改的是「每張卡片下方顯示的下一段車程」：第一站從公司地址出發，其餘從上一站出發。
+  window.nextRouteHtml=function(j){
+    if(!j||!j.address) return '';
+    const next=getNextJobLocal(j);
+    const from=fromForJob(j), to=clean(j.address), p=prefixForJob(j);
+    const gap=(typeof minutesBetween==='function')?minutesBetween((getPreviousJob(j)||{}).endTime||(getPreviousJob(j)||{}).startTime||'', j.startTime||j.time):'';
+    const html='<div class="route-info google-live-route" data-job-id="'+esc(j.id)+'" data-from="'+esc(from)+'" data-to="'+esc(to)+'" data-gap="'+(gap===null?'':esc(gap))+'" data-prefix="'+esc(p)+'" data-nav="'+mapUrl(from,to)+'">🚗 '+esc(p)+'：Google 即時路況更新中…</div>';
+    if(!next) return html + '<div class="route-info ok">🏁 本日最後一站　<a href="'+mapUrl('', j.address)+'" target="_blank">從目前位置導航</a></div>';
+    return html;
+  };
+
+  window.openTodayAllRoutes=function(){
+    const d=(document.getElementById('viewDate')&&document.getElementById('viewDate').value) || (typeof todayStr==='function'?todayStr():'');
+    const list=allJobs().filter(j=>j&&!j.isHold&&j.date===d&&j.address).sort((a,b)=>{
+      if((a.engineer||'')!==(b.engineer||'')) return String(a.engineer||'').localeCompare(String(b.engineer||''),'zh-Hant');
+      return sortJobs(a,b);
+    });
+    const stops=[COMPANY_START_ADDRESS].concat(list.map(j=>j.address));
+    if(stops.length<2){alert('今天沒有可開啟的派工地址');return;}
+    const origin=stops[0], dest=stops[stops.length-1], waypoints=stops.slice(1,-1).join('|');
+    let url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(origin)+'&destination='+encodeURIComponent(dest)+'&travelmode=driving';
+    if(waypoints) url+='&waypoints='+encodeURIComponent(waypoints);
+    window.open(url,'_blank');
+  };
+
+  const oldRender=window.renderSchedule;
+  if(oldRender && !oldRender.__googleLiveFinalWrapped){
+    const w=function(){const r=oldRender.apply(this,arguments); setTimeout(()=>{try{window.updateTravelTags(true);}catch(e){}},300); return r;};
+    w.__googleLiveFinalWrapped=true; window.renderSchedule=w;
+  }
+  const oldMobile=window.renderMyTodayPanel;
+  if(oldMobile && !oldMobile.__googleLiveFinalWrapped){
+    const w=function(){const r=oldMobile.apply(this,arguments); setTimeout(()=>{try{window.updateTravelTags(true);}catch(e){}},300); return r;};
+    w.__googleLiveFinalWrapped=true; window.renderMyTodayPanel=w;
+  }
+  setTimeout(()=>{try{if(typeof renderSchedule==='function')renderSchedule();}catch(e){} try{window.updateTravelTags(true);}catch(e){}},1500);
+})();
+</script>
+
 </body>
 </html>
