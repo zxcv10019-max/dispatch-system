@@ -2683,11 +2683,13 @@ function routeTagHtml(from,to,label="車程", extra=""){
   return `<span class="travel-tag" data-from="${escapeHtml(from)}" data-to="${escapeHtml(to)}" ${extra}>${label}：計算中…</span>`;
 }
 function nextRouteHtml(j){
+  if(!j||!j.address) return "";
   const next=getNextJob(j);
-  if(!j.address) return "";
-  if(!next) return `<div class="route-info ok">🏁 本日最後一站　<a href="${directionUrl("", j.address)}" target="_blank">從目前位置導航</a></div>`;
-  const gap = minutesBetween(j.endTime||j.startTime||j.time, next.startTime||next.time);
-  return `<div class="route-info" data-from="${escapeHtml(j.address)}" data-to="${escapeHtml(next.address)}" data-gap="${gap===null?"":gap}" data-prefix="下一站" data-nav="${directionUrl(j.address,next.address)}">🚗 下一站：計算中…</div>`;
+  const from=next&&next.address?j.address:"";
+  const to=j.address;
+  const navUrl=directionUrl(from,to);
+  const label=next&&next.address?"上一站 → 導航":"📍 現在位置 → 導航";
+  return `<div style="margin-top:4px"><a href="${navUrl}" target="_blank" style="display:inline-block;background:#40739e;color:#fff;border-radius:5px;padding:3px 10px;font-size:12px;text-decoration:none;">🚗 ${label}</a></div>`;
 }
 async function updateTravelTags(){
   const tags = document.querySelectorAll(".travel-tag[data-from][data-to], .route-info[data-from][data-to]");
