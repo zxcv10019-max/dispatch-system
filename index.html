@@ -5040,8 +5040,39 @@ window.openTodayAllRoutes = function(){
     return !isHold && String(j.date||'')===today && j.address;
   }).sort(function(a,b){ return String(a.startTime||'').localeCompare(String(b.startTime||'')); });
   if(!todayJobs.length){ alert('今日沒有含地址的派工資料。'); return; }
-  const url = 'https://www.google.com/maps/dir/' + todayJobs.map(function(j){ return encodeURIComponent(j.address); }).join('/');
-  window.open(url, '_blank');
+
+  // 收集工程師清單
+  const engineerMap = {};
+  todayJobs.forEach(function(j){
+    const eng = j.engineer || '未指派';
+    if(!engineerMap[eng]) engineerMap[eng] = [];
+    engineerMap[eng].push(j);
+  });
+  const engineers = Object.keys(engineerMap);
+
+  // 移除舊選單
+  const old = document.getElementById('routePickerModal');
+  if(old) old.remove();
+
+  // 建立選單 modal
+  const modal = document.createElement('div');
+  modal.id = 'routePickerModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:10px;padding:24px 28px;min-width:260px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18);';
+  
+  box.innerHTML = '<div style="font-weight:bold;font-size:16px;margin-bottom:16px;">🗺 選擇工程師路線</div>' +
+    engineers.map(function(eng){
+      const count = engineerMap[eng].length;
+      const url = 'https://www.google.com/maps/dir/' + engineerMap[eng].map(function(j){ return encodeURIComponent(j.address); }).join('/');
+      return '<a href="'+url+'" target="_blank" onclick="document.getElementById(\'routePickerModal\').remove()" style="display:block;margin-bottom:10px;padding:10px 16px;background:#40739e;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;">👷 '+eng+' <span style="opacity:0.8;font-size:12px;">（'+count+' 個地點）</span></a>';
+    }).join('') +
+    '<button onclick="document.getElementById(\'routePickerModal\').remove()" style="margin-top:8px;width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;background:#f5f5f5;cursor:pointer;font-size:13px;">取消</button>';
+  
+  modal.appendChild(box);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
 };
 </script>
 
