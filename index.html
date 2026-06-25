@@ -5343,13 +5343,14 @@ window.openTodayAllRoutes = function(){
 
   window.nextRouteHtml=function(j){
     if(!j||!j.address)return '';
-    const p=prevJob(j);
-    const from=p&&p.address?routeAddress(p.address):COMPANY_START_ADDRESS;
+    const p=prevJob(j)&&prevJob(j).address?prevJob(j):null;
+    // 第一站：from 留空，Google Maps 自動用現在位置
+    // 後續站：from 用上一站地址
+    const from=p?routeAddress(p.address):'';
     const to=routeAddress(j.address);
     const navUrl=mapUrl(from,to);
-    const label=p?'上一站導航':'出發導航';
+    const label=p?'上一站 → 導航':'📍 現在位置 → 導航';
     let html='<div style="margin-top:4px"><a href="'+navUrl+'" target="_blank" style="display:inline-block;background:#40739e;color:#fff;border-radius:5px;padding:3px 10px;font-size:12px;text-decoration:none;">🚗 '+esc(label)+'</a></div>';
-    if(!nextJob(j))html+='<div style="margin-top:4px"><a href="'+mapUrl('',j.address)+'" target="_blank" style="display:inline-block;background:#218c74;color:#fff;border-radius:5px;padding:3px 10px;font-size:12px;text-decoration:none;">📍 從目前位置導航</a></div>';
     return html;
   };
   window.routeTagHtml=function(from,to,label='車程',extra=''){
