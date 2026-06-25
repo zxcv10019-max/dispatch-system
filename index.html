@@ -5528,5 +5528,26 @@ return r;};
 })();
 </script>
 
+
+
+<!-- 2026-06-25：移除自動車程/下一站計算顯示，只保留導航連結 -->
+<style>
+.route-info, .travel-tag{display:none !important;}
+</style>
+<script>
+(function(){
+  function disableAutoRouteDisplay(){
+    window.nextRouteHtml = function(){ return ""; };
+    window.routeTagHtml = function(){ return ""; };
+    window.updateTravelTags = function(){};
+    document.querySelectorAll('.route-info,.travel-tag').forEach(function(el){ el.remove(); });
+  }
+  disableAutoRouteDisplay();
+  document.addEventListener('DOMContentLoaded', disableAutoRouteDisplay);
+  setTimeout(disableAutoRouteDisplay, 300);
+  setTimeout(disableAutoRouteDisplay, 1200);
+})();
+</script>
+
 </body>
 </html>
