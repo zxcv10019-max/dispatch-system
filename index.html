@@ -5154,7 +5154,15 @@ window.openTodayAllRoutes = function(){
     if(!routes.length)return {status:'route_fail'};
     const r=routes[0];
     const sec=parseSec(r.duration);const meters=Number(r.distanceMeters||0);
-    return {status:'success',durationText:durText(sec),distanceText:distText(meters),durationMinutes:Math.round(sec/60),distanceKm:Number((meters/1000).toFixed(1)),updatedAt:new Date().toISOString()};
+    // Google Routes API 的 duration 常會比 Google Maps 網頁版「最佳路線」樂觀，
+    // 尤其台中市區短程/壅塞路段會差很多。這裡用 Google 即時路況結果再做
+    // 市區保守校正，讓顯示時間更接近 Google Maps 上看到的分鐘數。
+    const apiMin=Math.max(1,sec/60);
+    const km=Math.max(0,meters/1000);
+    const cityBuffer=Math.min(12,Math.max(4,km*0.7));
+    const calibratedMin=Math.max(Math.round(apiMin),Math.ceil(apiMin*1.25+cityBuffer));
+    const calibratedSec=calibratedMin*60;
+    return {status:'success',durationText:durText(calibratedSec),distanceText:distText(meters),durationMinutes:calibratedMin,distanceKm:Number(km.toFixed(1)),apiDurationMinutes:Math.round(apiMin),updatedAt:new Date().toISOString(),calibrated:true};
   }
 
   window.fetchDrivingInfo=async function(from,to){return googleRoute(from,to);};
@@ -5169,7 +5177,7 @@ window.openTodayAllRoutes = function(){
     const jobId=tag.dataset.jobId||'';
     tag.className=(box?'route-info ':'travel-tag ')+'google-route-final '+(warn?'warn':'ok');
     const warnText=warn?' ⚠️ 空檔'+gap+'分鐘，可能趕不上':'';
-    tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：'+esc(info.durationText)+'（'+esc(info.distanceText)+'）'+warnText+' <a href="'+nav+'" target="_blank">導航</a> '+btn(jobId,'即時更新')+'<span class="route-final-meta">Google 即時 '+fmtNow()+'</span>';
+    tag.innerHTML=(box?'🚗 ':'')+esc(prefix)+'：'+esc(info.durationText)+'（'+esc(info.distanceText)+'）'+warnText+' <a href="'+nav+'" target="_blank">導航</a> '+btn(jobId,'即時更新')+'<span class="route-final-meta">Google 即時校正 '+fmtNow()+'</span>';
   }
   function working(tag){const box=tag.classList.contains('route-info');const p=tag.dataset.prefix||'車程';tag.innerHTML=(box?'🚗 ':'')+esc(p)+'：Google 即時路況更新中…';}
   function error(tag,msg,from,to){const box=tag.classList.contains('route-info');const p=tag.dataset.prefix||'車程';const nav=tag.dataset.nav||mapUrl(from,to);const jobId=tag.dataset.jobId||'';tag.className=(box?'route-info ':'travel-tag ')+'warn';tag.innerHTML=(box?'🚗 ':'')+esc(p)+'：'+esc(msg||'無法計算')+' <a href="'+nav+'" target="_blank">開 Google Maps</a> '+btn(jobId,'再試一次');}
