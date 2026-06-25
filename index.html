@@ -1908,7 +1908,7 @@ function roleLabel(){
   return "未授權";
 }
 function localDataExists(){
-  return (Array.isArray(jobs) && jobs.length>0) || (Array.isArray(customers) && customers.length>0);
+  return (Array.isArray(jobs) && jobs.length>0) || (Array.isArray(customers) && customers.length>0) || (Array.isArray(leaveRecords) && leaveRecords.length>0);
 }
 function chunkArray(arr, size){
   const out=[];
@@ -1958,6 +1958,8 @@ async function saveCloudNow(){
       customersChunkCount:customerChunks.length,
       jobsCount:(jobs||[]).length,
       customersCount:(customers||[]).length,
+      leaveRecords:Array.isArray(leaveRecords) ? leaveRecords : [],
+      leaveRecordsCount:(leaveRecords||[]).length,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
@@ -2013,6 +2015,7 @@ async function applyRemoteData(data){
 
   let remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
   let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
+  let remoteLeaveRecords = Array.isArray(data.leaveRecords) ? data.leaveRecords : null;
   if(data.chunked){
     const loaded = await loadCloudChunks(data);
     remoteJobs = loaded.jobs;
@@ -2021,14 +2024,17 @@ async function applyRemoteData(data){
 
   const localJobsCount = (jobs||[]).length;
   const localCustomersCount = (customers||[]).length;
+  const localLeaveRecordsCount = (leaveRecords||[]).length;
   const remoteJobsCount = remoteJobs ? remoteJobs.length : 0;
   const remoteCustomersCount = remoteCustomers ? remoteCustomers.length : 0;
+  const remoteLeaveRecordsCount = remoteLeaveRecords ? remoteLeaveRecords.length : 0;
 
   // 只要本機有尚未確認的變更，且遠端資料比較少，就不覆蓋。
   // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
   if(localDirty){
     const remoteLooksOlder = (remoteJobs && remoteJobsCount + 3 < localJobsCount) ||
-                             (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount);
+                             (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) ||
+                             (remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount);
     if(remoteLooksOlder){
       setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
       return;
@@ -2045,14 +2051,18 @@ async function applyRemoteData(data){
   isApplyingRemote = true;
   if(remoteJobs) jobs = remoteJobs;
   if(remoteCustomers){ customers = remoteCustomers; sortCustomersByCode(); }
+  if(remoteLeaveRecords) leaveRecords = normalizeLeaveRecords(remoteLeaveRecords);
   // 快取到 localStorage（可能因空間不足而略過）
   try{ localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || [])); }catch(e){ try{localStorage.removeItem(JOBS_KEY);}catch(_){} }
   try{ localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || [])); }catch(e){ try{localStorage.removeItem(CUSTOMERS_KEY);}catch(_){} }
+  try{ localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRecords || [])); }catch(e){ try{localStorage.removeItem(LEAVE_KEY);}catch(_){} }
   updateCustomerCodeList();
   renderSchedule();
   renderCustomers();
   renderJobList();
   renderAvailableSlots();
+  renderLeaveList();
+  renderLeaveListLP();
   applyRoleUI();
   isApplyingRemote = false;
   applyRoleUI();
@@ -2073,8 +2083,8 @@ function startCloudSync(){
       if(doc.exists){
         const data = doc.data() || {};
         // 如果共用雲端還是空的，而本機有資料且有編輯權，優先把本機資料補上雲端
-        const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0);
-        const localCount = (jobs||[]).length + (customers||[]).length;
+        const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0) + Number(data.leaveRecordsCount || 0);
+        const localCount = (jobs||[]).length + (customers||[]).length + (leaveRecords||[]).length;
         if(remoteCount === 0 && localCount > 0 && canEdit() && localDirty){
           await saveCloudNow();
           return;
@@ -2120,13 +2130,18 @@ function applyRoleUI(){
     setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, access ? (canEdit()?"ok":"wait") : "err");
   }
   const adminTab=document.getElementById("adminTab");
-  if(adminTab && isAdmin()) adminTab.style.display="inline-block";
+  if(adminTab) adminTab.style.display = isAdmin() ? "inline-block" : "none";
+  const leaveTab=document.getElementById("tabLeave");
+  if(leaveTab) leaveTab.style.display = canEdit() ? "inline-block" : "none";
+  if(!canEdit() && document.getElementById("leavePage")?.classList.contains("active")){
+    showPage("schedulePage");
+  }
   renderMyTodayPanel();
   const denyWords=["儲存派工","清空派工","新增 / 更新客戶","匯入 Excel","還原備份","清空客戶","匯入派工 Excel"];
   document.querySelectorAll("button").forEach(btn=>{
     const txt=(btn.textContent||"").trim();
     const on=btn.getAttribute("onclick")||"";
-    const isEditBtn = denyWords.some(w=>txt.includes(w)) || /addJobFromForm|clearAllJobs|addCustomer|clearCustomers|importJobsExcel|importExcel|restoreBackup|deleteJob|editJobForm/.test(on);
+    const isEditBtn = denyWords.some(w=>txt.includes(w)) || /addJobFromForm|clearAllJobs|addCustomer|clearCustomers|importJobsExcel|importExcel|restoreBackup|deleteJob|editJobForm|addLeaveRecord|deleteLeaveRecord/.test(on);
     if(isEditBtn){ btn.disabled=!!readOnly || (loggedIn && !access); btn.title=(loggedIn && !access)?"此帳號尚未授權":(readOnly?"你的帳號是查看權限":""); }
   });
 }
@@ -4867,51 +4882,137 @@ function renderCompletionStats(){
 }
 
 // ===== 工程師休假管理 =====
+const LEAVE_KEY = 'admin_leave_records';
 let leaveRecords = [];
-try{ leaveRecords = JSON.parse(localStorage.getItem('admin_leave_records') || '[]'); }catch(e){}
+try{ leaveRecords = normalizeLeaveRecords(JSON.parse(localStorage.getItem(LEAVE_KEY) || '[]')); }catch(e){ leaveRecords = []; }
 
-function saveLeaveRecords(){ localStorage.setItem('admin_leave_records', JSON.stringify(leaveRecords)); }
-
-function addLeaveRecord(){
-  const eng = document.getElementById('leaveEngineer').value;
-  const date = document.getElementById('leaveDate').value;
-  const type = document.getElementById('leaveType').value;
-  if(!date){ alert('請選擇休假日期'); return; }
-  leaveRecords.push({ id: Date.now(), engineer: eng, date, type });
-  leaveRecords.sort((a,b)=>a.date.localeCompare(b.date));
-  saveLeaveRecords();
-  renderLeaveList();
-  if(confirm('是否同時在派工表中為 ' + eng + ' 新增「' + type + '」記錄？')){
-    const leaveJob = {
-      id: Date.now() + Math.floor(Math.random()*9999),
-      engineer: eng, date, startTime:'09:30', time:'09:30', endTime:'18:00',
-      codeName: eng + ' ' + type, customerCode:'', customerName: eng,
-      workItem: type, workContent: type,
-      phone:'', city:'', district:'', address:'', orderNo:'', amount:'', payment:'', isHold:false
+function normalizeLeaveRecords(list){
+  return (Array.isArray(list)?list:[]).map(function(r){
+    const id = Number(r.id || r.leaveId || Date.now() + Math.floor(Math.random()*9999));
+    return {
+      id,
+      engineer: normalizeEngineerName(r.engineer || ''),
+      date: String(r.date || ''),
+      type: String(r.type || ''),
+      createdAt: r.createdAt || new Date().toISOString(),
+      updatedAt: r.updatedAt || r.createdAt || new Date().toISOString()
     };
-    jobs.push(leaveJob);
-    saveJobs(); renderSchedule(); renderJobList();
-    alert('已新增至派工表。');
+  }).filter(r=>r.engineer && r.date && r.type)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.engineer).localeCompare(String(b.engineer)));
+}
+
+function saveLeaveRecords(){
+  leaveRecords = normalizeLeaveRecords(leaveRecords);
+  localDirty = true;
+  try{ localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRecords)); }catch(e){ console.warn('休假資料本機快取失敗', e.message); }
+  queueCloudSave();
+}
+
+function makeLeaveJob(rec){
+  const eng = normalizeEngineerName(rec.engineer || '');
+  const fullType = String(rec.type || '');
+  return {
+    id: Date.now() + Math.floor(Math.random()*9999),
+    leaveId: Number(rec.id),
+    isLeaveJob: true,
+    engineer: eng,
+    date: rec.date,
+    startTime:'09:30', time:'09:30', endTime:'18:00',
+    codeName: eng + ' ' + fullType,
+    customerCode:'', customerName: eng,
+    workItem: fullType, workContent: fullType,
+    phone:'', city:'', district:'', address:'', orderNo:'', amount:'', payment:'', isHold:false
+  };
+}
+
+function isSameLegacyLeaveJob(j, rec){
+  const eng = normalizeEngineerName(rec.engineer || '');
+  const type = String(rec.type || '');
+  return normalizeEngineerName(j.engineer || '') === eng &&
+    String(j.date || '') === String(rec.date || '') &&
+    ((j.workItem || '') === type || (j.workContent || '') === type ||
+     String(j.codeName || '').includes(type) || String(j.codeName || '').includes(eng));
+}
+
+function upsertLeaveJob(rec){
+  const id = Number(rec.id);
+  const idx = jobs.findIndex(j=>Number(j.leaveId)===id || isSameLegacyLeaveJob(j, rec));
+  const fresh = makeLeaveJob(rec);
+  if(idx >= 0){
+    const keepId = jobs[idx].id || fresh.id;
+    jobs[idx] = Object.assign({}, jobs[idx], fresh, {id: keepId});
+  }else{
+    jobs.push(fresh);
   }
 }
 
-function deleteLeaveRecord(id){
-  leaveRecords = leaveRecords.filter(r=>r.id!==id);
+function deleteLeaveJobByRecord(rec){
+  const id = Number(rec.id);
+  const before = jobs.length;
+  jobs = jobs.filter(j=>!(Number(j.leaveId)===id || isSameLegacyLeaveJob(j, rec)));
+  return jobs.length !== before;
+}
+
+function addOrUpdateLeaveRecord(eng, date, fullType){
+  eng = normalizeEngineerName(eng || '');
+  if(!date){ alert('請選擇休假日期'); return; }
+  if(!eng){ alert('請選擇工程師'); return; }
+  const existing = leaveRecords.find(r=>normalizeEngineerName(r.engineer)===eng && String(r.date)===String(date));
+  let rec;
+  if(existing){
+    existing.type = fullType;
+    existing.updatedAt = new Date().toISOString();
+    rec = existing;
+  }else{
+    rec = { id: Date.now() + Math.floor(Math.random()*9999), engineer: eng, date, type: fullType, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    leaveRecords.push(rec);
+  }
+  upsertLeaveJob(rec);
   saveLeaveRecords();
+  saveJobs();
   renderLeaveList();
+  renderLeaveListLP();
+  renderSchedule();
+  renderJobList();
+  renderMyTodayPanel();
+  alert(existing ? '已更新休假紀錄，並同步更新派工表。' : '已新增休假紀錄，並同步加入派工表。');
+}
+
+function addLeaveRecord(){
+  const eng = (document.getElementById('leaveEngineer')||{}).value;
+  const date = (document.getElementById('leaveDate')||{}).value;
+  const type = (document.getElementById('leaveType')||{}).value;
+  const area = (document.getElementById('tripArea')||{}).value;
+  const fullType = (type==='出差') ? '出差（'+(area||'北部')+'）' : type;
+  addOrUpdateLeaveRecord(eng, date, fullType);
+}
+
+function deleteLeaveRecord(id){
+  const numId = Number(id);
+  const rec = leaveRecords.find(r=>Number(r.id)===numId);
+  leaveRecords = leaveRecords.filter(r=>Number(r.id)!==numId);
+  if(rec) deleteLeaveJobByRecord(rec);
+  saveLeaveRecords();
+  saveJobs();
+  renderLeaveList();
+  renderLeaveListLP();
+  renderSchedule();
+  renderJobList();
+  renderMyTodayPanel();
 }
 
 function renderLeaveList(){
   const box = document.getElementById('leaveList'); if(!box) return;
   if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
-  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp','出差':'trip'};
+  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
+  const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
   box.innerHTML = leaveRecords.map(r=>{
-    const cls = typeCls[r.type] || '';
+    const cls = getTripCls(r.type);
     return '<div class="leave-item">'
       + '<span class="leave-badge ' + cls + '">' + escapeHtml(r.type) + '</span>'
       + '<span style="font-weight:bold">' + escapeHtml(r.engineer) + '</span>'
       + '<span>' + escapeHtml(r.date) + '</span>'
-      + '<button onclick="deleteLeaveRecord(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto">刪除</button>'
+      + '<button onclick="deleteLeaveRecord(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto;color:#fff;border:none;border-radius:4px;cursor:pointer">刪除</button>'
       + '</div>';
   }).join('');
 }
@@ -4927,32 +5028,16 @@ function addLeaveRecordLP(){
   const eng = (document.getElementById('lpEngineer')||{}).value;
   const date = (document.getElementById('lpDate')||{}).value;
   const type = (document.getElementById('lpType')||{}).value;
-  const region = (document.getElementById('lpTripRegion')||{}).value;
-  if(!date){ alert('請選擇休假日期'); return; }
+  const region = (document.getElementById('lpTripRegion')||{}).value || '北部';
   const fullType = (type==='出差') ? '出差（'+region+'）' : type;
-  leaveRecords.push({ id: Date.now(), engineer: eng, date, type: fullType });
-  leaveRecords.sort((a,b)=>a.date.localeCompare(b.date));
-  saveLeaveRecords();
-  renderLeaveListLP();
-  if(confirm('是否同時在派工表中為 ' + eng + ' 新增「' + fullType + '」記錄？')){
-    const leaveJob = {
-      id: Date.now() + Math.floor(Math.random()*9999),
-      engineer: eng, date, startTime:'09:30', time:'09:30', endTime:'18:00',
-      codeName: eng + ' ' + fullType, customerCode:'', customerName: eng,
-      workItem: fullType, workContent: fullType,
-      phone:'', city:'', district:'', address:'', orderNo:'', amount:'', payment:'', isHold:false
-    };
-    jobs.push(leaveJob);
-    saveJobs(); renderSchedule(); renderJobList();
-    alert('已新增至派工表。');
-  }
+  addOrUpdateLeaveRecord(eng, date, fullType);
 }
 
 function renderLeaveListLP(){
   const box = document.getElementById('lpList'); if(!box) return;
   if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
   const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
-  const getTripCls = t => t&&t.startsWith('出差') ? 'trip' : (typeCls[t]||'');
+  const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
   box.innerHTML = leaveRecords.map(r=>{
     const cls = getTripCls(r.type);
     return '<div class="leave-item">'
@@ -4965,24 +5050,7 @@ function renderLeaveListLP(){
 }
 
 function deleteLeaveRecordLP(id){
-  const numId = Number(id); // 確保型別一致
-  const rec = leaveRecords.find(r=>Number(r.id)===numId);
-  leaveRecords = leaveRecords.filter(r=>Number(r.id)!==numId);
-  saveLeaveRecords();
-  // 同步刪除對應派工資料（相同工程師、日期、workItem 或 codeName 吻合）
-  if(rec){
-    const before = jobs.length;
-    jobs = jobs.filter(function(j){
-      const sameEng = String(j.engineer||'').trim() === String(rec.engineer||'').trim();
-      const sameDate = j.date === rec.date;
-      const sameType = (j.workItem||'')=== rec.type || (j.workContent||'')===rec.type
-        || (j.codeName||'').includes(rec.type) || (j.codeName||'').includes(rec.engineer);
-      return !(sameEng && sameDate && sameType);
-    });
-    if(jobs.length < before){ saveJobs(); renderSchedule(); renderJobList(); }
-    else { alert('休假紀錄已刪除，但找不到對應的派工資料（可能已手動刪除）。'); }
-  }
-  renderLeaveListLP();
+  deleteLeaveRecord(id);
 }
 
 // ===== 客戶歷史紀錄進階查詢 =====
