@@ -5605,62 +5605,83 @@ return r;};
 <style>
 /* ── 精簡模式：整周一屏，只顯示客編，不顯示任何細項 ── */
 
-/* 整張表不強制 min-width，讓它自適應視窗 */
+/* 整張表：覆蓋所有 !important 的 min-width 設定 */
 body.compact-schedule #schedule,
+body.compact-schedule #schedule.week-schedule-table,
+body.compact-schedule table#schedule,
 body.compact-schedule .week-schedule-table{
   min-width:0 !important;
   width:100% !important;
+  max-width:100% !important;
   table-layout:fixed !important;
 }
 
-/* 日期欄頭：平均分配，不限最小寬 */
-body.compact-schedule .week-schedule-table .date-head,
-body.compact-schedule .week-schedule-table .weekend-head,
-body.compact-schedule .week-schedule-table .today-head{
+/* scheduleWrap 不要橫向超出視窗 */
+body.compact-schedule #scheduleWrap{
+  overflow-x:hidden !important;
+}
+
+/* 日期欄頭：覆蓋 min-width:960px */
+body.compact-schedule #schedule .date-head,
+body.compact-schedule #schedule .weekend-head,
+body.compact-schedule #schedule .today-head,
+body.compact-schedule table#schedule .date-head,
+body.compact-schedule table#schedule .weekend-head,
+body.compact-schedule table#schedule .today-head{
   min-width:0 !important;
   width:auto !important;
   max-width:none !important;
   font-size:11px !important;
-  padding:2px 4px !important;
+  padding:2px 2px !important;
   white-space:nowrap;
+  overflow:hidden;
 }
 
-/* 工程師欄頭 & 格子：極窄 */
-body.compact-schedule .week-schedule-table .engineer-head,
-body.compact-schedule .week-schedule-table td.slot{
+/* 工程師欄頭 & 格子：覆蓋 min-width:240px */
+body.compact-schedule #schedule .engineer-head,
+body.compact-schedule #schedule td.slot,
+body.compact-schedule table#schedule .engineer-head,
+body.compact-schedule table#schedule td.slot{
   min-width:0 !important;
-  width:52px !important;
-  max-width:72px !important;
+  width:56px !important;
+  max-width:56px !important;
   font-size:10px !important;
   padding:1px !important;
   overflow:hidden;
 }
-body.compact-schedule .week-schedule-table .engineer-head{
+body.compact-schedule #schedule .engineer-head,
+body.compact-schedule table#schedule .engineer-head{
   padding:2px 1px !important;
   white-space:nowrap;
-  overflow:hidden;
   text-overflow:ellipsis;
+  font-size:10px !important;
 }
 
-/* 時間欄：極窄，字更小 */
-body.compact-schedule .week-schedule-table .time-col{
-  min-width:32px !important;
-  width:32px !important;
-  max-width:32px !important;
+/* 時間欄：覆蓋 min-width:76px */
+body.compact-schedule #schedule .time-col,
+body.compact-schedule #schedule th.time-col,
+body.compact-schedule #schedule td.time-col,
+body.compact-schedule table#schedule .time-col{
+  min-width:36px !important;
+  width:36px !important;
+  max-width:36px !important;
   font-size:9px !important;
   padding:0 2px !important;
   white-space:nowrap;
 }
 
-/* 時間列高度極小 */
-body.compact-schedule .week-schedule-table tr{
-  height:16px !important;
-}
-
 /* 格子內容對齊頂部 */
-body.compact-schedule td.slot{
+body.compact-schedule #schedule td.slot,
+body.compact-schedule table#schedule td.slot{
   vertical-align:top !important;
   position:relative;
+  height:auto !important;
+}
+
+/* 精簡模式：調整 sticky 標頭列的 top 偏移，避免遮住 09:30 */
+body.compact-schedule #schedule tr:nth-child(2) th,
+body.compact-schedule table#schedule tr:nth-child(2) th{
+  top:24px !important;
 }
 
 /* 卡片本體：極緊湊，只留客編文字 */
