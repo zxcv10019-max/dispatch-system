@@ -2986,7 +2986,7 @@ function renderAvailableSlots(){
       const pop = document.createElement('div');
       pop.id = 'twSlotPopup';
       pop.style.cssText = 'display:none;position:fixed;z-index:9999;background:#fff;border:1.5px solid #3498db;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.22);padding:12px 14px;min-width:180px;max-width:280px;font-size:13px;';
-      pop.innerHTML = '<div id="twSlotPopupTitle" style="font-weight:bold;color:#2f3542;margin-bottom:8px;font-size:13px;"></div><div id="twSlotPopupList"></div><div style="margin-top:8px;text-align:right"><button onclick="document.getElementById('twSlotPopup').style.display='none'" style="font-size:12px;padding:3px 10px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:#f5f5f5;">關閉</button></div>';
+      pop.innerHTML = '<div id="twSlotPopupTitle" style="font-weight:bold;color:#2f3542;margin-bottom:8px;font-size:13px;"></div><div id="twSlotPopupList"></div><div style="margin-top:8px;text-align:right"><button onclick="document.getElementById(\'twSlotPopup\').style.display=\'none\'" style="font-size:12px;padding:3px 10px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:#f5f5f5;">關閉</button></div>';
       document.body.appendChild(pop);
       document.addEventListener('click', function(e){ const p=document.getElementById('twSlotPopup'); if(p && !p.contains(e.target) && !e.target.closest('#twoWeekList td')) p.style.display='none'; });
     }
