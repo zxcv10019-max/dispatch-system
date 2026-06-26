@@ -2362,7 +2362,8 @@ function cleanAddressForLocate(address){
   s = s.replace(/號\s*[A-Za-zＡ-Ｚａ-ｚ]\s*\d*/g, "號");    // 231號A11
   s = s.replace(/號\s*地下\s*\d*\s*樓?/g, "號");
   s = s.replace(/(\d+)\s*樓/g, "");
-  s = s.replace(/(\d+)[-－之]\d+號/g, "$1號"); // 57-18號 / 57之18號 -> 57號
+  // 只截掉「之N號」副號，保留連號門牌如 2-106號
+  s = s.replace(/(號)之\d+/g, "$1");  // 106號之3 → 106號
   // 「號」後出現中文備註自動截斷：如 180巷1號土撥之3 → 180巷1號
   s = s.replace(/(號)[\u4e00-\u9fff\u3400-\u4dbf].*/g, "$1");
   s = s.replace(/\s+/g, "");
