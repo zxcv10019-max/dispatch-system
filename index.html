@@ -2407,6 +2407,7 @@ function updateCodeName(){
 }
 
 function fillCustomerByCode(){
+  if(_clearingForm) return;
   const code=document.getElementById("fCustomerCode").value.trim();
   if(!code)return;
   const c=customers.find(x=>String(x.customerNo).trim()===code);
@@ -2471,47 +2472,106 @@ function suggestEngineerByAddress(){
   if(!box) return;
   if(addr.length < 3 || !date){ box.style.display='none'; return; }
 
-  // 從地址取縣市（前3~4字）
   const addrCity = addr.replace(/^(.*?(縣|市)).*$/, '$1');
-
-  // 取當日各工程師的縣市分佈
-  const todayJobs = (jobs||[]).filter(j=>j&&j.date===date&&!j.isHold&&!(j.statusList&&j.statusList.includes('暫押')));
+  const todayJobs = (jobs||[]).filter(function(j){ return j&&j.date===date&&!j.isHold&&!(j.statusList&&j.statusList.includes('暫押')); });
   const engineerNames = ['林川閔','陳昱存','陳義強','鄧長益'];
+  const labels = {'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'};
   const scores = {};
 
   engineerNames.forEach(function(eng){
     const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); });
-    let score = 0;
-    let sameCity = false;
+    var sameCityCount = 0;
     myJobs.forEach(function(j){
-      const jCity = (j.city||j.address||'').replace(/^(.*?(縣|市)).*$/, '$1');
-      if(jCity && addrCity && jCity === addrCity){ score += 3; sameCity = true; }
-      else if(jCity && addrCity && (jCity.slice(0,2)===addrCity.slice(0,2))){ score += 1; }
+      // 優先用 city 欄位，沒有就從 address 擷取縣市
+      const rawCity = j.city || '';
+      const fromAddr = (j.address||'').replace(/^(.*?(縣|市)).*$/, '$1');
+      const jCity = rawCity || fromAddr;
+      if(jCity && addrCity && jCity === addrCity) sameCityCount++;
     });
+    const sameCity = myJobs.length > 0 && (sameCityCount / myJobs.length) > 0.5;
+    const score = sameCityCount * 3 + (myJobs.length === 0 ? 1 : 0);
     scores[eng] = { score, count: myJobs.length, sameCity };
   });
 
-  // 排序：同縣市優先，行程少次之
   const sorted = engineerNames.slice().sort(function(a,b){
     if(scores[b].score !== scores[a].score) return scores[b].score - scores[a].score;
     return scores[a].count - scores[b].count;
   });
 
-  const top = sorted[0];
-  const labels = {'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'};
+  function slotTag(eng, r){
+    const fromT = times[r.from];
+    const toT = times[r.to];
+    const lbl = fromT === toT ? fromT : fromT+'~'+toT;
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:12px;border:1px solid #a3d6b0;background:#d4edda;color:#1a7a2e;font-size:11px;font-weight:bold;cursor:pointer;"'
+      +' onclick="document.getElementById('fEngineer').value=''+eng+'';document.getElementById('fStartTime').value=''+fromT+'';document.getElementById('fEndTime').value=''+toT+'';"'
+      +' title="點擊填入工程師與時間">'+lbl+'</span>';
+  }
 
-  let html = '<b>💡 建議工程師（參考）</b><br><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">';
-  sorted.forEach(function(eng, i){
-    const s = scores[eng];
-    const tag = s.sameCity ? '✅ 同縣市' : (s.count === 0 ? '空閒' : '');
-    const bg = i===0 ? '#218c74' : '#aaa';
-    html += '<span style="background:'+bg+';color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer;" onclick="document.getElementById(&quot;fEngineer&quot;).value=&quot;'+eng+'&quot;">'+labels[eng]+' '+eng+(tag?' <small>('+tag+')</small>':'')+'</span>';
+  function renderBox(engSlots){
+    let html = '<b>💡 建議工程師（參考）</b><div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">';
+    sorted.forEach(function(eng){
+      const s = scores[eng];
+      const lbl = labels[eng];
+      const tagText = s.sameCity ? '✅ 同縣市' : '';
+      const tagBg = s.sameCity ? '#218c74' : '#57606f';
+      const slots = engSlots[eng] || [];
+      const slotsHtml = slots.length === 0
+        ? '<span style="color:#c0392b;font-size:11px;">當天已排滿</span>'
+        : slots.map(function(r){ return slotTag(eng, r); }).join(' ');
+      html += '<div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">'
+        + '<span style="background:'+tagBg+';color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap;flex-shrink:0;"'
+        +' onclick="document.getElementById('fEngineer').value=''+eng+'';">'+lbl+' '+eng+(tagText?' <small>('+tagText+')</small>':'')+'</span>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'+slotsHtml+'</div>'
+        + '</div>';
+    });
+    html += '</div><div style="color:#888;font-size:11px;margin-top:5px;">點選名字填入工程師；點選時間段同時填入時間</div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+  }
+
+  const initialSlots = {};
+  sorted.forEach(function(eng){
+    const fr = getEngineerFreeRanges(eng, date);
+    initialSlots[eng] = fr ? fr.freeRanges.slice() : [];
   });
-  html += '</div><div style="color:#888;font-size:11px;margin-top:5px;">點選名字可直接填入工程師欄位</div>';
+  renderBox(initialSlots);
 
-  box.innerHTML = html;
-  box.style.display = 'block';
+  (async function(){
+    const engSlots = {};
+    await Promise.all(sorted.map(async function(eng){
+      const fr = getEngineerFreeRanges(eng, date);
+      const freeRanges = fr ? fr.freeRanges : [];
+      const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); }).slice().sort(sortJobsByTime);
+      const rangesWithDetour = await Promise.all(freeRanges.map(async function(r){
+        const slotStart = times[r.from];
+        const slotEnd   = times[r.to];
+        const prevJob = myJobs.slice().reverse().find(function(j){ return (j.endTime||j.startTime||'') <= slotStart; });
+        const nextJob = myJobs.find(function(j){ return (j.startTime||j.time||'') >= slotEnd; });
+        const prevAddr = prevJob ? prevJob.address : '';
+        const nextAddr = nextJob ? nextJob.address : '';
+        let detourKm = 999;
+        try {
+          if(prevAddr && nextAddr && addr){
+            const [d1,d2,d3] = await Promise.all([fetchDrivingInfo(prevAddr,addr),fetchDrivingInfo(addr,nextAddr),fetchDrivingInfo(prevAddr,nextAddr)]);
+            if(d1&&d2&&d3) detourKm = Math.max(0,(d1.distanceKm+d2.distanceKm)-d3.distanceKm);
+          } else if(prevAddr && addr){
+            const d1 = await fetchDrivingInfo(prevAddr,addr); if(d1) detourKm=d1.distanceKm;
+          } else if(addr && nextAddr){
+            const d2 = await fetchDrivingInfo(addr,nextAddr); if(d2) detourKm=d2.distanceKm;
+          } else { detourKm=0; }
+        } catch(e){}
+        return Object.assign({},r,{detourKm});
+      }));
+      rangesWithDetour.sort(function(a,b){
+        if(Math.abs((a.detourKm||999)-(b.detourKm||999))>0.1) return (a.detourKm||999)-(b.detourKm||999);
+        return a.from-b.from;
+      });
+      engSlots[eng] = rangesWithDetour;
+    }));
+    renderBox(engSlots);
+  })();
 }
+
 
 function addJobFromForm(){
   if(!requireEdit("新增/修改派工")) return;
@@ -2546,23 +2606,27 @@ function addJobFromForm(){
   renderJobList();
   clearDispatchForm();
 
-  // 儲存後留在「新增派工資料」頁，清空表單並跳出完成訊息
-  alert(wasEditing ? "已更新派工" : "已新增派工");
+  showToast(wasEditing ? "✅ 已更新派工" : "✅ 已新增派工");
 }
 
+let _clearingForm = false;
 function clearDispatchForm(){
-  ["fOrderNo","fCustomerCode","fCustomerName","fCodeName","fPhone","fCity","fDistrict","fAddress","fWorkContent","fAmount"].forEach(id=>document.getElementById(id).value="");
-  document.getElementById("fEngineer").value="";
-  document.getElementById("fDate").valueAsDate=new Date();
-  document.getElementById("fStartTime").value="09:30";
-  document.getElementById("fEndTime").value="10:30";
-  document.getElementById("fWorkItem").value="";
-  document.getElementById("fPayment").value="";
-  editingJobId=null;
-  const btn=document.getElementById("saveJobBtn"); if(btn) btn.textContent="儲存派工";
-  const sug=document.getElementById("engineerSuggestion"); if(sug) sug.style.display="none";
+  _clearingForm = true;
+  editingJobId = null;
+  ["fOrderNo","fCustomerCode","fCustomerName","fCodeName","fPhone","fCity","fDistrict","fAddress","fWorkContent","fAmount"].forEach(function(id){
+    const el = document.getElementById(id); if(el) el.value = "";
+  });
+  const engEl = document.getElementById("fEngineer"); if(engEl) engEl.value = "";
+  const dateEl = document.getElementById("fDate"); if(dateEl) dateEl.valueAsDate = new Date();
+  const stEl = document.getElementById("fStartTime"); if(stEl) stEl.value = "09:30";
+  const etEl = document.getElementById("fEndTime"); if(etEl) etEl.value = "10:30";
+  const wiEl = document.getElementById("fWorkItem"); if(wiEl) wiEl.value = "";
+  const pmEl = document.getElementById("fPayment"); if(pmEl) pmEl.value = "";
+  const btn = document.getElementById("saveJobBtn"); if(btn) btn.textContent = "儲存派工";
+  const sug = document.getElementById("engineerSuggestion"); if(sug) sug.style.display = "none";
   syncCityChecks();
   renderAvailableSlots();
+  _clearingForm = false;
 }
 
 function getEngineerFreeRanges(engineer, date){
