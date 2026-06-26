@@ -1605,12 +1605,6 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       </div>
     </div>
 
-    <!-- 可用時間段提示 -->
-    <div id="availableSlotPanel" style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #b3d1f0;border-radius:8px;font-size:13px;display:none;">
-      <div style="font-weight:bold;margin-bottom:10px;color:#2f3542;font-size:14px;">📅 <span id="availableSlotTitle"></span> 各工程師可安排時間段</div>
-      <div id="availableSlotList"></div>
-    </div>
-
     <!-- 第一個兩周面板 -->
     <div id="twoWeekRecommendPanel" style="margin-top:16px;display:none;">
       <div style="font-weight:bold;font-size:14px;color:#2f3542;margin-bottom:6px;">
@@ -2772,80 +2766,8 @@ async function updateTravelTags(){
 }
 
 function renderAvailableSlots(){
-  const selEngineer = document.getElementById("fEngineer").value;
-  const date = document.getElementById("fDate").value;
-  const panel = document.getElementById("availableSlotPanel");
-  const titleEl = document.getElementById("availableSlotTitle");
-  const listEl = document.getElementById("availableSlotList");
-
-  if(!date){ panel.style.display="none"; return; }
-
-  const formPlace = getCurrentFormPlace();
-  const currentAddr = document.getElementById("fAddress") ? document.getElementById("fAddress").value.trim() : "";
-  titleEl.textContent = date + (formPlace ? `（${formPlace}）` : "");
-
-  const targetEngineers = engineers;
-  let html = "";
-
-  targetEngineers.forEach(eng => {
-    const code = engineerCodes[eng] || eng;
-    const { freeRanges, dayJobs } = getEngineerFreeRanges(eng, date);
-    const isSelected = (selEngineer === eng);
-
-    const rowBg = isSelected ? "#e8f4fd" : "#fff";
-    const rowBorder = isSelected ? "2px solid #3498db" : "1px solid #dce8f7";
-
-    html += `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;padding:8px 10px;background:${rowBg};border:${rowBorder};border-radius:6px;">`;
-    html += `<div style="min-width:52px;font-weight:bold;padding-top:2px;">
-      <span style="display:inline-block;background:#2f3542;color:#fff;border-radius:4px;padding:3px 8px;font-size:13px;cursor:pointer;"
-        onclick="document.getElementById('fEngineer').value='${eng}';renderAvailableSlots();"
-        title="點擊選擇此工程師">${code}</span>
-    </div>`;
-    html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">`;
-
-    if(freeRanges.length === 0){
-      html += `<span style="color:#c0392b;font-size:12px;">當天已排滿</span>`;
-    } else {
-      freeRanges.forEach(r => {
-        const fromT = times[r.from];
-        const toT = times[r.to];
-        const slots = r.to - r.from;
-        const color = slots >= 3 ? "#1a7a2e" : slots >= 1 ? "#7a5a00" : "#555";
-        const bg    = slots >= 3 ? "#d4edda" : slots >= 1 ? "#fff3cd" : "#f1f1f1";
-        const bdr   = slots >= 3 ? "#a3d6b0" : slots >= 1 ? "#ffc107" : "#ccc";
-        const label = fromT === toT ? fromT : `${fromT}～${toT}`;
-        html += `<span style="display:inline-block;padding:3px 9px;border-radius:14px;border:1px solid ${bdr};background:${bg};color:${color};font-weight:bold;cursor:pointer;font-size:12px;"
-          onclick="document.getElementById('fEngineer').value='${eng}';document.getElementById('fStartTime').value='${fromT}';document.getElementById('fEndTime').value='${toT}';renderAvailableSlots();"
-          title="點擊選擇此工程師與時間段">${label}</span>`;
-      });
-    }
-
-    // 已排時段 + 導航
-    if(dayJobs.length > 0){
-      dayJobs.sort(sortJobsByTime).forEach(j => {
-        const s = j.startTime||j.time;
-        const e = j.endTime;
-        const place = cleanCityDistrict(j.city,j.district) || "";
-        const codename = escapeHtml(j.codeName || j.customerName || j.customerCode || "");
-        const jAddr = j.address || "";
-        const navUrl = (currentAddr && jAddr) ? directionUrl(currentAddr, jAddr) : (jAddr ? directionUrl("", jAddr) : "");
-        const navBtn = navUrl ? `<a href="${navUrl}" target="_blank" style="margin-left:5px;display:inline-block;background:#2980b9;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px;text-decoration:none;white-space:nowrap;">🚗導航</a>` : "";
-        html += `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}${navBtn}</span>`;
-      });
-    }
-
-    html += `</div></div>`;
-  });
-
-  listEl.innerHTML = html;
-  listEl.innerHTML = html;
-  panel.style.display = "block";
-
-  // 非同步填入車程
-  if(currentAddr){
-    // updateTravelTags(); // 已停用車程計算
-  }
-
+  // 「各工程師可安排時間段」面板已移除（2026-06-26）；導航功能已移到兩周推薦面板的彈出視窗內。
+  // 這裡只保留更新兩周推薦面板的功能。
   renderTwoWeekRecommend();
 }
 
@@ -2999,6 +2921,7 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
   if(dayJobs.length === 0){
     scheduleHtml += '<div style="color:#999;font-size:11px;">今日無派工</div>';
   } else {
+    const currentAddr = document.getElementById('fAddress') ? document.getElementById('fAddress').value.trim() : '';
     scheduleHtml += dayJobs.map(function(j){
       const city = j.city || '';
       const district = j.district || '';
@@ -3007,10 +2930,14 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
       const startT = j.startTime || j.time || '';
       const endT = j.endTime || '';
       const timeStr = startT + (endT ? ' ~ ' + endT : '');
+      const jAddr = j.address || '';
+      const navUrl = (currentAddr && jAddr) ? directionUrl(currentAddr, jAddr) : (jAddr ? directionUrl('', jAddr) : '');
+      const navBtn = navUrl ? '<a href="'+navUrl+'" target="_blank" style="margin-left:auto;display:inline-block;background:#2980b9;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px;text-decoration:none;white-space:nowrap;">🚗導航</a>' : '';
       return '<div style="font-size:11px;padding:2px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
         + (location ? '<span style="color:#666;white-space:nowrap;">' + escapeHtml(location) + '</span>' : '')
         + '<span style="color:#0066cc;font-weight:bold;">' + escapeHtml(codeName) + '</span>'
         + (timeStr ? '<span style="background:#fff8dc;border:1px solid #e0c35a;border-radius:4px;padding:1px 5px;font-size:10px;white-space:nowrap;">' + escapeHtml(timeStr) + '</span>' : '')
+        + navBtn
         + '</div>';
     }).join('');
   }
@@ -5907,22 +5834,18 @@ body.compact-schedule .job .card-main{
 }
 body.compact-schedule .job .card-main .compact-hide{ display:none !important; }
 body.compact-schedule .job .card-main .compact-city{
-  display:block !important;
-  font-size:9px !important;
+  display:inline !important;
+  font-size:11px !important;
   white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  color:#777 !important;
-  font-weight:normal !important;
+  color:#000 !important;
+  font-weight:bold !important;
 }
 body.compact-schedule .job .card-main .compact-district{
-  display:block !important;
-  font-size:9px !important;
+  display:inline !important;
+  font-size:11px !important;
   white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  color:#777 !important;
-  font-weight:normal !important;
+  color:#000 !important;
+  font-weight:bold !important;
 }
 body.compact-schedule .job .card-main .compact-code{
   display:block !important;
@@ -5931,15 +5854,10 @@ body.compact-schedule .job .card-main .compact-code{
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  color:#0055aa !important;
+  color:#0066cc !important;
 }
 body.compact-schedule .job .card-main .compact-name{
-  display:block !important;
-  font-size:9px !important;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  color:#333 !important;
+  display:none !important;
 }
 body.compact-schedule .job .job-top{ gap:0 !important; display:block !important; }
 body.compact-schedule .job .actions,
