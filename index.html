@@ -1516,6 +1516,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <button onclick="moveSchedule(1)">後7天 →</button>
     <button onclick="scrollSchedule(-900)">← 左移</button>
     <button onclick="scrollSchedule(900)">右移 →</button>
+    <button id="viewModeToggleBtn" style="background:#8e7cc3" onclick="toggleScheduleViewMode()">📐 精簡檢視</button>
     <button onclick="showPage('dispatchPage')">新增派工</button>
     <label class="export-range-label">匯出起</label><input type="date" id="exportStartDate" class="export-date">
     <label class="export-range-label">匯出迄</label><input type="date" id="exportEndDate" class="export-date">
@@ -3144,12 +3145,12 @@ function jobCard(j){
     ${statusOptions.map(o=>`<label><input type="checkbox" ${statusList.includes(o)?"checked":""} onchange="toggleJobStatusFlag(${j.id},'${o}',this.checked)">${o}</label>`).join("")}
   </div>`;
 
-  return `<div class="job ${j.isHold?"hold-job-card":""}" style="" draggable="true" ondragstart="dragStart(${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料">${escapeHtml(codeName)}${overlapHtml}</div>
       <div class="actions">
         <button class="edit" onclick="editJobForm(${j.id},event)">改</button>
-        <button class="delete" onclick="deleteJob(${j.id})">X</button>
+        <button class="delete" onclick="event.stopPropagation();deleteJob(${j.id})">X</button>
       </div>
     </div>
 
@@ -5595,6 +5596,107 @@ return r;};
       if(!hasGate && (!hasPage || visibleText()<5)) showGuard();
     }catch(e){showGuard();}
   },3500);
+})();
+</script>
+
+<!-- ===== 派工表 標準／精簡檢視 切換 2026-06-26 ===== -->
+<style>
+/* 精簡模式：大幅縮小欄寬與字體，盡量讓一次能看到較多天數 */
+body.compact-schedule .week-schedule-table{ min-width:1860px !important; }
+body.compact-schedule .week-schedule-table .date-head,
+body.compact-schedule .week-schedule-table .weekend-head,
+body.compact-schedule .week-schedule-table .today-head{
+  min-width:256px !important; width:256px !important; max-width:256px !important;
+}
+body.compact-schedule .week-schedule-table .engineer-head,
+body.compact-schedule .week-schedule-table .slot{
+  min-width:64px !important; width:64px !important; max-width:64px !important;
+}
+body.compact-schedule .week-schedule-table .time-col{
+  min-width:46px !important; width:46px !important; max-width:46px !important;
+  font-size:10px !important;
+}
+body.compact-schedule .week-schedule-table .engineer-head,
+body.compact-schedule .week-schedule-table .date-head{
+  font-size:11px !important;
+  padding:2px !important;
+}
+body.compact-schedule td.slot{ position:relative; padding:2px !important; }
+body.compact-schedule .job{
+  font-size:10px !important;
+  line-height:1.25 !important;
+  padding:3px 4px !important;
+  margin-bottom:2px !important;
+  cursor:pointer;
+}
+body.compact-schedule .job .job-top{ gap:2px !important; }
+body.compact-schedule .job .card-main{
+  font-size:10px !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:42px;
+}
+body.compact-schedule .job .card-time{ font-size:9px !important; color:#666; }
+/* 精簡模式預設只顯示客名/時間，其他細節收起來，點卡片展開 */
+body.compact-schedule .job .actions,
+body.compact-schedule .job .card-line,
+body.compact-schedule .job .status-checks,
+body.compact-schedule .job .job-resize-handle,
+body.compact-schedule .job>div[style*="margin-top:4px"]{
+  display:none !important;
+}
+/* 點擊卡片展開：用浮出視窗呈現完整內容，不擠壞窄欄位 */
+body.compact-schedule .job.expanded{
+  position:absolute !important;
+  left:0; top:0;
+  width:250px !important; min-width:250px !important; max-width:300px !important;
+  z-index:60;
+  box-shadow:0 6px 20px rgba(0,0,0,.28);
+  font-size:13px !important;
+  padding:8px !important;
+}
+body.compact-schedule .job.expanded .card-main{
+  font-size:14px !important;
+  white-space:normal;
+  max-width:none;
+}
+body.compact-schedule .job.expanded .actions{ display:flex !important; }
+body.compact-schedule .job.expanded .card-time{ font-size:13px !important; display:block !important; }
+body.compact-schedule .job.expanded .card-line,
+body.compact-schedule .job.expanded>div[style*="margin-top:4px"]{ display:block !important; }
+body.compact-schedule .job.expanded .status-checks{ display:flex !important; }
+</style>
+<script>
+(function(){
+  'use strict';
+  var KEY='scheduleViewMode';
+  window.scheduleViewMode = (function(){ try{ return localStorage.getItem(KEY) || 'standard'; }catch(e){ return 'standard'; } })();
+
+  window.applyScheduleViewModeUI = function(){
+    var compact = window.scheduleViewMode === 'compact';
+    document.body.classList.toggle('compact-schedule', compact);
+    var btn = document.getElementById('viewModeToggleBtn');
+    if(btn) btn.textContent = compact ? '📋 標準檢視' : '📐 精簡檢視';
+  };
+
+  window.toggleScheduleViewMode = function(){
+    window.scheduleViewMode = (window.scheduleViewMode === 'compact') ? 'standard' : 'compact';
+    try{ localStorage.setItem(KEY, window.scheduleViewMode); }catch(e){}
+    window.applyScheduleViewModeUI();
+    if(typeof renderSchedule === 'function') renderSchedule();
+  };
+
+  // 精簡模式下，點卡片本身（非按鈕/連結）展開或收合完整內容
+  window.toggleJobExpand = function(ev, id){
+    if(document.body.classList.contains('compact-schedule')){
+      if(ev) ev.stopPropagation();
+      var el = document.querySelector('.job[data-job-id="'+id+'"]');
+      if(el) el.classList.toggle('expanded');
+    }
+  };
+
+  applyScheduleViewModeUI();
 })();
 </script>
 
