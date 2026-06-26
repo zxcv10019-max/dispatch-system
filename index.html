@@ -2830,7 +2830,7 @@ function renderAvailableSlots(){
   });
 
   listEl.innerHTML = html;
-  panel.style.display = "block";
+  panel.style.display = "none"; // 已隱藏
 
   // 非同步填入車程
   if(currentAddr){
@@ -2923,10 +2923,14 @@ function renderAvailableSlots(){
       dates.forEach(d=>{
         const {freeRanges, dayJobs} = getEngineerFreeRanges(eng, d);
         // 判斷該天是否有去目標區域
-        const dayRegions = dayJobs.map(j=>cityToRegion(j.city||"")).filter(Boolean);
+        const dayRegions = dayJobs.map(j=>{
+          // city 欄優先，沒有就從 address 擷取縣市
+          const c = j.city || String(j.address||"").replace(/^(.*?(縣|市)).*$/,'$1');
+          return cityToRegion(c);
+        }).filter(Boolean);
         const hasTargetRegion = dayRegions.includes(region);
         const hasNoJobs = dayJobs.length === 0;
-        const hasOtherOnly = !hasTargetRegion && !hasNoJobs;
+        const hasOtherOnly = !hasTargetRegion && !hasNoJobs && dayRegions.length > 0;
 
         if(freeRanges.length===0){
           html += `<td style="padding:3px 4px;border:1px solid #eee;background:#fde8e8;text-align:center;color:#c0392b;font-size:11px;">滿</td>`;
