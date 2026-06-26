@@ -3147,11 +3147,12 @@ function jobCard(j){
 
   const compactCode = escapeHtml(j.customerCode || j.codeName || "");
   const compactName = escapeHtml(j.customerName || "");
-  const compactArea = escapeHtml((function(){ const c=String(j.city||"").trim(); const d=String(j.district||"").trim(); if(d && c && d.startsWith(c)) return d; if(c && d) return c+d; return d||c||""; })());
+  const compactCity = escapeHtml(String(j.city||"").trim());
+  const compactDistrict = escapeHtml(String(j.district||"").trim());
 
   return `<div class="job ${j.isHold?"hold-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
-      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactArea?`<span class="compact-area">${compactArea}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
+      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
         <button class="edit" onclick="editJobForm(${j.id},event)">改</button>
         <button class="delete" onclick="event.stopPropagation();deleteJob(${j.id})">X</button>
@@ -5689,7 +5690,7 @@ body.compact-schedule table#schedule tr:nth-child(2) th{
 }
 
 /* 精簡用 span：標準模式隱藏 */
-.compact-code, .compact-name, .compact-area { display:none; }
+.compact-code, .compact-name, .compact-city, .compact-district { display:none; }
 
 /* 卡片本體：極緊湊，只留客編文字 */
 body.compact-schedule .job{
@@ -5717,7 +5718,16 @@ body.compact-schedule .job .card-main{
   line-height:1.3 !important;
 }
 body.compact-schedule .job .card-main .compact-hide{ display:none !important; }
-body.compact-schedule .job .card-main .compact-area{
+body.compact-schedule .job .card-main .compact-city{
+  display:block !important;
+  font-size:9px !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:#777 !important;
+  font-weight:normal !important;
+}
+body.compact-schedule .job .card-main .compact-district{
   display:block !important;
   font-size:9px !important;
   white-space:nowrap;
