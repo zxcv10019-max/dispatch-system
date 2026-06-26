@@ -2830,7 +2830,8 @@ function renderAvailableSlots(){
   });
 
   listEl.innerHTML = html;
-  panel.style.display = "none"; // 已隱藏
+  listEl.innerHTML = html;
+  panel.style.display = "block";
 
   // 非同步填入車程
   if(currentAddr){
