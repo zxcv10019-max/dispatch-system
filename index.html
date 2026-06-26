@@ -2503,7 +2503,7 @@ function suggestEngineerByAddress(){
     const toT = times[r.to];
     const lbl = fromT === toT ? fromT : fromT+'~'+toT;
     return '<span style="display:inline-block;padding:2px 8px;border-radius:12px;border:1px solid #a3d6b0;background:#d4edda;color:#1a7a2e;font-size:11px;font-weight:bold;cursor:pointer;"'
-      +' onclick="document.getElementById('fEngineer').value=''+eng+'';document.getElementById('fStartTime').value=''+fromT+'';document.getElementById('fEndTime').value=''+toT+'';"'
+      +' onclick="document.getElementById(\'fEngineer\').value=\''+eng+'\';document.getElementById(\'fStartTime\').value=\''+fromT+'\';document.getElementById(\'fEndTime\').value=\''+toT+'\';"'
       +' title="點擊填入工程師與時間">'+lbl+'</span>';
   }
 
@@ -2520,7 +2520,7 @@ function suggestEngineerByAddress(){
         : slots.map(function(r){ return slotTag(eng, r); }).join(' ');
       html += '<div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">'
         + '<span style="background:'+tagBg+';color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap;flex-shrink:0;"'
-        +' onclick="document.getElementById('fEngineer').value=''+eng+'';">'+lbl+' '+eng+(tagText?' <small>('+tagText+')</small>':'')+'</span>'
+        +' onclick="document.getElementById(\'fEngineer\').value=\''+eng+'\';">'+lbl+' '+eng+(tagText?' <small>('+tagText+')</small>':'')+'</span>'
         + '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'+slotsHtml+'</div>'
         + '</div>';
     });
