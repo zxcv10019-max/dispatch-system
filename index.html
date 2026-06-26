@@ -2967,11 +2967,12 @@ function renderAvailableSlots(){
           const bg = slots>=3?"#d4edda":slots>=1?"#fff3cd":"#f8f9fa";
           const color = slots>=3?"#1a7a2e":"#7a5a00";
           const label = fromT===toT ? fromT : `${fromT}`;
-          // Click to fill form
-          const onclick = `document.getElementById('fEngineer').value='${eng}';document.getElementById('fDate').value='${d}';document.getElementById('fStartTime').value='${fromT}';document.getElementById('fEndTime').value='${toT}';renderAvailableSlots();`;
-          html += `<td style="padding:2px 3px;border:1px solid #eee;background:${bg};text-align:center;cursor:pointer;" onclick="${escapeHtml(onclick)}" title="${escapeHtml(fromT+'～'+toT)}，點擊填入">`;
+          // Build slot list for popup
+          const slotsJson = JSON.stringify(freeRanges.map(r=>({f:times[r.from],t:times[r.to],slots:r.to-r.from})));
+          const onclick = `showTwoWeekSlotPicker(event,'${eng}','${d}',${slotsJson.replace(/'/g,"\'")})`;
+          html += `<td style="padding:2px 3px;border:1px solid #eee;background:${bg};text-align:center;cursor:pointer;position:relative;" onclick="${escapeHtml(onclick)}" title="點擊查看空擋">`;
           html += `<span style="color:${color};font-size:11px;font-weight:bold;">${escapeHtml(label)}</span>`;
-          if(freeRanges.length>1) html += `<span style="color:#888;font-size:9px;display:block;">${freeRanges.length}段空擋</span>`;
+          html += `<span style="color:#888;font-size:9px;display:block;">${freeRanges.length}段空擋</span>`;
           html += `</td>`;
         }
       });
@@ -2980,10 +2981,63 @@ function renderAvailableSlots(){
 
     html += '</tbody></table></div>';
     html += '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝充裕空擋（≥90分鐘）；黃色＝短暫空擋；紅色＝已排滿。點擊格子可快速填入工程師＋日期＋時間。</div>';
+    // 浮出彈窗 HTML（全域一份）
+    if(!document.getElementById('twSlotPopup')){
+      const pop = document.createElement('div');
+      pop.id = 'twSlotPopup';
+      pop.style.cssText = 'display:none;position:fixed;z-index:9999;background:#fff;border:1.5px solid #3498db;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.22);padding:12px 14px;min-width:180px;max-width:280px;font-size:13px;';
+      pop.innerHTML = '<div id="twSlotPopupTitle" style="font-weight:bold;color:#2f3542;margin-bottom:8px;font-size:13px;"></div><div id="twSlotPopupList"></div><div style="margin-top:8px;text-align:right"><button onclick="document.getElementById('twSlotPopup').style.display='none'" style="font-size:12px;padding:3px 10px;border:1px solid #ccc;border-radius:5px;cursor:pointer;background:#f5f5f5;">關閉</button></div>';
+      document.body.appendChild(pop);
+      document.addEventListener('click', function(e){ const p=document.getElementById('twSlotPopup'); if(p && !p.contains(e.target) && !e.target.closest('#twoWeekList td')) p.style.display='none'; });
+    }
     listEl.innerHTML = html;
   };
 })();
 
+function showTwoWeekSlotPicker(ev, eng, date, slots){
+  ev.stopPropagation();
+  const pop = document.getElementById('twSlotPopup');
+  if(!pop) return;
+  const code = (typeof engineerCodes!=='undefined' && engineerCodes[eng]) || eng;
+  const dObj = (typeof parseDateLocal==='function') ? parseDateLocal(date) : new Date(date);
+  const wd = ["日","一","二","三","四","五","六"][dObj.getDay()];
+  const mm = String(dObj.getMonth()+1).padStart(2,"0");
+  const dd = String(dObj.getDate()).padStart(2,"0");
+  document.getElementById('twSlotPopupTitle').textContent = code + ' ' + eng + '｜' + mm + '/' + dd + ' 週' + wd;
+  const listEl = document.getElementById('twSlotPopupList');
+  listEl.innerHTML = slots.map(function(s){
+    const mins = s.slots * 30;
+    const color = s.slots>=3?"#1a7a2e":s.slots>=1?"#7a5a00":"#555";
+    const bg    = s.slots>=3?"#d4edda":s.slots>=1?"#fff3cd":"#f1f1f1";
+    const bdr   = s.slots>=3?"#a3d6b0":s.slots>=1?"#ffc107":"#ccc";
+    return '<div style="margin-bottom:6px;">'
+      + '<button style="width:100%;text-align:left;padding:6px 10px;border:1.5px solid '+bdr+';border-radius:7px;background:'+bg+';color:'+color+';font-weight:bold;font-size:13px;cursor:pointer;"'
+      + ' onclick="fillFromTwoWeek(''+eng+'',''+date+'',''+s.f+'',''+s.t+'');document.getElementById('twSlotPopup').style.display='none';">'
+      + s.f + ' ～ ' + s.t
+      + '<span style="font-weight:normal;font-size:11px;color:#888;margin-left:8px;">（' + mins + ' 分鐘）</span>'
+      + '</button></div>';
+  }).join('');
+  // 定位在點擊位置旁邊
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = ev.clientX + 8, y = ev.clientY + 8;
+  pop.style.display = 'block';
+  const pw = pop.offsetWidth || 220, ph = pop.offsetHeight || 160;
+  if(x + pw > vw - 10) x = vw - pw - 12;
+  if(y + ph > vh - 10) y = vh - ph - 12;
+  pop.style.left = x + 'px';
+  pop.style.top  = y + 'px';
+}
+
+function fillFromTwoWeek(eng, date, fromT, toT){
+  if(document.getElementById('fEngineer')) document.getElementById('fEngineer').value = eng;
+  if(document.getElementById('fDate'))     document.getElementById('fDate').value = date;
+  if(document.getElementById('fStartTime')) document.getElementById('fStartTime').value = fromT;
+  if(document.getElementById('fEndTime'))   document.getElementById('fEndTime').value = toT;
+  if(typeof renderAvailableSlots==='function') renderAvailableSlots();
+  // 捲動到表單頂部
+  const form = document.getElementById('dispatchForm') || document.querySelector('.form-card');
+  if(form) form.scrollIntoView({behavior:'smooth', block:'start'});
+}
 
 function timeIndex(t){
   return times.indexOf(t);
