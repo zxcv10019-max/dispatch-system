@@ -2546,7 +2546,8 @@ function addJobFromForm(){
   renderJobList();
   clearDispatchForm();
 
-  showToast(wasEditing ? "✅ 已更新派工" : "✅ 已新增派工");
+  // 儲存後留在「新增派工資料」頁，清空表單並跳出完成訊息
+  alert(wasEditing ? "已更新派工" : "已新增派工");
 }
 
 function clearDispatchForm(){
@@ -2772,14 +2773,17 @@ function renderAvailableSlots(){
       });
     }
 
-    // 已排時段 + 車程
+    // 已排時段 + 導航
     if(dayJobs.length > 0){
-      dayJobs.forEach(j => {
+      dayJobs.sort(sortJobsByTime).forEach(j => {
         const s = j.startTime||j.time;
         const e = j.endTime;
         const place = cleanCityDistrict(j.city,j.district) || "";
         const codename = escapeHtml(j.codeName || j.customerName || j.customerCode || "");
-        html += `<span style="display:inline-block;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}</span>`;
+        const jAddr = j.address || "";
+        const navUrl = (currentAddr && jAddr) ? directionUrl(currentAddr, jAddr) : (jAddr ? directionUrl("", jAddr) : "");
+        const navBtn = navUrl ? `<a href="${navUrl}" target="_blank" style="margin-left:5px;display:inline-block;background:#2980b9;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px;text-decoration:none;white-space:nowrap;">🚗導航</a>` : "";
+        html += `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}${navBtn}</span>`;
       });
     }
 
