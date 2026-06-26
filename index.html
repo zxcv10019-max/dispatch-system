@@ -3119,7 +3119,7 @@ function renderSchedule(){
   });
 
   table.innerHTML=html;
-  table.style.minWidth = "6800px";
+  table.style.minWidth = (window.scheduleViewMode === 'compact') ? '' : '6800px';
   renderSummary();
   renderMyTodayPanel();
   // setTimeout(updateTravelTags, 80); // 已停用
@@ -3289,10 +3289,16 @@ function setupFixedBottomScrollbar(){
 
   if(!wrap || !table || !bar || !inner) return;
 
+  if(window.scheduleViewMode === 'compact'){
+    table.style.minWidth = '';
+    inner.style.width = (wrap.scrollWidth || wrap.offsetWidth) + 'px';
+    bar.style.display = 'block';
+  } else {
   const scrollWidth = Math.max(6800, table.scrollWidth, wrap.scrollWidth);
   table.style.minWidth = scrollWidth + "px";
   inner.style.width = scrollWidth + "px";
   bar.style.display = "block";
+  }
 
   if(bar.dataset.syncReady !== "1"){
     bar.dataset.syncReady = "1";
@@ -5600,6 +5606,7 @@ return r;};
 /* ── 精簡模式：整周一屏，只顯示客編，不顯示任何細項 ── */
 
 /* 整張表不強制 min-width，讓它自適應視窗 */
+body.compact-schedule #schedule,
 body.compact-schedule .week-schedule-table{
   min-width:0 !important;
   width:100% !important;
