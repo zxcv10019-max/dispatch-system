@@ -2822,10 +2822,17 @@ function renderAvailableSlots(){
       html += `</td>`;
       dates.forEach(d=>{
         const {freeRanges, dayJobs} = getEngineerFreeRanges(eng, d);
+        const dayRegions = dayJobs.map(j=>{
+          const c = j.city || String(j.address||"").replace(/^(.*?(縣|市)).*$/,'$1');
+          return cityToRegion(c);
+        }).filter(Boolean);
+        const hasOtherRegion = dayRegions.some(r=>r && r!==region);
         const slotsJson = JSON.stringify(freeRanges.map(r=>({f:times[r.from],t:times[r.to],slots:r.to-r.from})));
         const onclick = `showTwoWeekSlotPicker(event,'${eng}','${d}',${slotsJson.replace(/'/g,"\'")})`;
         if(freeRanges.length===0){
           html += `<td style="padding:3px 4px;border:1px solid #eee;background:#e0e0e0;text-align:center;color:#777;font-size:11px;cursor:pointer;" onclick="${escapeHtml(onclick)}" title="已排滿，點擊查看當天排工">已排滿</td>`;
+        } else if(hasOtherRegion){
+          html += `<td style="padding:3px 4px;border:1px solid #eee;background:#e0e0e0;text-align:center;color:#777;font-size:11px;cursor:pointer;" onclick="${escapeHtml(onclick)}" title="當天已有其他區域行程，點擊查看當天排工">外區行程</td>`;
         } else {
           const best = freeRanges.reduce((a,b)=>(b.to-b.from>a.to-a.from)?b:a, freeRanges[0]);
           const fromT = times[best.from];
@@ -2869,7 +2876,7 @@ function renderAvailableSlots(){
     const engScores = {};
     engineers.forEach(e=>{ engScores[e]=engineerRegionScore(e); });
 
-    const note = '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝有空檔；灰色＝已排滿。點擊格子可查看當天排工與詳細時段。</div>';
+    const note = '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝當天適合排這個區域；灰色＝已排滿或當天已有其他區域行程。點擊格子可查看當天排工與詳細時段。</div>';
     // 浮出彈窗 HTML（全域一份）
     if(!document.getElementById('twSlotPopup')){
       const pop = document.createElement('div');
