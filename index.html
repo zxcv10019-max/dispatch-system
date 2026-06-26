@@ -5308,20 +5308,16 @@ showAdminPage = function(){
   function money(v){ const s=String(v||'').trim(); if(!s) return ''; const n=Number(s.replace(/,/g,'')); return isNaN(n)?s:(n.toLocaleString('zh-TW')+' 元'); }
   function reminderMessage(j){
     const dateLine = (j.date? md(j.date)+'（'+weekday(j.date)+'）':'') + (j.startTime ? ' '+j.startTime : '');
-    return '您好，這邊提醒您有預約\n\n'
-      + '📅 ' + dateLine.trim() + '\n\n'
-      + '🔧 服務內容：\n' + (j.workItem||'') + '\n\n'
-      + '💰 應收款項：\n' + money(j.amount) + '\n\n'
-      + '💳 付款方式：\n' + (j.payment||'') + '\n\n'
-      + '📍 服務地址：\n' + (j.address||'') + '\n\n'
-      + '—\n\n'
-      + '因工程前一日已排定整日行程，\n'
-      + '當日件無法變更時段，\n'
-      + '以上確認後無法臨時變更喔！\n\n'
-      + '如有其他問題或需改約其他日期，\n'
-      + '請提早通知。\n\n'
-      + '確認正確請再傳個貼圖～\n'
-      + '謝謝！😊';
+    return '您好，這邊提醒您有預約\n'
+      + '📅 ' + dateLine.trim() + '\n'
+      + '🔧 服務內容：' + (j.workItem||'') + '\n'
+      + '💰 應收款項：' + money(j.amount) + '\n'
+      + '💳 付款方式：' + (j.payment||'') + '\n'
+      + '📍 服務地址：' + (j.address||'') + '\n'
+      + '—\n'
+      + '因工程前一日已排定整日行程，當日件無法變更時段，以上確認後無法臨時變更喔！\n'
+      + '如有其他問題或需改約其他日期，請提早通知。\n'
+      + '確認正確請再傳個貼圖～謝謝！😊';
   }
   window.showReminderPreview = function(id,ev){ if(ev){ev.preventDefault();ev.stopPropagation();} const j=window.findJobById(id); if(!j){alert('找不到這筆派工資料');return;} const modal=document.getElementById('reminderModal'); const txt=document.getElementById('reminderText'); if(txt) txt.value=reminderMessage(j); if(modal) modal.style.display='flex'; setTimeout(()=>txt&&txt.focus(),60); };
   window.closeReminderModal=function(){ const m=document.getElementById('reminderModal'); if(m) m.style.display='none'; };
