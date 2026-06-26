@@ -1610,6 +1610,15 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       <div style="font-weight:bold;margin-bottom:10px;color:#2f3542;font-size:14px;">📅 <span id="availableSlotTitle"></span> 各工程師可安排時間段</div>
       <div id="availableSlotList"></div>
     </div>
+
+    <!-- 近兩周推薦面板 -->
+    <div id="twoWeekRecommendPanel" style="margin-top:16px;display:none;">
+      <div style="font-weight:bold;font-size:14px;color:#2f3542;margin-bottom:10px;">
+        🗓️ 近兩周可安排時間 &nbsp;
+        <span id="twoWeekRegionLabel" style="font-size:12px;color:#fff;background:#e67e22;border-radius:10px;padding:2px 10px;vertical-align:middle;"></span>
+      </div>
+      <div id="twoWeekList"></div>
+    </div>
   </div>
 </div>
 
@@ -2861,9 +2870,119 @@ function renderAvailableSlots(){
   if(currentAddr){
     // updateTravelTags(); // 已停用車程計算
   }
+
+  renderTwoWeekRecommend();
 }
 
 
+// ===== 近兩周推薦面板 =====
+(function(){
+  const NORTH_CITIES = ["台北市","臺北市","新北市","基隆市","桃園市","新竹市","新竹縣","宜蘭縣","苗栗縣","花蓮縣","台東縣","臺東縣","澎湖縣","金門縣","連江縣"];
+  const CENTRAL_CITIES = ["台中市","臺中市","彰化縣","南投縣","雲林縣"];
+  const SOUTH_CITIES = ["嘉義市","嘉義縣","台南市","臺南市","高雄市","屏東縣"];
+
+  function cityToRegion(city){
+    const c = String(city||"").trim();
+    if(!c) return null;
+    if(NORTH_CITIES.some(x=>c.startsWith(x))) return "北部";
+    if(CENTRAL_CITIES.some(x=>c.startsWith(x))) return "中部";
+    if(SOUTH_CITIES.some(x=>c.startsWith(x))) return "南部";
+    return null;
+  }
+
+  // 判斷哪些工程師適合哪個區域（依歷史資料最多件的縣市）
+  function engineerRegionScore(eng){
+    const counts = {"北部":0,"中部":0,"南部":0};
+    (jobs||[]).forEach(j=>{
+      if(normalizeEngineerName(j.engineer)!==eng || isHoldJob(j)) return;
+      const r = cityToRegion(j.city||"");
+      if(r) counts[r]++;
+    });
+    return counts;
+  }
+
+  window.renderTwoWeekRecommend = function(){
+    const panel = document.getElementById("twoWeekRecommendPanel");
+    const listEl = document.getElementById("twoWeekList");
+    const labelEl = document.getElementById("twoWeekRegionLabel");
+    if(!panel||!listEl) return;
+
+    const cityVal = (document.getElementById("fCity")||{}).value||"";
+    const region = cityToRegion(cityVal);
+
+    if(!region){ panel.style.display="none"; return; }
+
+    labelEl.textContent = region;
+    panel.style.display = "block";
+
+    // 今天往後 14 天（跳過已過的日期）
+    const today = formatDateLocal(new Date());
+    const dates = [];
+    for(let i=0; i<14; i++){
+      const d = addDays(parseDateLocal(today), i);
+      dates.push(formatDateLocal(d));
+    }
+
+    // 計算各工程師的區域偏好（歷史件數比例）
+    const engScores = {};
+    engineers.forEach(e=>{ engScores[e]=engineerRegionScore(e); });
+
+    // 針對目標區域，找出每個工程師每天的空擋
+    let html = '<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;font-size:12px;">';
+
+    // Header row: 日期
+    html += '<thead><tr><th style="padding:5px 8px;background:#2f3542;color:#fff;border:1px solid #444;min-width:52px;white-space:nowrap;">工程師</th>';
+    dates.forEach(d=>{
+      const dObj = parseDateLocal(d);
+      const wd = ["日","一","二","三","四","五","六"][dObj.getDay()];
+      const isWknd = dObj.getDay()===0||dObj.getDay()===6;
+      const mm = String(dObj.getMonth()+1).padStart(2,"0");
+      const dd = String(dObj.getDate()).padStart(2,"0");
+      const bg = isWknd ? "#c0392b" : "#2f3542";
+      html += `<th style="padding:4px 6px;background:${bg};color:#fff;border:1px solid #444;text-align:center;white-space:nowrap;">${mm}/${dd}<br/>週${wd}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    engineers.forEach(eng=>{
+      const code = engineerCodes[eng]||eng;
+      const score = engScores[eng];
+      const total = Object.values(score).reduce((a,b)=>a+b,0)||1;
+      const pct = Math.round((score[region]||0)/total*100);
+      // 工程師列
+      html += `<tr><td style="padding:5px 8px;border:1px solid #ddd;font-weight:bold;background:#f8f9fa;white-space:nowrap;">`;
+      html += `<div style="display:inline-block;background:#2f3542;color:#fff;border-radius:4px;padding:2px 7px;font-size:12px;">${escapeHtml(code)}</div>`;
+      html += `<div style="font-size:10px;color:#888;margin-top:2px;">${region}佔比 ${pct}%</div>`;
+      html += `</td>`;
+
+      dates.forEach(d=>{
+        const {freeRanges} = getEngineerFreeRanges(eng, d);
+        if(freeRanges.length===0){
+          html += `<td style="padding:3px 4px;border:1px solid #eee;background:#fde8e8;text-align:center;color:#c0392b;font-size:11px;">滿</td>`;
+        } else {
+          // 找最大連續空擋
+          const best = freeRanges.reduce((a,b)=>(b.to-b.from>a.to-a.from)?b:a, freeRanges[0]);
+          const slots = best.to - best.from;
+          const fromT = times[best.from];
+          const toT = times[best.to];
+          const bg = slots>=3?"#d4edda":slots>=1?"#fff3cd":"#f8f9fa";
+          const color = slots>=3?"#1a7a2e":"#7a5a00";
+          const label = fromT===toT ? fromT : `${fromT}`;
+          // Click to fill form
+          const onclick = `document.getElementById('fEngineer').value='${eng}';document.getElementById('fDate').value='${d}';document.getElementById('fStartTime').value='${fromT}';document.getElementById('fEndTime').value='${toT}';renderAvailableSlots();`;
+          html += `<td style="padding:2px 3px;border:1px solid #eee;background:${bg};text-align:center;cursor:pointer;" onclick="${escapeHtml(onclick)}" title="${escapeHtml(fromT+'～'+toT)}，點擊填入">`;
+          html += `<span style="color:${color};font-size:11px;font-weight:bold;">${escapeHtml(label)}</span>`;
+          if(freeRanges.length>1) html += `<span style="color:#888;font-size:9px;display:block;">${freeRanges.length}段空擋</span>`;
+          html += `</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    html += '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝充裕空擋（≥90分鐘）；黃色＝短暫空擋；紅色＝已排滿。點擊格子可快速填入工程師＋日期＋時間。</div>';
+    listEl.innerHTML = html;
+  };
+})();
 
 
 function timeIndex(t){
