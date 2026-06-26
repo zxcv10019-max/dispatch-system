@@ -2599,7 +2599,6 @@ function addJobFromForm(){
     writeLog("add", { codeName:job.codeName||job.customerName||"", date:job.date, engineer:job.engineer, startTime:job.startTime, endTime:job.endTime });
   }
 
-  enableScheduleDrag();
   renderSchedule();
   setTimeout(setupFixedBottomScrollbar, 100);
   setupFixedBottomScrollbar();
@@ -3178,6 +3177,10 @@ function isValidJob(j){
   const item = String(j.workItem||"");
   const content = String(j.workContent||"");
   return !INVALID_KEYWORDS.some(kw => item.includes(kw) || content.includes(kw));
+}
+
+function isHoldJob(j){
+  return !!(j && (j.isHold || (j.statusList && j.statusList.includes("暫押"))));
 }
 
 function updateJobStatus(id, status){
