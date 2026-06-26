@@ -5597,71 +5597,143 @@ return r;};
 
 <!-- ===== 派工表 標準／精簡檢視 切換 2026-06-26 ===== -->
 <style>
-/* 精簡模式：大幅縮小欄寬與字體，盡量讓一次能看到較多天數 */
-body.compact-schedule .week-schedule-table{ min-width:1860px !important; }
+/* ── 精簡模式：整周一屏，只顯示客編，不顯示任何細項 ── */
+
+/* 整張表不強制 min-width，讓它自適應視窗 */
+body.compact-schedule .week-schedule-table{
+  min-width:0 !important;
+  width:100% !important;
+  table-layout:fixed !important;
+}
+
+/* 日期欄頭：平均分配，不限最小寬 */
 body.compact-schedule .week-schedule-table .date-head,
 body.compact-schedule .week-schedule-table .weekend-head,
 body.compact-schedule .week-schedule-table .today-head{
-  min-width:256px !important; width:256px !important; max-width:256px !important;
-}
-body.compact-schedule .week-schedule-table .engineer-head,
-body.compact-schedule .week-schedule-table .slot{
-  min-width:64px !important; width:64px !important; max-width:64px !important;
-}
-body.compact-schedule .week-schedule-table .time-col{
-  min-width:46px !important; width:46px !important; max-width:46px !important;
-  font-size:10px !important;
-}
-body.compact-schedule .week-schedule-table .engineer-head,
-body.compact-schedule .week-schedule-table .date-head{
+  min-width:0 !important;
+  width:auto !important;
+  max-width:none !important;
   font-size:11px !important;
-  padding:2px !important;
+  padding:2px 4px !important;
+  white-space:nowrap;
 }
-body.compact-schedule td.slot{ position:relative; padding:2px !important; }
-body.compact-schedule .job{
+
+/* 工程師欄頭 & 格子：極窄 */
+body.compact-schedule .week-schedule-table .engineer-head,
+body.compact-schedule .week-schedule-table td.slot{
+  min-width:0 !important;
+  width:52px !important;
+  max-width:72px !important;
   font-size:10px !important;
-  line-height:1.25 !important;
-  padding:3px 4px !important;
-  margin-bottom:2px !important;
-  cursor:pointer;
+  padding:1px !important;
+  overflow:hidden;
 }
-body.compact-schedule .job .job-top{ gap:2px !important; }
-body.compact-schedule .job .card-main{
-  font-size:10px !important;
+body.compact-schedule .week-schedule-table .engineer-head{
+  padding:2px 1px !important;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  max-width:42px;
 }
-body.compact-schedule .job .card-time{ font-size:9px !important; color:#666; }
-/* 精簡模式預設只顯示客名/時間，其他細節收起來，點卡片展開 */
+
+/* 時間欄：極窄，字更小 */
+body.compact-schedule .week-schedule-table .time-col{
+  min-width:32px !important;
+  width:32px !important;
+  max-width:32px !important;
+  font-size:9px !important;
+  padding:0 2px !important;
+  white-space:nowrap;
+}
+
+/* 時間列高度極小 */
+body.compact-schedule .week-schedule-table tr{
+  height:16px !important;
+}
+
+/* 格子內容對齊頂部 */
+body.compact-schedule td.slot{
+  vertical-align:top !important;
+  position:relative;
+}
+
+/* 卡片本體：極緊湊，只留客編文字 */
+body.compact-schedule .job{
+  font-size:9px !important;
+  line-height:1.2 !important;
+  padding:1px 2px !important;
+  margin-bottom:1px !important;
+  border-radius:3px !important;
+  cursor:pointer;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  background:#FFF2CC !important;
+  border:1px solid #D6B656 !important;
+}
+
+/* 只留 card-main（客編），其他全隱藏 */
+body.compact-schedule .job .card-main{
+  font-size:9px !important;
+  font-weight:bold !important;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:100%;
+  text-decoration:none !important;
+  color:#333 !important;
+}
+body.compact-schedule .job .job-top{ gap:0 !important; display:block !important; }
 body.compact-schedule .job .actions,
+body.compact-schedule .job .card-time,
 body.compact-schedule .job .card-line,
 body.compact-schedule .job .status-checks,
 body.compact-schedule .job .job-resize-handle,
-body.compact-schedule .job>div[style*="margin-top:4px"]{
+body.compact-schedule .job>div[style*="margin-top"]{
   display:none !important;
 }
-/* 點擊卡片展開：用浮出視窗呈現完整內容，不擠壞窄欄位 */
-body.compact-schedule .job.expanded{
-  position:absolute !important;
-  left:0; top:0;
-  width:250px !important; min-width:250px !important; max-width:300px !important;
-  z-index:60;
-  box-shadow:0 6px 20px rgba(0,0,0,.28);
-  font-size:13px !important;
-  padding:8px !important;
+
+/* Hold 卡片：灰底區別 */
+body.compact-schedule .job.hold-job-card{
+  background:#e0e0e0 !important;
+  border-color:#aaa !important;
 }
+
+/* 點擊卡片 → 浮出完整內容 */
+body.compact-schedule .job.expanded{
+  position:fixed !important;
+  left:50% !important; top:50% !important;
+  transform:translate(-50%,-50%) !important;
+  width:300px !important; min-width:240px !important; max-width:340px !important;
+  z-index:9900;
+  box-shadow:0 8px 32px rgba(0,0,0,.32);
+  font-size:13px !important;
+  padding:10px !important;
+  white-space:normal !important;
+  overflow:visible !important;
+  text-overflow:unset !important;
+  background:#FFF2CC !important;
+  border:2px solid #D6B656 !important;
+  border-radius:8px !important;
+}
+body.compact-schedule .job.expanded .job-top{ display:flex !important; gap:4px !important; }
 body.compact-schedule .job.expanded .card-main{
   font-size:14px !important;
-  white-space:normal;
-  max-width:none;
+  white-space:normal !important;
+  max-width:none !important;
+  color:#0066cc !important;
+  text-decoration:underline !important;
 }
 body.compact-schedule .job.expanded .actions{ display:flex !important; }
-body.compact-schedule .job.expanded .card-time{ font-size:13px !important; display:block !important; }
-body.compact-schedule .job.expanded .card-line,
-body.compact-schedule .job.expanded>div[style*="margin-top:4px"]{ display:block !important; }
-body.compact-schedule .job.expanded .status-checks{ display:flex !important; }
+body.compact-schedule .job.expanded .card-time{ display:block !important; font-size:12px !important; }
+body.compact-schedule .job.expanded .card-line{ display:block !important; font-size:12px !important; }
+body.compact-schedule .job.expanded>div[style*="margin-top"]{ display:block !important; }
+body.compact-schedule .job.expanded .status-checks{ display:flex !important; font-size:12px !important; }
+body.compact-schedule .job.expanded .job-resize-handle{ display:none !important; }
+
+/* 展開時背後遮罩（點外側關閉） */
+#compactExpandOverlay{
+  display:none;position:fixed;inset:0;z-index:9899;background:rgba(0,0,0,.15);
+}
 </style>
 <script>
 (function(){
@@ -5674,6 +5746,11 @@ body.compact-schedule .job.expanded .status-checks{ display:flex !important; }
     document.body.classList.toggle('compact-schedule', compact);
     var btn = document.getElementById('viewModeToggleBtn');
     if(btn) btn.textContent = compact ? '📋 標準檢視' : '📐 精簡檢視';
+    // 精簡模式：覆蓋 renderSchedule 的 minWidth 設定
+    if(compact){
+      var t = document.getElementById('schedule');
+      if(t) t.style.minWidth = '';
+    }
   };
 
   window.toggleScheduleViewMode = function(){
@@ -5681,14 +5758,68 @@ body.compact-schedule .job.expanded .status-checks{ display:flex !important; }
     try{ localStorage.setItem(KEY, window.scheduleViewMode); }catch(e){}
     window.applyScheduleViewModeUI();
     if(typeof renderSchedule === 'function') renderSchedule();
+    // 精簡模式 render 後再清掉 minWidth
+    if(window.scheduleViewMode === 'compact'){
+      setTimeout(function(){
+        var t = document.getElementById('schedule');
+        if(t) t.style.minWidth = '';
+      }, 50);
+    }
   };
 
-  // 精簡模式下，點卡片本身（非按鈕/連結）展開或收合完整內容
+  // 確保 renderSchedule 後精簡模式不被 minWidth 撐爛
+  var _origRender = null;
+  function patchRender(){
+    if(typeof window.renderSchedule !== 'function' || window.renderSchedule.__compactPatched) return;
+    _origRender = window.renderSchedule;
+    window.renderSchedule = function(){
+      var r = _origRender.apply(this, arguments);
+      if(window.scheduleViewMode === 'compact'){
+        var t = document.getElementById('schedule');
+        if(t) t.style.minWidth = '';
+      }
+      return r;
+    };
+    window.renderSchedule.__compactPatched = true;
+  }
+  // 等 renderSchedule 定義好後再 patch
+  if(typeof window.renderSchedule === 'function'){
+    patchRender();
+  } else {
+    var _patchTimer = setInterval(function(){
+      if(typeof window.renderSchedule === 'function'){ patchRender(); clearInterval(_patchTimer); }
+    }, 100);
+  }
+
+  // 遮罩元素
+  function getOverlay(){
+    var o = document.getElementById('compactExpandOverlay');
+    if(!o){
+      o = document.createElement('div');
+      o.id = 'compactExpandOverlay';
+      document.body.appendChild(o);
+    }
+    return o;
+  }
+
+  function collapseAll(){
+    document.querySelectorAll('.job.expanded').forEach(function(el){ el.classList.remove('expanded'); });
+    getOverlay().style.display = 'none';
+  }
+
+  // 精簡模式下，點卡片本身展開浮出完整內容；再點關閉
   window.toggleJobExpand = function(ev, id){
-    if(document.body.classList.contains('compact-schedule')){
-      if(ev) ev.stopPropagation();
-      var el = document.querySelector('.job[data-job-id="'+id+'"]');
-      if(el) el.classList.toggle('expanded');
+    if(!document.body.classList.contains('compact-schedule')) return;
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+    var el = document.querySelector('.job[data-job-id="'+id+'"]');
+    if(!el) return;
+    var isOpen = el.classList.contains('expanded');
+    collapseAll();
+    if(!isOpen){
+      el.classList.add('expanded');
+      var o = getOverlay();
+      o.style.display = 'block';
+      o.onclick = collapseAll;
     }
   };
 
