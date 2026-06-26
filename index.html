@@ -2972,18 +2972,51 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
   const dd = String(dObj.getDate()).padStart(2,"0");
   document.getElementById('twSlotPopupTitle').textContent = code + ' ' + eng + '｜' + mm + '/' + dd + ' 週' + wd;
   const listEl = document.getElementById('twSlotPopupList');
-  listEl.innerHTML = slots.map(function(s){
-    const mins = s.slots * 30;
-    const color = s.slots>=3?"#1a7a2e":s.slots>=1?"#7a5a00":"#555";
-    const bg    = s.slots>=3?"#d4edda":s.slots>=1?"#fff3cd":"#f1f1f1";
-    const bdr   = s.slots>=3?"#a3d6b0":s.slots>=1?"#ffc107":"#ccc";
-    return '<div style="margin-bottom:6px;">'
-      + '<button style="width:100%;text-align:left;padding:6px 10px;border:1.5px solid '+bdr+';border-radius:7px;background:'+bg+';color:'+color+';font-weight:bold;font-size:13px;cursor:pointer;"'
-      + ' onclick="fillFromTwoWeek(\''+eng+'\',\''+date+'\',\''+s.f+'\',\''+s.t+'\');document.getElementById(\'twSlotPopup\').style.display=\'none\';">'
-      + s.f + ' ～ ' + s.t
-      + '<span style="font-weight:normal;font-size:11px;color:#888;margin-left:8px;">（' + mins + ' 分鐘）</span>'
-      + '</button></div>';
-  }).join('');
+
+  // 今日工程安排
+  const dayJobs = (jobs||[]).filter(function(j){
+    return j && j.date===date && !j.isHold && (j.engineer||'').includes(eng) &&
+      !(j.statusList && j.statusList.includes('暫押'));
+  }).slice().sort(sortJobsByTime);
+
+  let scheduleHtml = '<div style="margin-bottom:8px;">'
+    + '<div style="font-size:11px;font-weight:bold;color:#2f3542;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px;">今日工程安排</div>';
+  if(dayJobs.length === 0){
+    scheduleHtml += '<div style="color:#999;font-size:11px;">今日無派工</div>';
+  } else {
+    scheduleHtml += dayJobs.map(function(j){
+      const city = j.city || '';
+      const district = j.district || '';
+      const location = [city, district].filter(Boolean).join(' ');
+      const codeName = (j.customerCode||'') + (j.customerCode && j.customerName ? ' ' : '') + (j.customerName||'') || '未填客戶';
+      const startT = j.startTime || j.time || '';
+      const endT = j.endTime || '';
+      const timeStr = startT + (endT ? ' ~ ' + endT : '');
+      return '<div style="font-size:11px;padding:2px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
+        + (location ? '<span style="color:#666;white-space:nowrap;">' + escapeHtml(location) + '</span>' : '')
+        + '<span style="color:#0066cc;font-weight:bold;">' + escapeHtml(codeName) + '</span>'
+        + (timeStr ? '<span style="background:#fff8dc;border:1px solid #e0c35a;border-radius:4px;padding:1px 5px;font-size:10px;white-space:nowrap;">' + escapeHtml(timeStr) + '</span>' : '')
+        + '</div>';
+    }).join('');
+  }
+  scheduleHtml += '</div>';
+
+  // 空檔時間
+  const slotsHtml = '<div style="font-size:11px;font-weight:bold;color:#2f3542;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px;">空檔時間</div>'
+    + slots.map(function(s){
+      const mins = s.slots * 30;
+      const color = s.slots>=3?"#1a7a2e":s.slots>=1?"#7a5a00":"#555";
+      const bg    = s.slots>=3?"#d4edda":s.slots>=1?"#fff3cd":"#f1f1f1";
+      const bdr   = s.slots>=3?"#a3d6b0":s.slots>=1?"#ffc107":"#ccc";
+      return '<div style="margin-bottom:6px;">'
+        + '<button style="width:100%;text-align:left;padding:6px 10px;border:1.5px solid '+bdr+';border-radius:7px;background:'+bg+';color:'+color+';font-weight:bold;font-size:13px;cursor:pointer;"'
+        + ' onclick="fillFromTwoWeek(\''+eng+'\',\''+date+'\',\''+s.f+'\',\''+s.t+'\');document.getElementById(\'twSlotPopup\').style.display=\'none\';">'
+        + s.f + ' ～ ' + s.t
+        + '<span style="font-weight:normal;font-size:11px;color:#888;margin-left:8px;">（' + mins + ' 分鐘）</span>'
+        + '</button></div>';
+    }).join('');
+
+  listEl.innerHTML = scheduleHtml + slotsHtml;
   // 定位在點擊位置旁邊
   const vw = window.innerWidth, vh = window.innerHeight;
   let x = ev.clientX + 8, y = ev.clientY + 8;
