@@ -1605,16 +1605,10 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       </div>
     </div>
 
-    <!-- 可用時間段提示 -->
-    <div id="availableSlotPanel" style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #b3d1f0;border-radius:8px;font-size:13px;display:none;">
-      <div style="font-weight:bold;margin-bottom:10px;color:#2f3542;font-size:14px;">📅 <span id="availableSlotTitle"></span> 各工程師可安排時間段</div>
-      <div id="availableSlotList"></div>
-    </div>
-
-    <!-- 近兩周推薦面板 -->
+    <!-- 近一個月可安排時間面板 -->
     <div id="twoWeekRecommendPanel" style="margin-top:16px;display:none;">
       <div style="font-weight:bold;font-size:14px;color:#2f3542;margin-bottom:10px;">
-        🗓️ 近兩周可安排時間 &nbsp;
+        🗓️ 近一個月可安排時間 &nbsp;
         <span id="twoWeekRegionLabel" style="font-size:12px;color:#fff;background:#e67e22;border-radius:10px;padding:2px 10px;vertical-align:middle;"></span>
       </div>
       <div id="twoWeekList"></div>
@@ -2475,80 +2469,110 @@ function getFormJob(){
 
 // ===== 新增派工：顯示當日各工程師排程與空檔 =====
 function suggestEngineerByAddress(){
+  const addr = (document.getElementById('fAddress')||{}).value || '';
   const date = (document.getElementById('fDate')||{}).value || '';
   const box = document.getElementById('engineerSuggestion');
   if(!box) return;
-  if(!date){ box.style.display='none'; return; }
+  if(addr.length < 3 || !date){ box.style.display='none'; return; }
 
+  const addrCity = addr.replace(/^(.*?(縣|市)).*$/, '$1');
   const todayJobs = (jobs||[]).filter(function(j){ return j&&j.date===date&&!j.isHold&&!(j.statusList&&j.statusList.includes('暫押')); });
   const engineerNames = ['林川閔','陳昱存','陳義強','鄧長益'];
   const labels = {'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'};
+  const scores = {};
+
+  engineerNames.forEach(function(eng){
+    const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); });
+    var sameCityCount = 0;
+    myJobs.forEach(function(j){
+      const rawCity = j.city || '';
+      const fromAddr = (j.address||'').replace(/^(.*?(縣|市)).*$/, '$1');
+      const jCity = rawCity || fromAddr;
+      if(jCity && addrCity && jCity === addrCity) sameCityCount++;
+    });
+    const sameCity = myJobs.length > 0 && (sameCityCount / myJobs.length) > 0.5;
+    const score = sameCityCount * 3 + (myJobs.length === 0 ? 1 : 0);
+    scores[eng] = { score, count: myJobs.length, sameCity };
+  });
+
+  const sorted = engineerNames.slice().sort(function(a,b){
+    if(scores[b].score !== scores[a].score) return scores[b].score - scores[a].score;
+    return scores[a].count - scores[b].count;
+  });
 
   function slotTag(eng, r){
     const fromT = times[r.from];
     const toT = times[r.to];
-    const mins = (r.to - r.from + 1) * 30;
-    const lbl = fromT + ' - ' + toT ;
-    const bg = mins >= 90 ? '#d4edda' : '#fff3cd';
-    const border = mins >= 90 ? '#a3d6b0' : '#ffc107';
-    const color = mins >= 90 ? '#1a7a2e' : '#7a5a00';
-    return '<span style="display:inline-block;padding:3px 10px;border-radius:12px;border:1px solid '+border+';background:'+bg+';color:'+color+';font-size:11px;font-weight:bold;cursor:pointer;margin:2px;"'
-      +' onclick="document.getElementById(\'fEngineer\').value=\''+eng+'\';document.getElementById(\'fStartTime\').value=\''+fromT+'\';document.getElementById(\'fEndTime\').value=\''+toT+'\';"'
+    const lbl = fromT === toT ? fromT : fromT+'~'+toT;
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:12px;border:1px solid #a3d6b0;background:#d4edda;color:#1a7a2e;font-size:11px;font-weight:bold;cursor:pointer;"'
+      +' onclick="document.getElementById('fEngineer').value=''+eng+'';document.getElementById('fStartTime').value=''+fromT+'';document.getElementById('fEndTime').value=''+toT+'';"'
       +' title="點擊填入工程師與時間">'+lbl+'</span>';
   }
 
-  let html = '<b>📅 今日工程安排</b><div style="margin-top:8px;display:flex;flex-direction:column;gap:10px;">';
+  function renderBox(engSlots){
+    let html = '<b>💡 建議工程師（參考）</b><div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;">';
+    sorted.forEach(function(eng){
+      const s = scores[eng];
+      const lbl = labels[eng];
+      const tagText = s.sameCity ? '✅ 同縣市' : '';
+      const tagBg = s.sameCity ? '#218c74' : '#57606f';
+      const slots = engSlots[eng] || [];
+      const slotsHtml = slots.length === 0
+        ? '<span style="color:#c0392b;font-size:11px;">當天已排滿</span>'
+        : slots.map(function(r){ return slotTag(eng, r); }).join(' ');
+      html += '<div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;">'
+        + '<span style="background:'+tagBg+';color:#fff;border-radius:5px;padding:4px 10px;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap;flex-shrink:0;"'
+        +' onclick="document.getElementById('fEngineer').value=''+eng+'';">'+lbl+' '+eng+(tagText?' <small>('+tagText+')</small>':'')+'</span>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'+slotsHtml+'</div>'
+        + '</div>';
+    });
+    html += '</div><div style="color:#888;font-size:11px;margin-top:5px;">點選名字填入工程師；點選時間段同時填入時間</div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+  }
 
-  engineerNames.forEach(function(eng){
-    const lbl = labels[eng];
-    const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); }).slice().sort(sortJobsByTime);
+  const initialSlots = {};
+  sorted.forEach(function(eng){
     const fr = getEngineerFreeRanges(eng, date);
-    const freeRanges = fr ? fr.freeRanges : [];
-
-    // 今日工程清單
-    let jobsHtml = '';
-    if(myJobs.length === 0){
-      jobsHtml = '<span style="color:#999;font-size:11px;">今日無派工</span>';
-    } else {
-      jobsHtml = myJobs.map(function(j){
-        const city = j.city || '';
-        const district = j.district || '';
-        const location = [city, district].filter(Boolean).join(' ');
-        const code = j.customerCode || '';
-        const name = j.customerName || '';
-        const codeName = [code, name].filter(Boolean).join(' ') || '未填客戶';
-        const startT = j.startTime || j.time || '';
-        const endT = j.endTime || '';
-        const timeStr = startT + (endT ? ' ~ ' + endT : '');
-        return '<div style="font-size:11px;padding:2px 0;color:#333;">'
-          + (location ? '<span style="color:#666;">'+escapeHtml(location)+'</span> ' : '')
-          + '<span style="color:#0066cc;font-weight:bold;">'+escapeHtml(codeName)+'</span>'
-          + (timeStr ? ' <span style="background:#fff8dc;border:1px solid #e0c35a;border-radius:4px;padding:1px 5px;font-size:10px;">'+escapeHtml(timeStr)+'</span>' : '')
-          + '</div>';
-      }).join('');
-    }
-
-    // 空檔時間
-    const slotsHtml = freeRanges.length === 0
-      ? '<span style="color:#c0392b;font-size:11px;">已排滿</span>'
-      : freeRanges.map(function(r){ return slotTag(eng, r); }).join('');
-
-    html += '<div style="border:1px solid #e0e0e0;border-radius:7px;padding:8px 10px;background:#fafafa;">'
-      + '<div style="font-weight:bold;font-size:12px;margin-bottom:5px;">'
-      + '<span style="background:#2f3542;color:#fff;border-radius:4px;padding:2px 7px;margin-right:5px;">'+lbl+'</span>'
-      + escapeHtml(eng)
-      + '</div>'
-      + '<div style="margin-bottom:4px;">'+jobsHtml+'</div>'
-      + '<div style="margin-top:4px;"><span style="font-size:11px;color:#555;font-weight:bold;">空檔：</span>'+slotsHtml+'</div>'
-      + '</div>';
+    initialSlots[eng] = fr ? fr.freeRanges.slice() : [];
   });
+  renderBox(initialSlots);
 
-  html += '</div><div style="color:#888;font-size:11px;margin-top:5px;">點選空檔時間段可自動填入工程師與時間</div>';
-  box.innerHTML = html;
-  box.style.display = 'block';
+  (async function(){
+    const engSlots = {};
+    await Promise.all(sorted.map(async function(eng){
+      const fr = getEngineerFreeRanges(eng, date);
+      const freeRanges = fr ? fr.freeRanges : [];
+      const myJobs = todayJobs.filter(function(j){ return (j.engineer||'').includes(eng); }).slice().sort(sortJobsByTime);
+      const rangesWithDetour = await Promise.all(freeRanges.map(async function(r){
+        const slotStart = times[r.from];
+        const slotEnd   = times[r.to];
+        const prevJob = myJobs.slice().reverse().find(function(j){ return (j.endTime||j.startTime||'') <= slotStart; });
+        const nextJob = myJobs.find(function(j){ return (j.startTime||j.time||'') >= slotEnd; });
+        const prevAddr = prevJob ? prevJob.address : '';
+        const nextAddr = nextJob ? nextJob.address : '';
+        let detourKm = 999;
+        try {
+          if(prevAddr && nextAddr && addr){
+            const [d1,d2,d3] = await Promise.all([fetchDrivingInfo(prevAddr,addr),fetchDrivingInfo(addr,nextAddr),fetchDrivingInfo(prevAddr,nextAddr)]);
+            if(d1&&d2&&d3) detourKm = Math.max(0,(d1.distanceKm+d2.distanceKm)-d3.distanceKm);
+          } else if(prevAddr && addr){
+            const d1 = await fetchDrivingInfo(prevAddr,addr); if(d1) detourKm=d1.distanceKm;
+          } else if(addr && nextAddr){
+            const d2 = await fetchDrivingInfo(addr,nextAddr); if(d2) detourKm=d2.distanceKm;
+          } else { detourKm=0; }
+        } catch(e){}
+        return Object.assign({},r,{detourKm});
+      }));
+      rangesWithDetour.sort(function(a,b){
+        if(Math.abs((a.detourKm||999)-(b.detourKm||999))>0.1) return (a.detourKm||999)-(b.detourKm||999);
+        return a.from-b.from;
+      });
+      engSlots[eng] = rangesWithDetour;
+    }));
+    renderBox(engSlots);
+  })();
 }
-
-
 function addJobFromForm(){
   if(!requireEdit("新增/修改派工")) return;
   const job=getFormJob();
@@ -2764,80 +2788,6 @@ async function updateTravelTags(){
 }
 
 function renderAvailableSlots(){
-  const selEngineer = document.getElementById("fEngineer").value;
-  const date = document.getElementById("fDate").value;
-  const panel = document.getElementById("availableSlotPanel");
-  const titleEl = document.getElementById("availableSlotTitle");
-  const listEl = document.getElementById("availableSlotList");
-
-  if(!date){ panel.style.display="none"; return; }
-
-  const formPlace = getCurrentFormPlace();
-  const currentAddr = document.getElementById("fAddress") ? document.getElementById("fAddress").value.trim() : "";
-  titleEl.textContent = date + (formPlace ? `（${formPlace}）` : "");
-
-  const targetEngineers = engineers;
-  let html = "";
-
-  targetEngineers.forEach(eng => {
-    const code = engineerCodes[eng] || eng;
-    const { freeRanges, dayJobs } = getEngineerFreeRanges(eng, date);
-    const isSelected = (selEngineer === eng);
-
-    const rowBg = isSelected ? "#e8f4fd" : "#fff";
-    const rowBorder = isSelected ? "2px solid #3498db" : "1px solid #dce8f7";
-
-    html += `<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;padding:8px 10px;background:${rowBg};border:${rowBorder};border-radius:6px;">`;
-    html += `<div style="min-width:52px;font-weight:bold;padding-top:2px;">
-      <span style="display:inline-block;background:#2f3542;color:#fff;border-radius:4px;padding:3px 8px;font-size:13px;cursor:pointer;"
-        onclick="document.getElementById('fEngineer').value='${eng}';renderAvailableSlots();"
-        title="點擊選擇此工程師">${code}</span>
-    </div>`;
-    html += `<div style="flex:1;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">`;
-
-    if(freeRanges.length === 0){
-      html += `<span style="color:#c0392b;font-size:12px;">當天已排滿</span>`;
-    } else {
-      freeRanges.forEach(r => {
-        const fromT = times[r.from];
-        const toT = times[r.to];
-        const slots = r.to - r.from;
-        const color = slots >= 3 ? "#1a7a2e" : slots >= 1 ? "#7a5a00" : "#555";
-        const bg    = slots >= 3 ? "#d4edda" : slots >= 1 ? "#fff3cd" : "#f1f1f1";
-        const bdr   = slots >= 3 ? "#a3d6b0" : slots >= 1 ? "#ffc107" : "#ccc";
-        const label = fromT === toT ? fromT : `${fromT}～${toT}`;
-        html += `<span style="display:inline-block;padding:3px 9px;border-radius:14px;border:1px solid ${bdr};background:${bg};color:${color};font-weight:bold;cursor:pointer;font-size:12px;"
-          onclick="document.getElementById('fEngineer').value='${eng}';document.getElementById('fStartTime').value='${fromT}';document.getElementById('fEndTime').value='${toT}';renderAvailableSlots();"
-          title="點擊選擇此工程師與時間段">${label}</span>`;
-      });
-    }
-
-    // 已排時段 + 導航
-    if(dayJobs.length > 0){
-      dayJobs.sort(sortJobsByTime).forEach(j => {
-        const s = j.startTime||j.time;
-        const e = j.endTime;
-        const place = cleanCityDistrict(j.city,j.district) || "";
-        const codename = escapeHtml(j.codeName || j.customerName || j.customerCode || "");
-        const jAddr = j.address || "";
-        const navUrl = (currentAddr && jAddr) ? directionUrl(currentAddr, jAddr) : (jAddr ? directionUrl("", jAddr) : "");
-        const navBtn = navUrl ? `<a href="${navUrl}" target="_blank" style="margin-left:5px;display:inline-block;background:#2980b9;color:#fff;border-radius:4px;padding:1px 7px;font-size:10px;text-decoration:none;white-space:nowrap;">🚗導航</a>` : "";
-        html += `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 8px;border-radius:12px;background:#fde8e8;border:1px solid #f5c6cb;color:#721c24;font-size:11px;line-height:1.5;">${s}${e?"~"+e:""} ${codename}${place?" "+escapeHtml(place):""}${navBtn}</span>`;
-      });
-    }
-
-    html += `</div></div>`;
-  });
-
-  listEl.innerHTML = html;
-  listEl.innerHTML = html;
-  panel.style.display = "block";
-
-  // 非同步填入車程
-  if(currentAddr){
-    // updateTravelTags(); // 已停用車程計算
-  }
-
   renderTwoWeekRecommend();
 }
 
@@ -2882,10 +2832,10 @@ function renderAvailableSlots(){
     labelEl.textContent = region;
     panel.style.display = "block";
 
-    // 今天往後 14 天（跳過已過的日期）
+    // 明天往後 30 天
     const today = formatDateLocal(new Date());
     const dates = [];
-    for(let i=0; i<14; i++){
+    for(let i=1; i<=30; i++){
       const d = addDays(parseDateLocal(today), i);
       dates.push(formatDateLocal(d));
     }
@@ -2963,7 +2913,7 @@ function renderAvailableSlots(){
     });
 
     html += '</tbody></table></div>';
-    html += '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝充裕空擋（≥90分鐘）；黃色＝短暫空擋；紅色＝已排滿。點擊格子可快速填入工程師＋日期＋時間。</div>';
+    html += '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝充裕空擋（≥90分鐘）；黃色＝短暫空擋；紅色＝已排滿；－＝無同區域行程。點擊格子查看詳細時段。</div>';
     // 浮出彈窗 HTML（全域一份）
     if(!document.getElementById('twSlotPopup')){
       const pop = document.createElement('div');
@@ -3008,10 +2958,15 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
       const startT = j.startTime || j.time || '';
       const endT = j.endTime || '';
       const timeStr = startT + (endT ? ' ~ ' + endT : '');
+      const jAddr = j.address || '';
+      const fAddr = (document.getElementById('fAddress')||{}).value||'';
+      const navUrl = (fAddr && jAddr) ? directionUrl(fAddr, jAddr) : (jAddr ? directionUrl('', jAddr) : '');
+      const navBtn = navUrl ? '<a href="'+navUrl+'" target="_blank" style="display:inline-block;background:#2980b9;color:#fff;border-radius:4px;padding:1px 6px;font-size:10px;text-decoration:none;white-space:nowrap;">🚗導航</a>' : '';
       return '<div style="font-size:11px;padding:2px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
         + (location ? '<span style="color:#666;white-space:nowrap;">' + escapeHtml(location) + '</span>' : '')
         + '<span style="color:#0066cc;font-weight:bold;">' + escapeHtml(codeName) + '</span>'
         + (timeStr ? '<span style="background:#fff8dc;border:1px solid #e0c35a;border-radius:4px;padding:1px 5px;font-size:10px;white-space:nowrap;">' + escapeHtml(timeStr) + '</span>' : '')
+        + navBtn
         + '</div>';
     }).join('');
   }
