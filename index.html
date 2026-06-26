@@ -2774,8 +2774,8 @@ function renderAvailableSlots(){
 
 // ===== 近兩周推薦面板 =====
 (function(){
-  const NORTH_CITIES = ["台北市","臺北市","新北市","基隆市","桃園市","新竹市","新竹縣","宜蘭縣","苗栗縣","花蓮縣","台東縣","臺東縣","澎湖縣","金門縣","連江縣"];
-  const CENTRAL_CITIES = ["台中市","臺中市","彰化縣","南投縣","雲林縣"];
+  const NORTH_CITIES = ["台北市","臺北市","新北市","基隆市","桃園市","新竹市","新竹縣","宜蘭縣","花蓮縣","台東縣","臺東縣","澎湖縣","金門縣","連江縣"];
+  const CENTRAL_CITIES = ["台中市","臺中市","彰化縣","南投縣","雲林縣","苗栗縣"];
   const SOUTH_CITIES = ["嘉義市","嘉義縣","台南市","臺南市","高雄市","屏東縣"];
 
   function cityToRegion(city){
@@ -2822,31 +2822,18 @@ function renderAvailableSlots(){
       html += `</td>`;
       dates.forEach(d=>{
         const {freeRanges, dayJobs} = getEngineerFreeRanges(eng, d);
-        const dayRegions = dayJobs.map(j=>{
-          const c = j.city || String(j.address||"").replace(/^(.*?(縣|市)).*$/,'$1');
-          return cityToRegion(c);
-        }).filter(Boolean);
-        const hasTargetRegion = dayRegions.includes(region);
-        const hasOtherOnly = !hasTargetRegion;
+        const slotsJson = JSON.stringify(freeRanges.map(r=>({f:times[r.from],t:times[r.to],slots:r.to-r.from})));
+        const onclick = `showTwoWeekSlotPicker(event,'${eng}','${d}',${slotsJson.replace(/'/g,"\'")})`;
         if(freeRanges.length===0){
-          html += `<td style="padding:3px 4px;border:1px solid #eee;background:#fde8e8;text-align:center;color:#c0392b;font-size:11px;">滿</td>`;
-        } else if(hasOtherOnly && dayJobs.length > 0){
-          html += `<td style="padding:3px 4px;border:1px solid #eee;background:#f0f0f0;text-align:center;color:#bbb;font-size:11px;" title="該天無${region}行程">－</td>`;
+          html += `<td style="padding:3px 4px;border:1px solid #eee;background:#e0e0e0;text-align:center;color:#777;font-size:11px;cursor:pointer;" onclick="${escapeHtml(onclick)}" title="已排滿，點擊查看當天排工">已排滿</td>`;
         } else {
           const best = freeRanges.reduce((a,b)=>(b.to-b.from>a.to-a.from)?b:a, freeRanges[0]);
-          const slots = best.to - best.from;
           const fromT = times[best.from];
           const toT = times[best.to];
-          const bg = hasTargetRegion
-            ? (slots>=3?"#d4edda":slots>=1?"#fff3cd":"#f8f9fa")
-            : (slots>=3?"#eaf7ee":"#fafafa");
-          const color = slots>=3?"#1a7a2e":"#7a5a00";
           const label = fromT===toT ? fromT : `${fromT}`;
-          const slotsJson = JSON.stringify(freeRanges.map(r=>({f:times[r.from],t:times[r.to],slots:r.to-r.from})));
-          const onclick = `showTwoWeekSlotPicker(event,'${eng}','${d}',${slotsJson.replace(/'/g,"\'")})`;
-          html += `<td style="padding:2px 3px;border:1px solid #eee;background:${bg};text-align:center;cursor:pointer;position:relative;" onclick="${escapeHtml(onclick)}" title="${hasTargetRegion?'有'+region+'行程，':'今日無派工，'}點擊查看空擋">`;
-          html += `<span style="color:${color};font-size:11px;font-weight:bold;">${escapeHtml(label)}</span>`;
-          html += `<span style="color:#888;font-size:9px;display:block;">${freeRanges.length}段空擋</span>`;
+          html += `<td style="padding:2px 3px;border:1px solid #eee;background:#d4edda;text-align:center;cursor:pointer;position:relative;" onclick="${escapeHtml(onclick)}" title="有空檔，點擊查看詳細時段">`;
+          html += `<span style="color:#1a7a2e;font-size:11px;font-weight:bold;">${escapeHtml(label)}</span>`;
+          html += `<span style="color:#3d8b53;font-size:9px;display:block;">${freeRanges.length}段空擋</span>`;
           html += `</td>`;
         }
       });
@@ -2882,7 +2869,7 @@ function renderAvailableSlots(){
     const engScores = {};
     engineers.forEach(e=>{ engScores[e]=engineerRegionScore(e); });
 
-    const note = '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝充裕空擋（≥90分鐘）；黃色＝短暫空擋；紅色＝已排滿；－＝無同區域行程。點擊格子查看詳細時段。</div>';
+    const note = '<div style="margin-top:6px;font-size:11px;color:#888;">綠色＝有空檔；灰色＝已排滿。點擊格子可查看當天排工與詳細時段。</div>';
     // 浮出彈窗 HTML（全域一份）
     if(!document.getElementById('twSlotPopup')){
       const pop = document.createElement('div');
@@ -2945,7 +2932,7 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
 
   // 空檔時間
   const slotsHtml = '<div style="font-size:11px;font-weight:bold;color:#2f3542;margin-bottom:4px;border-bottom:1px solid #eee;padding-bottom:3px;">空檔時間</div>'
-    + slots.map(function(s){
+    + (slots.length === 0 ? '<div style="color:#999;font-size:11px;">今日已無空檔（已排滿）</div>' : slots.map(function(s){
       const mins = s.slots * 30;
       const color = s.slots>=3?"#1a7a2e":s.slots>=1?"#7a5a00":"#555";
       const bg    = s.slots>=3?"#d4edda":s.slots>=1?"#fff3cd":"#f1f1f1";
@@ -2956,7 +2943,7 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
         + s.f + ' ～ ' + s.t
         + ''
         + '</button></div>';
-    }).join('');
+    }).join(''));
 
   listEl.innerHTML = scheduleHtml + slotsHtml;
   // 定位在點擊位置旁邊
