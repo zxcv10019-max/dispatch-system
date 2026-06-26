@@ -2494,7 +2494,7 @@ function suggestEngineerByAddress(){
     const border = mins >= 90 ? '#a3d6b0' : '#ffc107';
     const color = mins >= 90 ? '#1a7a2e' : '#7a5a00';
     return '<span style="display:inline-block;padding:3px 10px;border-radius:12px;border:1px solid '+border+';background:'+bg+';color:'+color+';font-size:11px;font-weight:bold;cursor:pointer;margin:2px;"'
-      +' onclick="document.getElementById('fEngineer').value=''+eng+'';document.getElementById('fStartTime').value=''+fromT+'';document.getElementById('fEndTime').value=''+toT+'';"'
+      +' onclick="document.getElementById(\'fEngineer\').value=\''+eng+'\';document.getElementById(\'fStartTime\').value=\''+fromT+'\';document.getElementById(\'fEndTime\').value=\''+toT+'\';"'
       +' title="點擊填入工程師與時間">'+lbl+'</span>';
   }
 
