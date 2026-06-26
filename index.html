@@ -2488,7 +2488,7 @@ function suggestEngineerByAddress(){
     const fromT = times[r.from];
     const toT = times[r.to];
     const mins = (r.to - r.from + 1) * 30;
-    const lbl = fromT + ' - ' + toT + '（' + mins + ' 分鐘）';
+    const lbl = fromT + ' - ' + toT ;
     const bg = mins >= 90 ? '#d4edda' : '#fff3cd';
     const border = mins >= 90 ? '#a3d6b0' : '#ffc107';
     const color = mins >= 90 ? '#1a7a2e' : '#7a5a00';
@@ -2930,7 +2930,7 @@ function renderAvailableSlots(){
         }).filter(Boolean);
         const hasTargetRegion = dayRegions.includes(region);
         const hasNoJobs = dayJobs.length === 0;
-        const hasOtherOnly = !hasTargetRegion && !hasNoJobs && dayRegions.length > 0;
+        const hasOtherOnly = !hasTargetRegion; // 沒有目標區域派工一律灰掉
 
         if(freeRanges.length===0){
           html += `<td style="padding:3px 4px;border:1px solid #eee;background:#fde8e8;text-align:center;color:#c0392b;font-size:11px;">滿</td>`;
@@ -3027,7 +3027,7 @@ function showTwoWeekSlotPicker(ev, eng, date, slots){
         + '<button style="width:100%;text-align:left;padding:6px 10px;border:1.5px solid '+bdr+';border-radius:7px;background:'+bg+';color:'+color+';font-weight:bold;font-size:13px;cursor:pointer;"'
         + ' onclick="fillFromTwoWeek(\''+eng+'\',\''+date+'\',\''+s.f+'\',\''+s.t+'\');document.getElementById(\'twSlotPopup\').style.display=\'none\';">'
         + s.f + ' ～ ' + s.t
-        + '<span style="font-weight:normal;font-size:11px;color:#888;margin-left:8px;">（' + mins + ' 分鐘）</span>'
+        + ''
         + '</button></div>';
     }).join('');
 
