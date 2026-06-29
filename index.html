@@ -6071,80 +6071,28 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
 </script>
 
 
-<style>
-/* ===== 禁止截圖：iOS Safari / Android Chrome ===== */
-#screenshotBlockOverlay{
-  display:none;
-  position:fixed;inset:0;z-index:99999;
-  background:#000;
-  align-items:center;justify-content:center;
-  flex-direction:column;gap:16px;color:#fff;
-  font-family:"Microsoft JhengHei",Arial,sans-serif;
-  text-align:center;padding:20px;
-}
-#screenshotBlockOverlay.show{display:flex!important;}
-#screenshotBlockOverlay .lock-icon{font-size:60px}
-#screenshotBlockOverlay h2{margin:0;font-size:22px}
-#screenshotBlockOverlay p{margin:0;font-size:14px;color:#ccc;line-height:1.6}
-</style>
-<div id="screenshotBlockOverlay">
-  <div class="lock-icon">🔒</div>
-  <h2>禁止截圖</h2>
-  <p>此系統內容受到保護，<br>不允許擷取畫面。</p>
-</div>
+
 <script>
+/* ===== 禁止截圖（安全版）===== */
 (function(){
   'use strict';
-  var overlay = document.getElementById('screenshotBlockOverlay');
-  var hideTimer = null;
 
-  function showBlock(){
-    if(!overlay) return;
-    clearTimeout(hideTimer);
-    overlay.classList.add('show');
-    // 自動 2 秒後隱藏（iOS 截圖後會恢復前景）
-    hideTimer = setTimeout(function(){ overlay.classList.remove('show'); }, 2000);
-  }
-
-  // 1. iOS 截圖偵測：visibilitychange（頁面切到背景時觸發）
-  // 僅在使用者已登入且頁面已顯示一段時間後才啟用，避免登入彈窗誤觸
-  var pageReadyForProtection = false;
-  setTimeout(function(){ pageReadyForProtection = true; }, 3000);
-  document.addEventListener('visibilitychange', function(){
-    if(document.hidden && pageReadyForProtection && currentUser) showBlock();
+  // 1. 手機版禁用右鍵（防止長按存圖）
+  document.addEventListener('contextmenu', function(e){
+    if(window.innerWidth <= 900) e.preventDefault();
   });
 
-  // 2. CSS -webkit-user-select 讓內容無法被選取（降低截圖可讀性已另行保護）
+  // 2. 禁止選取文字（手機版）
   document.addEventListener('DOMContentLoaded', function(){
-    var style = document.createElement('style');
-    style.textContent = [
-      // 手機截圖保護：CSS 層讓截圖內容模糊（僅限支援 backdrop-filter 瀏覽器）
-      '@media (max-width:900px){',
-      '  body.screenshot-protect #myTodayPanel{',
-      '    -webkit-user-select:none;user-select:none;',
-      '  }',
-      '}'
-    ].join('');
-    document.head.appendChild(style);
-    document.body.classList.add('screenshot-protect');
+    var s = document.createElement('style');
+    s.textContent = '@media(max-width:900px){#myTodayPanel{-webkit-user-select:none;user-select:none;}}';
+    document.head.appendChild(s);
   });
 
-  // 3. PrintScreen / Snipping Tool（桌面端）
+  // 3. PrintScreen 鍵：清空剪貼簿
   document.addEventListener('keyup', function(e){
     if(e.key === 'PrintScreen' || e.keyCode === 44){
-      // 清空剪貼簿（部分瀏覽器支援）
-      try{
-        navigator.clipboard.writeText('').catch(function(){});
-      }catch(err){}
-      showBlock();
-    }
-  });
-
-  // 5. 右鍵選單停用（防止另存圖片）
-  document.addEventListener('contextmenu', function(e){
-    // 只在手機版且有派工資料顯示時停用
-    if(window.innerWidth <= 900){
-      e.preventDefault();
+      try{ navigator.clipboard.writeText('').catch(function(){}); }catch(err){}
     }
   });
 
