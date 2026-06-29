@@ -6391,10 +6391,10 @@ body.cartridge-scroll-mode {
 // 全域：讓 saveCloudNow / applyRemoteData 可存取
 var cartridgeData = [];
 var CARTRIDGE_KEY = 'cartridge_list_v1';
+try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
 (function(){
 'use strict';
-var cartridgeData = [];
-try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
+// cartridgeData / CARTRIDGE_KEY 使用全域變數
 
 function saveCD(){ try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){} }
 
