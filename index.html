@@ -6394,14 +6394,14 @@ window.renderCartridgeTable = function(){
   var cnt = document.getElementById('cartridgeCount');
   if(!t) return;
   if(!cartridgeData.length){
-    t.innerHTML='<tr><td colspan="7" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
+    t.innerHTML='<tr><td colspan="8" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
     if(cnt) cnt.textContent='';
     return;
   }
   var arranged = cartridgeData.filter(function(r){ return r._jobId; }).length;
   if(cnt) cnt.textContent='共 '+cartridgeData.length+' 筆　已安排 '+arranged+' 筆';
   var html='<thead><tr style="background:#2f3542;color:#fff;">'
-    +['客戶編號','客戶全稱','產品編號','品名規格','日期','周期（月）','安排派工'].map(function(h){
+    +['客戶編號','客戶全稱','產品編號','品名規格','上次換芯','周期（月）','下次換芯','安排派工'].map(function(h){
       return '<th style="padding:8px 10px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2;">'+h+'</th>';
     }).join('')+'</tr></thead><tbody>';
 
@@ -6425,6 +6425,7 @@ window.renderCartridgeTable = function(){
       +'<td style="padding:7px 10px;border-bottom:1px solid #eee;">'+escapeHtml(r.品名規格||'')+'</td>'
       +'<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;">'+escapeHtml(r.日期||'')+'</td>'
       +'<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;">'+escapeHtml(String(r.周期||''))+'</td>'
+      +'<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;font-weight:bold;color:#b33939;">'+escapeHtml(r.下次換芯||'')+'</td>'
       +'<td style="padding:7px 10px;border-bottom:1px solid #eee;">'+actionCell+'</td>'
       +'</tr>';
   });
@@ -6606,13 +6607,40 @@ window.importCartridgeExcel = function(event){
           date=d.getUTCFullYear()+'/'+(d.getUTCMonth()+1).toString().padStart(2,'0')+'/'+d.getUTCDate().toString().padStart(2,'0');
         } else { date=date.replace(/-/g,'/'); }
         if(!custNo&&!custName) continue;
-        result.push({客戶編號:custNo,客戶全稱:custName,產品編號:prodNo,品名規格:prodName,日期:date,周期:Number(cycle)});
+
+        // 計算下次換芯日期 = 上次日期 + 周期月數
+        var nextDate = null;
+        if(date){
+          var parts = date.replace(/-/g,'/').split('/');
+          if(parts.length>=3){
+            var y=Number(parts[0]), m=Number(parts[1])-1, d=Number(parts[2]);
+            var base = new Date(y, m, d);
+            base.setMonth(base.getMonth() + Number(cycle));
+            nextDate = base;
+          }
+        }
+
+        // 只取下個月到期的
+        var now = new Date();
+        var nextMonthY = now.getMonth()===11 ? now.getFullYear()+1 : now.getFullYear();
+        var nextMonthM = now.getMonth()===11 ? 0 : now.getMonth()+1;
+        if(!nextDate) continue;
+        if(nextDate.getFullYear()!==nextMonthY || nextDate.getMonth()!==nextMonthM) continue;
+
+        var nextDateStr = nextDate.getFullYear()+'/'
+          +String(nextDate.getMonth()+1).padStart(2,'0')+'/'
+          +String(nextDate.getDate()).padStart(2,'0');
+
+        result.push({客戶編號:custNo,客戶全稱:custName,產品編號:prodNo,品名規格:prodName,
+          日期:date,周期:Number(cycle),下次換芯:nextDateStr});
       }
       if(!result.length){ alert('沒有找到有效資料（需有周期欄位且有值）。'); event.target.value=''; return; }
       cartridgeData=result;
       saveCD();
       renderCartridgeTable();
-      document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料。來源：'+file.name;
+      var nm = new Date(); nm.setMonth(nm.getMonth()+1);
+        var nmStr = nm.getFullYear()+'/'+(nm.getMonth()+1)+'月';
+        document.getElementById('cartridgeStatus').textContent='已篩選出 '+result.length+' 筆下個月（'+nmStr+'）需換芯資料。來源：'+file.name;
     }catch(err){ alert('匯入失敗：'+err.message); }
     event.target.value='';
   };
@@ -6624,7 +6652,7 @@ window.exportCartridgeExcel=function(){
   if(!cartridgeData.length){ alert('尚無資料'); return; }
   if(typeof XLSX==='undefined'){ alert('Excel 套件未載入'); return; }
   var ws=XLSX.utils.json_to_sheet(cartridgeData.map(function(r){
-    return {'客戶編號':r.客戶編號,'客戶全稱':r.客戶全稱,'產品編號':r.產品編號,'品名規格':r.品名規格,'日期':r.日期,'周期（月）':r.周期,
+    return {'客戶編號':r.客戶編號,'客戶全稱':r.客戶全稱,'產品編號':r.產品編號,'品名規格':r.品名規格,'上次換芯':r.日期,'周期（月）':r.周期,'下次換芯':r.下次換芯,
       '已安排':r._jobId?'✅':'','安排日期':r._arranged?r._arranged.date:'','工程師':r._arranged?r._arranged.engineer:''};
   }));
   var wb=XLSX.utils.book_new();
