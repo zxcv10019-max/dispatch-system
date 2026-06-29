@@ -1514,6 +1514,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
   <button id="tabList" onclick="showPage('listPage')">派工明細</button>
   <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
+  <button id="tabCartridge" onclick="showPage('cartridgePage')">🔄 換芯名單</button>
   <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
 </div>
 
@@ -2325,6 +2326,7 @@ function showPage(pageId){
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+  if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgePage();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");renderLeaveListLP();}
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
@@ -6184,6 +6186,197 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
 
 
 
+
+
+<!-- ===== 換芯名單頁面 ===== -->
+<div id="cartridgePage" class="page">
+  <div class="toolbar">
+    <button class="import-btn" onclick="document.getElementById('cartridgeFile').click()">📥 匯入換芯 Excel</button>
+    <input type="file" id="cartridgeFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importCartridgeExcel(event)">
+    <button class="export-btn" onclick="exportCartridgeExcel()">📤 匯出換芯 Excel</button>
+    <button class="clear-btn" onclick="clearCartridgeData()">清空</button>
+    <span id="cartridgeCount" style="align-self:center;font-size:13px;color:#555;font-weight:bold;margin-left:8px;"></span>
+  </div>
+  <div id="cartridgeStatus" class="import-status" style="margin:8px 12px;">尚未匯入資料。</div>
+  <div style="margin:0 12px 12px;overflow:auto;">
+    <table id="cartridgeTable" style="border-collapse:collapse;width:100%;min-width:700px;font-size:13px;"></table>
+  </div>
+</div>
+
+<script>
+const CARTRIDGE_KEY = 'cartridge_list_v1';
+let cartridgeData = (function(){ try{ return JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ return []; } })();
+
+function saveCartridgeData(){
+  try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
+}
+
+function renderCartridgePage(){
+  renderCartridgeTable();
+}
+
+function renderCartridgeTable(){
+  const t = document.getElementById('cartridgeTable');
+  const cnt = document.getElementById('cartridgeCount');
+  if(!t) return;
+  if(!cartridgeData.length){
+    t.innerHTML = '<tr><td style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
+    if(cnt) cnt.textContent = '';
+    return;
+  }
+  if(cnt) cnt.textContent = '共 ' + cartridgeData.length + ' 筆';
+  let html = '<thead><tr style="background:#2f3542;color:#fff;">'
+    + '<th style="padding:8px 10px;text-align:left;">客戶編號</th>'
+    + '<th style="padding:8px 10px;text-align:left;">客戶全稱</th>'
+    + '<th style="padding:8px 10px;text-align:left;">產品編號</th>'
+    + '<th style="padding:8px 10px;text-align:left;">品名規格</th>'
+    + '<th style="padding:8px 10px;text-align:center;">日期</th>'
+    + '<th style="padding:8px 10px;text-align:center;">周期（月）</th>'
+    + '</tr></thead><tbody>';
+  cartridgeData.forEach(function(r, i){
+    const bg = i % 2 === 0 ? '#fff' : '#f5f8fc';
+    html += '<tr style="background:' + bg + ';">'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;">' + escapeHtml(r.客戶編號||'') + '</td>'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;">' + escapeHtml(r.客戶全稱||'') + '</td>'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;">' + escapeHtml(r.產品編號||'') + '</td>'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;">' + escapeHtml(r.品名規格||'') + '</td>'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;">' + escapeHtml(r.日期||'') + '</td>'
+      + '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;">' + escapeHtml(String(r.周期||'')) + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody>';
+  t.innerHTML = html;
+}
+
+function importCartridgeExcel(event){
+  const file = event.target.files[0];
+  if(!file){ event.target.value=''; return; }
+  if(typeof XLSX === 'undefined'){ alert('Excel 套件未載入，請確認網路後重新整理。'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:false, raw:false});
+      // 找第一個工作表
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+
+      // 找標頭列（前20列搜尋包含「客戶編號」或「周期」的列）
+      let headerRow = -1, headers = [];
+      for(let i = 0; i < Math.min(rows.length, 20); i++){
+        const r = rows[i].map(function(c){ return String(c||'').trim(); });
+        if(r.includes('客戶編號') || r.includes('客編') || r.includes('周期')){
+          headerRow = i; headers = r; break;
+        }
+      }
+
+      function colIdx(names){
+        for(const n of names){
+          const i = headers.indexOf(n);
+          if(i >= 0) return i;
+        }
+        return -1;
+      }
+
+      let idxCustNo   = colIdx(['客戶編號','客編']);
+      let idxCustName = colIdx(['客戶全稱','客戶名稱','客名']);
+      let idxProdNo   = colIdx(['產品編號','品號']);
+      let idxProdName = colIdx(['品名規格','品名','規格']);
+      let idxDate     = colIdx(['日期','換芯日期']);
+      let idxCycle    = colIdx(['周期','換芯周期','週期']);
+
+      // 若沒找到標頭，嘗試從固定欄位位置（配合來源格式：col1=客編, col2=客名, col12=產品編號, col13=品名規格, col19=日期, col20=周期）
+      let useFixed = false;
+      if(headerRow < 0){
+        // 嘗試來源 Excel 格式（有表頭在第6列 index=5）
+        for(let i = 0; i < Math.min(rows.length, 10); i++){
+          const r = rows[i];
+          if(String(r[1]||'').trim() === '客戶編號'){
+            headerRow = i;
+            idxCustNo=1; idxCustName=2; idxProdNo=12; idxProdName=13; idxDate=19; idxCycle=20;
+            useFixed = true;
+            break;
+          }
+        }
+      }
+
+      if(headerRow < 0 && !useFixed){
+        alert('找不到欄位標頭，請確認 Excel 含有「客戶編號、品名規格、周期」等欄位。');
+        event.target.value=''; return;
+      }
+
+      const result = [];
+      const startRow = headerRow + 1;
+      for(let i = startRow; i < rows.length; i++){
+        const row = rows[i];
+        if(!row || row.every(function(c){ return !String(c||'').trim(); })) continue;
+
+        const cycle = String(row[idxCycle]||'').trim();
+        if(!cycle || isNaN(Number(cycle))) continue; // 只留有周期的
+
+        const custNo   = String(row[idxCustNo]||'').trim();
+        const custName = String(row[idxCustName]||'').trim();
+        const prodNo   = idxProdNo >= 0 ? String(row[idxProdNo]||'').trim() : '';
+        const prodName = idxProdName >= 0 ? String(row[idxProdName]||'').trim() : '';
+        let date = idxDate >= 0 ? String(row[idxDate]||'').trim() : '';
+
+        // 格式化日期
+        if(date && !isNaN(Number(date)) && Number(date) > 20000){
+          const serial = Number(date);
+          const d = new Date(Math.floor(serial - 25569) * 86400 * 1000);
+          date = d.getUTCFullYear() + '/' + String(d.getUTCMonth()+1).padStart(2,'0') + '/' + String(d.getUTCDate()).padStart(2,'0');
+        } else {
+          date = date.replace(/-/g, '/');
+        }
+
+        if(!custNo && !custName) continue;
+
+        result.push({
+          客戶編號: custNo,
+          客戶全稱: custName,
+          產品編號: prodNo,
+          品名規格: prodName,
+          日期: date,
+          周期: Number(cycle)
+        });
+      }
+
+      if(!result.length){
+        alert('沒有找到有效的換芯資料（需有「周期」欄位且有值）。');
+        event.target.value=''; return;
+      }
+
+      cartridgeData = result;
+      saveCartridgeData();
+      renderCartridgeTable();
+      document.getElementById('cartridgeStatus').textContent = '已匯入 ' + result.length + ' 筆換芯資料。來源：' + file.name;
+    }catch(err){
+      alert('匯入失敗：' + err.message);
+    }
+    event.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function exportCartridgeExcel(){
+  if(!cartridgeData.length){ alert('尚無換芯資料可匯出。'); return; }
+  if(typeof XLSX === 'undefined'){ alert('Excel 套件未載入。'); return; }
+  const ws = XLSX.utils.json_to_sheet(cartridgeData.map(function(r){
+    return { '客戶編號':r.客戶編號, '客戶全稱':r.客戶全稱, '產品編號':r.產品編號, '品名規格':r.品名規格, '日期':r.日期, '周期（月）':r.周期 };
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '換芯名單');
+  XLSX.writeFile(wb, '換芯名單.xlsx');
+}
+
+function clearCartridgeData(){
+  if(!confirm('確定清空換芯名單？')) return;
+  cartridgeData = [];
+  saveCartridgeData();
+  renderCartridgeTable();
+  document.getElementById('cartridgeStatus').textContent = '已清空。';
+}
+</script>
 
 </body>
 </html>
