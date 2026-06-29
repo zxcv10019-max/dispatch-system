@@ -3436,7 +3436,8 @@ function renderMyTodayPanel(){
       const phoneRaw=String(j.phone||"").trim();
       const phone=phoneRaw ? `<div>📞 <a class="my-phone-link" href="tel:${escapeHtml(cleanPhoneForTel(phoneRaw))}" style="font-weight:bold;">撥打電話</a></div>` : `<div style="color:#999">☎️ 電話：未填</div>`;
       const addrRaw=String(j.address||"").trim();
-      const addr=addrRaw ? `<div>📍 <a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank" style="font-weight:bold;">點擊查看地址</a></div>` : `<div style="color:#999">📍 地址：未填</div>`;
+      const cityLabel=String(j.city||"").trim() || String(j.district||"").trim() || "";
+      const addr=addrRaw ? `<div>📍 <a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank" style="font-weight:bold;">${cityLabel?escapeHtml(cityLabel)+" ":""}點擊查看地址</a></div>` : `<div style="color:#999">📍 地址：未填</div>`;
       const work=j.workItem?`<div>施工項目：${escapeHtml(j.workItem)}</div>`:"";
       const content=j.workContent?`<div>施工內容：${escapeHtml(j.workContent)}</div>`:"";
       const routeHtml=nextRouteHtml(j);
@@ -4941,7 +4942,7 @@ document.addEventListener("click", function(e){
       : `<div style="color:#999">☎️ 電話：未填</div>`;
     const addrRaw = String(j.address||"").trim();
     const addr = addrRaw
-      ? `<div>📍 <a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank" style="font-weight:bold;">點擊查看地址</a></div>`
+      ? `<div>📍 <a class="my-map-link" href="${directionUrl("", addrRaw)}" target="_blank" style="font-weight:bold;">${String(j.city||"").trim()||String(j.district||"").trim() ? escapeHtml((String(j.city||"").trim()||String(j.district||"").trim()))+" " : ""}點擊查看地址</a></div>`
       : `<div style="color:#999">📍 地址：未填</div>`;
     const work = j.workItem ? `<div>施工項目：${escapeHtml(j.workItem)}</div>` : "";
     const content = j.workContent ? `<div>施工內容：${escapeHtml(j.workContent)}</div>` : "";
