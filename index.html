@@ -2317,6 +2317,7 @@ function syncEndTimeByStart(){
 
 function showPage(pageId){
   document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage");
+  document.body.classList.toggle("cartridge-scroll-mode", pageId==="cartridgePage");
   document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage");
   document.body.classList.toggle("force-admin-scroll", pageId==="adminPage");
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
@@ -6225,6 +6226,32 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
   padding:12px 16px;background:#f8f9fa;border-top:1px solid #ddd;
 }
 #cartridgeModal .cfoot button{ padding:8px 18px;font-size:14px;border-radius:6px; }
+
+/* 換芯表頭強制黑底白字 */
+#cartridgeTable thead tr th {
+  background:#1a1a2e !important;
+  color:#ffffff !important;
+  font-weight:bold !important;
+  border:1px solid #333 !important;
+}
+/* 換芯頁滑動修正 */
+#cartridgePage.page.active {
+  display:block !important;
+  flex:none !important;
+  height:auto !important;
+  max-height:none !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding-bottom:100px !important;
+  position:relative !important;
+}
+body:has(#cartridgePage.page.active),
+body.cartridge-scroll-mode {
+  height:auto !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  display:block !important;
+}
 
 /* 已安排 badge */
 .cart-arranged-badge{
