@@ -4797,7 +4797,7 @@ applyRoleUI();
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
             <h3 style="margin:0;">📊 工程師施工項目統計</h3>
             <label style="font-size:13px;color:#555;">月份：</label>
-            <input type="month" id="statsMonth" style="font-size:13px;padding:5px 8px;" onchange="renderWorkItemStats()">
+            <input type="month" id="statsMonth" style="font-size:13px;padding:5px 8px;" onchange="renderCompletionStats(); renderWorkItemStats()">
           </div>
           <div id="workItemStatsBody" style="overflow-x:auto;"></div>
         </div>
@@ -5203,7 +5203,8 @@ function renderAdminMap(){
 // ===== 完成率統計 =====
 function renderCompletionStats(){
   const box = document.getElementById('adminCompletionContent'); if(!box) return;
-  const month = adminMonthNow();
+  const sm = document.getElementById('statsMonth');
+  const month = (sm && sm.value) ? sm.value : adminMonthNow();
   const monthJobs = (jobs||[]).filter(j=>String(j.date||'').startsWith(month) && !isHoldJob(j));
   let html = '<div style="margin-bottom:12px;font-size:13px;color:#555">本月（' + month + '）共 ' + monthJobs.length + ' 件派工。工程師件數分佈：</div>';
   const totalAll = monthJobs.length || 1;
