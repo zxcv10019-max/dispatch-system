@@ -1996,6 +1996,8 @@ async function saveCloudNow(){
       customersCount:(customers||[]).length,
       leaveRecords:Array.isArray(leaveRecords) ? leaveRecords : [],
       leaveRecordsCount:(leaveRecords||[]).length,
+      cartridgeData:Array.isArray(cartridgeData) ? cartridgeData : [],
+      cartridgeDataCount:(cartridgeData||[]).length,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
@@ -2052,6 +2054,7 @@ async function applyRemoteData(data){
   let remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
   let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
   let remoteLeaveRecords = Array.isArray(data.leaveRecords) ? data.leaveRecords : null;
+  let remoteCartridgeData = Array.isArray(data.cartridgeData) ? data.cartridgeData : null;
   if(data.chunked){
     const loaded = await loadCloudChunks(data);
     remoteJobs = loaded.jobs;
@@ -2088,10 +2091,15 @@ async function applyRemoteData(data){
   if(remoteJobs) jobs = remoteJobs;
   if(remoteCustomers){ customers = remoteCustomers; sortCustomersByCode(); }
   if(remoteLeaveRecords) leaveRecords = normalizeLeaveRecords(remoteLeaveRecords);
+  if(remoteCartridgeData){
+    cartridgeData = remoteCartridgeData;
+    try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
+  }
   // 快取到 localStorage（可能因空間不足而略過）
   try{ localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || [])); }catch(e){ try{localStorage.removeItem(JOBS_KEY);}catch(_){} }
   try{ localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || [])); }catch(e){ try{localStorage.removeItem(CUSTOMERS_KEY);}catch(_){} }
   try{ localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRecords || [])); }catch(e){ try{localStorage.removeItem(LEAVE_KEY);}catch(_){} }
+  try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData || [])); }catch(e){ try{localStorage.removeItem(CARTRIDGE_KEY);}catch(_){} }
   updateCustomerCodeList();
   renderSchedule();
   renderCustomers();
@@ -2099,6 +2107,7 @@ async function applyRemoteData(data){
   renderAvailableSlots();
   renderLeaveList();
   renderLeaveListLP();
+  if(typeof renderCartridgeTable==='function') renderCartridgeTable();
   applyRoleUI();
   isApplyingRemote = false;
   applyRoleUI();
@@ -6379,9 +6388,11 @@ body.cartridge-scroll-mode {
 </div>
 
 <script>
+// 全域：讓 saveCloudNow / applyRemoteData 可存取
+var cartridgeData = [];
+var CARTRIDGE_KEY = 'cartridge_list_v1';
 (function(){
 'use strict';
-var CARTRIDGE_KEY = 'cartridge_list_v1';
 var cartridgeData = [];
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
 
