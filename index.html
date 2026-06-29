@@ -1504,6 +1504,8 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <div class="gate-icon">🚫</div>
     <h2>此帳號尚未授權</h2>
     <p>你的 Google 帳號目前沒有查看權限。<br>請先請管理員在後台新增此 Email 權限，才可以查看派工表資料。</p>
+    <p style="font-size:13px;color:#555;">目前登入帳號：<code id="noAccessEmail" style="background:#f3f3f3;padding:2px 6px;border-radius:4px;">-</code></p>
+    <div id="noAccessDebugInfo" style="font-size:12px;color:#922b21;background:#fde8e8;border:1px solid #f5a3a3;border-radius:6px;padding:10px;margin:8px 0;text-align:left;line-height:1.6;"></div>
     <button onclick="signOutGoogle()">登出並更換帳號</button>
   </div>
 </div>
@@ -1879,6 +1881,7 @@ const ADMIN_EMAILS = ["zxcv10019@gmail.com", "gd044@gungdai.com"];
 let currentRole = "none"; // admin / editor / viewer / none（未授權不可查看）
 let currentEngineer = ""; // 綁定工程師，手機版用來顯示本人今日派工
 let rolesCache = [];
+let lastRoleLoadError = null; // 讀取角色資料時若發生 Firestore 錯誤，記錄下來用於畫面提示
 
 function emailKey(email){
   return String(email||"").trim().toLowerCase().replaceAll(".",",");
@@ -1915,6 +1918,7 @@ function cloudDocRef(){
 }
 
 async function loadUserRole(){
+  lastRoleLoadError = null;
   if(!currentUser || !firebaseDb){ currentRole="none"; currentEngineer=""; applyRoleUI(); return; }
   if(isAdmin()){ currentRole="admin"; currentEngineer=""; applyRoleUI(); return; }
   try{
@@ -1931,6 +1935,7 @@ async function loadUserRole(){
     currentEngineer = normalizeEngineerName(roleData.engineer || "");
   }catch(e){
     console.warn("讀取角色失敗，暫以未授權處理", e);
+    lastRoleLoadError = `${e && e.code ? e.code : ""} ${e && e.message ? e.message : String(e)}`.trim();
     currentRole="none";
     currentEngineer="";
   }
@@ -2150,7 +2155,8 @@ function startCloudSync(){
     }
   }, err=>{
     console.error("Firestore 讀取失敗", err);
-    setSyncStatus("雲端讀取失敗，請檢查 Firestore 規則", "err");
+    const isPerm = err && (err.code === "permission-denied" || /permission/i.test(err.message||""));
+    setSyncStatus(isPerm ? `雲端讀取被拒絕（${currentUser.email}）：Firestore 規則未允許此帳號讀取，請聯絡管理員` : "雲端讀取失敗，請檢查 Firestore 規則", "err");
   });
 }
 
@@ -2169,6 +2175,16 @@ function applyRoleUI(){
   const readOnly = access && !canEdit();
   document.body.classList.toggle("no-permission", loggedIn && !access);
   document.body.classList.toggle("viewer-mode", !!readOnly);
+  if(loggedIn && !access){
+    const emailEl = document.getElementById("noAccessEmail");
+    if(emailEl) emailEl.textContent = currentUser.email || "(無法取得 Email)";
+    const dbgEl = document.getElementById("noAccessDebugInfo");
+    if(dbgEl){
+      dbgEl.innerHTML = lastRoleLoadError
+        ? `⚠️ 讀取權限資料時發生錯誤，這通常代表 <b>Firestore 規則尚未允許此帳號讀取</b>，並不是「忘記設定權限」：<br><code>${escapeHtml(lastRoleLoadError)}</code><br>請聯絡管理員確認 Firestore 安全規則。`
+        : `如果管理員已經幫你設定過權限，請把上面這個 Email 完整複製給管理員核對：後台「帳號權限設定」裡輸入的 Email 必須跟這個一字不差（大小寫、空格、拼字都要完全一致）。`;
+    }
+  }
   // 手機版「兩日派工」鎖定畫面只給工程帳號（viewer）用，admin / editor 後台要跟電腦版一樣完整
   document.body.classList.toggle("engineer-lock-mode", currentRole === "viewer");
   if(currentUser){
