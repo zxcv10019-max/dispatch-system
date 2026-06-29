@@ -3407,19 +3407,22 @@ function renderMyTodayPanel(){
   const todayObj=new Date();
   const tomorrowObj=new Date();
   tomorrowObj.setDate(todayObj.getDate()+1);
+  const dayAfterObj=new Date();
+  dayAfterObj.setDate(todayObj.getDate()+2);
   const today=formatDateLocal(todayObj);
   const tomorrow=formatDateLocal(tomorrowObj);
+  const dayAfter=formatDateLocal(dayAfterObj);
   const targetEngineer=currentEngineer || "";
 
-  let title="兩日派工";
-  let sub="以今天為主，可往下查看明天派工";
+  let title="三日派工";
+  let sub="以今天為主，可往下查看明天與後天派工";
   if(targetEngineer){
-    title=`我的兩日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
+    title=`我的三日派工｜${displayEngineer(targetEngineer)} ${targetEngineer}`;
     sub=`依登入帳號 ${currentUser.email} 綁定工程師顯示`;
   }else if(isAdmin()){
-    sub="管理員未綁定工程師，手機版顯示全部工程師今天與明天派工";
+    sub="管理員未綁定工程師，手機版顯示全部工程師今天、明天與後天派工";
   }else{
-    panel.innerHTML=`<h3>我的兩日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
+    panel.innerHTML=`<h3>我的三日派工</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
     return;
   }
 
@@ -3452,7 +3455,7 @@ function renderMyTodayPanel(){
     return `<div class="my-day-section"><h4>${escapeHtml(caption)}｜${escapeHtml(dateLabel)}　共 ${list.length} 件</h4>${rows || '<div class="my-today-empty">沒有派工。</div>'}</div>`;
   }
 
-  panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDaySection(today,"今天")}${oneDaySection(tomorrow,"明天")}`;
+  panel.innerHTML=`<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDaySection(today,"今天")}${oneDaySection(tomorrow,"明天")}${oneDaySection(dayAfter,"後天")}`;
   // setTimeout(updateTravelTags, 80); // 已停用
 }
 
@@ -4965,23 +4968,26 @@ document.addEventListener("click", function(e){
     const todayObj = new Date();
     const tomorrowObj = new Date();
     tomorrowObj.setDate(todayObj.getDate()+1);
+    const dayAfterObj2 = new Date();
+    dayAfterObj2.setDate(todayObj.getDate()+2);
     const today = formatDateLocal(todayObj);
     const tomorrow = formatDateLocal(tomorrowObj);
+    const dayAfter2 = formatDateLocal(dayAfterObj2);
 
     const adminMode = (typeof isAdmin === "function" && isAdmin());
     const targetEngineer = currentEngineer || "";
 
-    let title = "兩日派工表";
-    let sub = "以今天為主，可往下查看明天派工。";
+    let title = "三日派工表";
+    let sub = "以今天為主，可往下查看明天與後天派工。";
 
     if(adminMode){
-      title = "兩日派工表｜全部工程";
-      sub = "主帳號手機版顯示 4 位工程師今天與明天的派工資料。";
+      title = "三日派工表｜全部工程";
+      sub = "主帳號手機版顯示 4 位工程師今天、明天與後天的派工資料。";
     }else if(targetEngineer){
-      title = `兩日派工表｜${mobileEngineerLabel(targetEngineer)}`;
+      title = `三日派工表｜${mobileEngineerLabel(targetEngineer)}`;
       sub = `依登入帳號 ${currentUser.email} 綁定工程師顯示。`;
     }else{
-      panel.innerHTML = `<h3>兩日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
+      panel.innerHTML = `<h3>三日派工表</h3><div class="my-today-empty">此帳號尚未在後台綁定工程師，請由管理員到「後台管理 → 帳號權限設定」設定對應工程師。</div>`;
       return;
     }
 
@@ -5010,7 +5016,7 @@ document.addEventListener("click", function(e){
       return `<div class="my-day-section"><h4>${escapeHtml(caption)}｜${escapeHtml(dateLabel)}　共 ${list.length} 件</h4>${rows || '<div class="my-today-empty">沒有派工。</div>'}</div>`;
     }
 
-    panel.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDay(today,"今天")}${oneDay(tomorrow,"明天")}`;
+    panel.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="my-today-sub">${escapeHtml(sub)}</div>${oneDay(today,"今天")}${oneDay(tomorrow,"明天")}${oneDay(dayAfter2,"後天")}`;
     // setTimeout(updateTravelTags, 80); // 已停用
   }
 
@@ -6061,6 +6067,87 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
   };
 
   applyScheduleViewModeUI();
+})();
+</script>
+
+
+<style>
+/* ===== 禁止截圖：iOS Safari / Android Chrome ===== */
+#screenshotBlockOverlay{
+  display:none;
+  position:fixed;inset:0;z-index:99999;
+  background:#000;
+  align-items:center;justify-content:center;
+  flex-direction:column;gap:16px;color:#fff;
+  font-family:"Microsoft JhengHei",Arial,sans-serif;
+  text-align:center;padding:20px;
+}
+#screenshotBlockOverlay.show{display:flex!important;}
+#screenshotBlockOverlay .lock-icon{font-size:60px}
+#screenshotBlockOverlay h2{margin:0;font-size:22px}
+#screenshotBlockOverlay p{margin:0;font-size:14px;color:#ccc;line-height:1.6}
+</style>
+<div id="screenshotBlockOverlay">
+  <div class="lock-icon">🔒</div>
+  <h2>禁止截圖</h2>
+  <p>此系統內容受到保護，<br>不允許擷取畫面。</p>
+</div>
+<script>
+(function(){
+  'use strict';
+  var overlay = document.getElementById('screenshotBlockOverlay');
+  var hideTimer = null;
+
+  function showBlock(){
+    if(!overlay) return;
+    clearTimeout(hideTimer);
+    overlay.classList.add('show');
+    // 自動 2 秒後隱藏（iOS 截圖後會恢復前景）
+    hideTimer = setTimeout(function(){ overlay.classList.remove('show'); }, 2000);
+  }
+
+  // 1. iOS 截圖偵測：visibilitychange（頁面切到背景時觸發）
+  // 僅在使用者已登入且頁面已顯示一段時間後才啟用，避免登入彈窗誤觸
+  var pageReadyForProtection = false;
+  setTimeout(function(){ pageReadyForProtection = true; }, 3000);
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden && pageReadyForProtection && currentUser) showBlock();
+  });
+
+  // 2. CSS -webkit-user-select 讓內容無法被選取（降低截圖可讀性已另行保護）
+  document.addEventListener('DOMContentLoaded', function(){
+    var style = document.createElement('style');
+    style.textContent = [
+      // 手機截圖保護：CSS 層讓截圖內容模糊（僅限支援 backdrop-filter 瀏覽器）
+      '@media (max-width:900px){',
+      '  body.screenshot-protect #myTodayPanel{',
+      '    -webkit-user-select:none;user-select:none;',
+      '  }',
+      '}'
+    ].join('');
+    document.head.appendChild(style);
+    document.body.classList.add('screenshot-protect');
+  });
+
+  // 3. PrintScreen / Snipping Tool（桌面端）
+  document.addEventListener('keyup', function(e){
+    if(e.key === 'PrintScreen' || e.keyCode === 44){
+      // 清空剪貼簿（部分瀏覽器支援）
+      try{
+        navigator.clipboard.writeText('').catch(function(){});
+      }catch(err){}
+      showBlock();
+    }
+  });
+
+  // 5. 右鍵選單停用（防止另存圖片）
+  document.addEventListener('contextmenu', function(e){
+    // 只在手機版且有派工資料顯示時停用
+    if(window.innerWidth <= 900){
+      e.preventDefault();
+    }
+  });
+
 })();
 </script>
 
