@@ -1739,6 +1739,20 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
   </div>
   <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
+
+  <!-- 施工項目統計區塊 -->
+  <div id="workItemStatsWrap" style="margin:10px 12px 0;background:#fff;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid #e0e0e0;flex-wrap:wrap;">
+      <span style="font-weight:bold;font-size:14px;color:#2f3542;">📊 施工項目統計</span>
+      <label style="font-size:13px;color:#555;">月份：</label>
+      <input type="month" id="statsMonth" style="font-size:13px;padding:4px 8px;" onchange="renderWorkItemStats()">
+      <button onclick="(function(){document.getElementById('statsMonth').value=document.getElementById('listMonth').value;renderWorkItemStats();})()" style="font-size:12px;padding:4px 10px;background:#487eb0;">同步明細月份</button>
+      <button onclick="document.getElementById('workItemStatsWrap').style.display='none'" style="font-size:12px;padding:4px 10px;background:#888;margin-left:auto;">收起</button>
+    </div>
+    <div id="workItemStatsBody" style="overflow-x:auto;padding:12px 14px;"></div>
+  </div>
+  <button id="showStatsBtn" onclick="document.getElementById('workItemStatsWrap').style.display='';renderWorkItemStats();" style="display:none;margin:8px 12px 0;font-size:12px;padding:4px 12px;background:#888;">顯示統計</button>
+
   <div class="customer-table"><table id="jobListTable"></table></div>
 </div>
 
@@ -2263,6 +2277,11 @@ document.getElementById("viewDate").valueAsDate=new Date();
 document.getElementById("fDate").valueAsDate=new Date();
 const nowForList = new Date();
 document.getElementById("listMonth").value = `${nowForList.getFullYear()}-${String(nowForList.getMonth()+1).padStart(2,"0")}`;
+document.getElementById("listMonth").addEventListener("change", function(){
+  var sm = document.getElementById("statsMonth");
+  if(sm) sm.value = this.value;
+  renderWorkItemStats();
+});
 
 times.forEach(t=>{
   ["fStartTime","fEndTime"].forEach(id=>{
@@ -2322,7 +2341,7 @@ function showPage(pageId){
   if(pageId==="schedulePage")document.getElementById("tabSchedule").classList.add("active");
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
-  if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+  if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();var sm=document.getElementById("statsMonth");if(sm&&!sm.value)sm.value=document.getElementById("listMonth").value||"";renderWorkItemStats();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");renderLeaveListLP();}
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
@@ -4207,6 +4226,88 @@ function renderJobList(){
 
   document.getElementById("jobListTable").innerHTML=html;
   // setTimeout(updateTravelTags, 80); // 已停用
+}
+
+function renderWorkItemStats(){
+  const statsMonth = (document.getElementById("statsMonth")||{}).value || "";
+  const wrap = document.getElementById("workItemStatsWrap");
+  const showBtn = document.getElementById("showStatsBtn");
+  if(wrap) wrap.style.display = "";
+  if(showBtn) showBtn.style.display = "none";
+
+  // Filter: valid jobs only, selected month, non-hold
+  const filtered = jobs.filter(j => {
+    if(j.isHold || !j.date) return false;
+    if(!isValidJob(j)) return false;
+    if(statsMonth && String(j.date||"").slice(0,7) !== statsMonth) return false;
+    return true;
+  });
+
+  // Collect all unique work items
+  const allItems = [...new Set(filtered.map(j => String(j.workItem||"未填施工項目").trim()))].sort();
+
+  // Build per-engineer counts
+  const engCols = engineers; // ["林川閔","陳昱存","陳義強","鄧長益"]
+
+  // item -> { engineer -> count }
+  const table = {};
+  filtered.forEach(j => {
+    const item = String(j.workItem||"未填施工項目").trim();
+    const eng = normalizeEngineerName(j.engineer) || j.engineer || "未知";
+    if(!table[item]) table[item] = {};
+    table[item][eng] = (table[item][eng] || 0) + 1;
+  });
+
+  // Totals per engineer
+  const engTotals = {};
+  engCols.forEach(e => {
+    engTotals[e] = filtered.filter(j => normalizeEngineerName(j.engineer) === normalizeEngineerName(e)).length;
+  });
+  const grandTotal = filtered.length;
+
+  if(!grandTotal){
+    document.getElementById("workItemStatsBody").innerHTML =
+      `<div style="color:#888;font-size:13px;padding:8px 0;">${statsMonth?"該月份":"目前"}無有效派工資料。</div>`;
+    return;
+  }
+
+  // Render table
+  let html = `<table style="border-collapse:collapse;min-width:600px;font-size:13px;width:100%">`;
+  // header
+  html += `<tr>`;
+  html += `<th style="background:#2f3542;color:#fff;padding:8px 12px;text-align:left;white-space:nowrap;">施工項目</th>`;
+  engCols.forEach(e => {
+    html += `<th style="background:#2f3542;color:#fff;padding:8px 10px;text-align:center;white-space:nowrap;">${escapeHtml(displayEngineer(e))}&nbsp;${escapeHtml(e)}</th>`;
+  });
+  html += `<th style="background:#1a252f;color:#fff;padding:8px 10px;text-align:center;">合計</th>`;
+  html += `</tr>`;
+
+  // rows
+  allItems.forEach((item, ri) => {
+    const rowBg = ri % 2 === 0 ? "#fff" : "#f8f9fa";
+    const rowTotal = engCols.reduce((s,e) => s + (table[item][normalizeEngineerName(e)] || table[item][e] || 0), 0);
+    html += `<tr style="background:${rowBg}">`;
+    html += `<td style="padding:7px 12px;border-bottom:1px solid #eee;font-weight:bold;">${escapeHtml(item)}</td>`;
+    engCols.forEach(e => {
+      const cnt = table[item][normalizeEngineerName(e)] || table[item][e] || 0;
+      html += `<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;color:${cnt?'#155a8a':'#bbb'};">${cnt || "—"}</td>`;
+    });
+    html += `<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#2f3542;">${rowTotal}</td>`;
+    html += `</tr>`;
+  });
+
+  // total row
+  html += `<tr style="background:#e9f0f7;font-weight:bold;">`;
+  html += `<td style="padding:8px 12px;border-top:2px solid #aaa;">合計</td>`;
+  engCols.forEach(e => {
+    const cnt = engTotals[normalizeEngineerName(e)] || engTotals[e] || 0;
+    html += `<td style="padding:8px 10px;border-top:2px solid #aaa;text-align:center;">${cnt}</td>`;
+  });
+  html += `<td style="padding:8px 10px;border-top:2px solid #aaa;text-align:center;color:#c0392b;">${grandTotal}</td>`;
+  html += `</tr>`;
+  html += `</table>`;
+
+  document.getElementById("workItemStatsBody").innerHTML = html;
 }
 
 function exportCustomers(){
