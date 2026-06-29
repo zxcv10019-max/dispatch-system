@@ -6433,16 +6433,19 @@ var _arrangingIdx = -1;
 window.renderCartridgeTable = function(){
   var t = document.getElementById('cartridgeTable');
   var cnt = document.getElementById('cartridgeCount');
+  var statusEl = document.getElementById('cartridgeStatus');
   if(!t) return;
   if(!cartridgeData.length){
     t.innerHTML='<tr><td colspan="8" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
     if(cnt) cnt.textContent='';
     var sumDiv=document.getElementById('cartridgeSummary'); if(sumDiv) sumDiv.style.display='none';
+    if(statusEl) statusEl.textContent='尚未匯入資料。';
     return;
   }
   var arranged = cartridgeData.filter(function(r){ return r._jobId; }).length;
   var pending = cartridgeData.length - arranged;
   if(cnt) cnt.textContent='';
+  if(statusEl) statusEl.textContent='目前共 '+cartridgeData.length+' 筆換芯資料（'+arranged+' 筆已安排，'+pending+' 筆未安排）。';
   // 更新統計
   var sumDiv=document.getElementById('cartridgeSummary');
   if(sumDiv) sumDiv.style.display='flex';
