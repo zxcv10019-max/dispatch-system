@@ -3286,17 +3286,15 @@ function slotClickNew(event, dateStr, engineer, time){
   // Set engineer
   const engSel = document.getElementById("fEngineer");
   if(engSel){
-    // engineer is the full name like "林川閔"
     for(let i=0;i<engSel.options.length;i++){
       if(engSel.options[i].value === engineer){ engSel.selectedIndex=i; break; }
     }
   }
   showPage("dispatchPage");
-  // Focus on customer code field
   setTimeout(()=>{ const el=document.getElementById("fCustomerCode"); if(el) el.focus(); }, 100);
 }
 
-
+function jobCard(j){
   const address = j.address
     ? `<div class="card-line card-address">地址：<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`
     : "";
@@ -5349,12 +5347,13 @@ function renderCustomerHistory(){
 }
 
 // ===== 覆寫 showAdminPage 加入預設顯示 dashboard =====
-const _origShowAdminPage = showAdminPage;
-showAdminPage = function(){
-  _origShowAdminPage();
-  // 延遲確保 adminContent 已顯示
-  setTimeout(function(){ showAdminSection('dashboard'); }, 30);
-};
+if(typeof showAdminPage === 'function'){
+  const _origShowAdminPage = showAdminPage;
+  showAdminPage = function(){
+    _origShowAdminPage();
+    setTimeout(function(){ if(typeof showAdminSection==='function') showAdminSection('dashboard'); }, 30);
+  };
+}
 </script>
 
 
