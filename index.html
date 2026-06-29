@@ -1873,6 +1873,7 @@ function signOutGoogle(){
 }
 
 const ADMIN_EMAIL = "zxcv10019@gmail.com";
+const ADMIN_EMAILS = ["zxcv10019@gmail.com", "gd044@gungdai.com"];
 let currentRole = "none"; // admin / editor / viewer / none（未授權不可查看）
 let currentEngineer = ""; // 綁定工程師，手機版用來顯示本人今日派工
 let rolesCache = [];
@@ -1881,7 +1882,8 @@ function emailKey(email){
   return String(email||"").trim().toLowerCase().replaceAll(".",",");
 }
 function isAdmin(){
-  return currentUser && String(currentUser.email||"").toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const email = String(currentUser&&currentUser.email||"").toLowerCase();
+  return !!currentUser && ADMIN_EMAILS.some(a=>a.toLowerCase()===email);
 }
 function hasAccess(){
   return currentRole === "admin" || currentRole === "editor" || currentRole === "viewer";
@@ -2197,7 +2199,7 @@ async function saveRole(){
   const role=document.getElementById("roleSelect")?.value||"viewer";
   const engineer=normalizeEngineerName(document.getElementById("roleEngineer")?.value||"");
   if(!email) return alert("請輸入 email");
-  if(email===ADMIN_EMAIL.toLowerCase()) return alert("主帳號固定為 admin，不需要設定");
+  if(ADMIN_EMAILS.some(a=>a.toLowerCase()===email)) return alert("主帳號固定為 admin，不需要設定");
   await rolesColRef().doc(emailKey(email)).set({email, role, engineer, updatedAt:new Date().toISOString(), updatedBy:currentUser.email},{merge:true});
   document.getElementById("roleEmail").value="";
   const engSel=document.getElementById("roleEngineer"); if(engSel) engSel.value="";
@@ -3255,7 +3257,7 @@ function renderSchedule(){
           return s>=0 && idx>=s && idx<=end;
         });
         const holdCls = activeJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')">`;
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -3270,7 +3272,31 @@ function renderSchedule(){
   // setTimeout(updateTravelTags, 80); // 已停用
 }
 
-function jobCard(j){
+function slotClickNew(event, dateStr, engineer, time){
+  // Only trigger when clicking directly on the empty slot (not on a job card or button)
+  if(!canEdit()) return;
+  if(event.target.closest('.job') || event.target.closest('button')) return;
+  // Pre-fill form and navigate to dispatch page
+  document.getElementById("fDate").value = dateStr;
+  document.getElementById("fStartTime").value = time;
+  // Default end time = 1 slot later
+  const idx = times.indexOf(time);
+  const nextTime = (idx >= 0 && idx+1 < times.length) ? times[idx+1] : time;
+  document.getElementById("fEndTime").value = nextTime;
+  // Set engineer
+  const engSel = document.getElementById("fEngineer");
+  if(engSel){
+    // engineer is the full name like "林川閔"
+    for(let i=0;i<engSel.options.length;i++){
+      if(engSel.options[i].value === engineer){ engSel.selectedIndex=i; break; }
+    }
+  }
+  showPage("dispatchPage");
+  // Focus on customer code field
+  setTimeout(()=>{ const el=document.getElementById("fCustomerCode"); if(el) el.focus(); }, 100);
+}
+
+
   const address = j.address
     ? `<div class="card-line card-address">地址：<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`
     : "";
