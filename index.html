@@ -1740,19 +1740,6 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   </div>
   <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
 
-  <!-- 施工項目統計區塊 -->
-  <div id="workItemStatsWrap" style="margin:10px 12px 0;background:#fff;border:1px solid #ddd;border-radius:8px;overflow:hidden;">
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f9fa;border-bottom:1px solid #e0e0e0;flex-wrap:wrap;">
-      <span style="font-weight:bold;font-size:14px;color:#2f3542;">📊 施工項目統計</span>
-      <label style="font-size:13px;color:#555;">月份：</label>
-      <input type="month" id="statsMonth" style="font-size:13px;padding:4px 8px;" onchange="renderWorkItemStats()">
-      <button onclick="(function(){document.getElementById('statsMonth').value=document.getElementById('listMonth').value;renderWorkItemStats();})()" style="font-size:12px;padding:4px 10px;background:#487eb0;">同步明細月份</button>
-      <button onclick="document.getElementById('workItemStatsWrap').style.display='none'" style="font-size:12px;padding:4px 10px;background:#888;margin-left:auto;">收起</button>
-    </div>
-    <div id="workItemStatsBody" style="overflow-x:auto;padding:12px 14px;"></div>
-  </div>
-  <button id="showStatsBtn" onclick="document.getElementById('workItemStatsWrap').style.display='';renderWorkItemStats();" style="display:none;margin:8px 12px 0;font-size:12px;padding:4px 12px;background:#888;">顯示統計</button>
-
   <div class="customer-table"><table id="jobListTable"></table></div>
 </div>
 
@@ -2277,11 +2264,7 @@ document.getElementById("viewDate").valueAsDate=new Date();
 document.getElementById("fDate").valueAsDate=new Date();
 const nowForList = new Date();
 document.getElementById("listMonth").value = `${nowForList.getFullYear()}-${String(nowForList.getMonth()+1).padStart(2,"0")}`;
-document.getElementById("listMonth").addEventListener("change", function(){
-  var sm = document.getElementById("statsMonth");
-  if(sm) sm.value = this.value;
-  renderWorkItemStats();
-});
+
 
 times.forEach(t=>{
   ["fStartTime","fEndTime"].forEach(id=>{
@@ -2341,7 +2324,7 @@ function showPage(pageId){
   if(pageId==="schedulePage")document.getElementById("tabSchedule").classList.add("active");
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
-  if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();var sm=document.getElementById("statsMonth");if(sm&&!sm.value)sm.value=document.getElementById("listMonth").value||"";renderWorkItemStats();}
+  if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");renderLeaveListLP();}
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
@@ -4230,11 +4213,6 @@ function renderJobList(){
 
 function renderWorkItemStats(){
   const statsMonth = (document.getElementById("statsMonth")||{}).value || "";
-  const wrap = document.getElementById("workItemStatsWrap");
-  const showBtn = document.getElementById("showStatsBtn");
-  if(wrap) wrap.style.display = "";
-  if(showBtn) showBtn.style.display = "none";
-
   // Filter: valid jobs only, selected month, non-hold
   const filtered = jobs.filter(j => {
     if(j.isHold || !j.date) return false;
@@ -4814,6 +4792,14 @@ applyRoleUI();
           <h3>✅ 完成率統計</h3>
           <div id="adminCompletionContent"></div>
         </div>
+        <div class="role-panel" style="margin-top:16px;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <h3 style="margin:0;">📊 工程師施工項目統計</h3>
+            <label style="font-size:13px;color:#555;">月份：</label>
+            <input type="month" id="statsMonth" style="font-size:13px;padding:5px 8px;" onchange="renderWorkItemStats()">
+          </div>
+          <div id="workItemStatsBody" style="overflow-x:auto;"></div>
+        </div>
       </div>
 
       <!-- ===== SECTION: leave ===== -->
@@ -5161,7 +5147,7 @@ function showAdminSection(section){
 
   // 觸發對應渲染
   if(section==='map') renderAdminMap();
-  if(section==='completion') renderCompletionStats();
+  if(section==='completion'){ renderCompletionStats(); var sm=document.getElementById('statsMonth'); if(sm&&!sm.value){ var d=new Date(); sm.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); } renderWorkItemStats(); }
   if(section==='leave') renderLeaveList();
   if(section==='customerHistory'){ document.getElementById('customerHistoryResult').innerHTML='<div style="color:#888;font-size:13px">輸入關鍵字後查詢。</div>'; }
   if(section==='logs') renderAdminLogs();
@@ -5617,7 +5603,7 @@ if(typeof showAdminPage === 'function'){
 
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') window.closeReminderModal(); });
   document.addEventListener('DOMContentLoaded',()=>{ setTimeout(function(){ addReminderButtons(); refreshAdminV2(); },300); });
-  setInterval(function(){ const ap=document.getElementById('adminPage'); if(ap&&ap.classList.contains('active')) refreshAdminV2(); addReminderButtons(); },1500);
+  setInterval(function(){ const ap=document.getElementById('adminPage'); if(ap&&ap.classList.contains('active')) refreshAdminV2(); addReminderButtons(); },30000);
 })();
 
 window.openTodayAllRoutes = function(){
