@@ -2318,6 +2318,16 @@ function syncEndTimeByStart(){
 function showPage(pageId){
   document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage");
   document.body.classList.toggle("cartridge-scroll-mode", pageId==="cartridgePage");
+  document.documentElement.classList.toggle("force-cartridge-scroll", pageId==="cartridgePage");
+  document.body.classList.toggle("force-cartridge-scroll", pageId==="cartridgePage");
+  if(pageId==="cartridgePage"){
+    document.documentElement.style.height="auto";
+    document.documentElement.style.overflowY="scroll";
+    document.body.style.height="auto";
+    document.body.style.minHeight="100vh";
+    document.body.style.overflowY="scroll";
+    document.body.style.display="block";
+  };
   document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage");
   document.body.classList.toggle("force-admin-scroll", pageId==="adminPage");
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
@@ -3555,7 +3565,7 @@ function deleteJob(id){
   if(!confirm("確定刪除此筆派工？"))return;
   const j=jobs.find(x=>x.id===id);
   if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer,deletedJob:{...j}});
-  jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();
+  jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();if(typeof syncCartridgeWithJobs==='function')syncCartridgeWithJobs();
 }
 function editJobForm(id,event){
   if(!requireEdit("修改派工")) return;
@@ -6191,17 +6201,33 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
 
 <!-- ===== 換芯名單 ===== -->
 <style>
-#cartridgePage.page.active{
-  display:block !important;
-  flex:none !important;
+/* ===== 換芯名單滑動修正（與後台管理相同手法）===== */
+html.force-cartridge-scroll,
+body.cartridge-scroll-mode,
+body.force-cartridge-scroll {
   height:auto !important;
-  min-height:0 !important;
-  overflow-y:auto !important;
+  min-height:100% !important;
+  overflow-y:scroll !important;
   overflow-x:hidden !important;
-  padding-bottom:80px !important;
+  display:block !important;
+  position:static !important;
+  padding-bottom:120px !important;
+}
+#cartridgePage.page.active {
+  display:block !important;
+  height:auto !important;
+  min-height:calc(100vh - 96px) !important;
+  overflow:visible !important;
+  padding-bottom:140px !important;
+  flex:none !important;
 }
 @media(max-width:900px){
-  #cartridgePage.page.active{ display:block !important; height:auto !important; overflow-y:auto !important; }
+  body.cartridge-scroll-mode {
+    height:auto !important;
+    overflow-y:auto !important;
+    display:block !important;
+  }
+  #cartridgePage.page.active { height:auto !important; overflow:visible !important; }
 }
 /* 安排彈窗 */
 #cartridgeModal{
@@ -6607,7 +6633,25 @@ window.exportCartridgeExcel=function(){
 };
 
 /* ── 清空 ── */
-window.clearCartridgeData=function(){
+/* 同步：如果對應派工被刪除，恢復安排狀態 */
+  window.syncCartridgeWithJobs = function(){
+    if(!cartridgeData.length) return;
+    var allJobs = (typeof jobs!=='undefined' && Array.isArray(jobs)) ? jobs : [];
+    var changed = false;
+    cartridgeData.forEach(function(r){
+      if(r._jobId){
+        var still = allJobs.some(function(j){ return j.id === r._jobId; });
+        if(!still){
+          delete r._jobId;
+          delete r._arranged;
+          changed = true;
+        }
+      }
+    });
+    if(changed){ saveCD(); renderCartridgeTable(); }
+  };
+
+  window.clearCartridgeData=function(){
   if(!confirm('確定清空換芯名單？')) return;
   cartridgeData=[];
   saveCD();
