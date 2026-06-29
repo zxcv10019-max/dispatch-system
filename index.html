@@ -829,6 +829,14 @@ body{
   font-weight:bold;
 }
 
+/* 新增派工表單：正式 / 暫押 狀態切換 */
+.dispatch-status-toggle{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.dispatch-status-toggle label{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border:2px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-weight:bold;font-size:14px;user-select:none}
+.dispatch-status-toggle input{width:auto !important;cursor:pointer;margin:0}
+.dispatch-status-toggle label.active.status-normal-opt{border-color:#2f3542;background:#eef1f5;color:#2f3542}
+.dispatch-status-toggle label.active.status-hold-opt{border-color:#3949ab;background:#e8eaf6;color:#3949ab}
+.hold-date-hint{margin-top:6px;font-size:12px;color:#3949ab;font-weight:bold}
+
 /* Google 登入同步狀態 */
 .header{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .auth-panel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:normal}
@@ -1539,6 +1547,18 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     </div>
 
     <div class="form-grid">
+      <div class="field-full field">
+        <label>派工狀態</label>
+        <div class="dispatch-status-toggle" id="dispatchStatusToggle">
+          <label class="status-opt status-normal-opt active" id="statusNormalLabel">
+            <input type="radio" name="fHoldStatus" id="fStatusNormal" value="normal" checked onchange="onDispatchStatusChange()"> 正式派工
+          </label>
+          <label class="status-opt status-hold-opt" id="statusHoldLabel">
+            <input type="radio" name="fHoldStatus" id="fStatusHold" value="hold" onchange="onDispatchStatusChange()"> 目前暫押派工
+          </label>
+        </div>
+        <div class="hold-date-hint" id="holdDateHint" style="display:none;">⚠️ 暫押派工可以先不填「排工日期」，之後確認日期後再回來補上即可改回正式派工。</div>
+      </div>
       <div class="field">
         <label>工程人員 <span class="required">*</span></label>
         <select id="fEngineer">
@@ -2449,11 +2469,23 @@ function openCustomerFormMap(){
   window.open(mapUrl(address),"_blank");
 }
 
+function onDispatchStatusChange(){
+  const holdEl = document.getElementById("fStatusHold");
+  const isHold = !!(holdEl && holdEl.checked);
+  const nl = document.getElementById("statusNormalLabel");
+  const hl = document.getElementById("statusHoldLabel");
+  if(nl) nl.classList.toggle("active", !isHold);
+  if(hl) hl.classList.toggle("active", isHold);
+  const hint = document.getElementById("holdDateHint");
+  if(hint) hint.style.display = isHold ? "block" : "none";
+}
+
 function getFormJob(){
   const code=document.getElementById("fCustomerCode").value.trim();
   const name=document.getElementById("fCustomerName").value.trim();
   updateCodeName();
   const p=parseTaiwanAddress(document.getElementById("fAddress").value.trim());
+  const isHold = !!(document.getElementById("fStatusHold") && document.getElementById("fStatusHold").checked);
   return {
     id:Date.now(),
     engineer:document.getElementById("fEngineer").value,
@@ -2472,7 +2504,9 @@ function getFormJob(){
     workItem:document.getElementById("fWorkItem").value,
     workContent:document.getElementById("fWorkContent").value.trim(),
     amount:document.getElementById("fAmount").value.trim(),
-    payment:document.getElementById("fPayment").value
+    payment:document.getElementById("fPayment").value,
+    isHold:isHold,
+    holdReason:isHold ? "人工標記為暫押派工" : ""
   };
 }
 
@@ -2555,14 +2589,13 @@ function suggestEngineerByAddress(){
 function addJobFromForm(){
   if(!requireEdit("新增/修改派工")) return;
   const job=getFormJob();
-  if(!job.engineer||!job.date||!job.startTime){alert("請填工程人員、排工日期、排工時間");return}
+  if(!job.engineer||!job.startTime||(!job.isHold&&!job.date)){
+    alert(job.isHold ? "請填工程人員、排工時間" : "請填工程人員、排工日期、排工時間");
+    return;
+  }
   if(!job.customerCode&&!job.customerName){alert("請至少輸入客編或客名");return}
 
   const wasEditing = !!editingJobId;
-  if(wasEditing && job.date){
-    job.isHold=false;
-    job.holdReason="";
-  }
   if(editingJobId){
     const idx=jobs.findIndex(x=>x.id===editingJobId);
     if(idx>=0){
@@ -2600,6 +2633,8 @@ function clearDispatchForm(){
   const etEl = document.getElementById("fEndTime"); if(etEl) etEl.value = "10:30";
   const wiEl = document.getElementById("fWorkItem"); if(wiEl) wiEl.value = "";
   const pmEl = document.getElementById("fPayment"); if(pmEl) pmEl.value = "";
+  const stNormalEl = document.getElementById("fStatusNormal"); if(stNormalEl) stNormalEl.checked = true;
+  onDispatchStatusChange();
   const btn = document.getElementById("saveJobBtn"); if(btn) btn.textContent = "儲存派工";
   const sug = document.getElementById("engineerSuggestion"); if(sug) sug.style.display = "none";
   syncCityChecks();
@@ -3512,6 +3547,10 @@ function editJobForm(id,event){
   document.getElementById("fWorkContent").value=j.workContent||"";
   document.getElementById("fAmount").value=j.amount||"";
   document.getElementById("fPayment").value=j.payment||"";
+  const holdNow = isHoldJob(j);
+  const stNormalEl = document.getElementById("fStatusNormal"); if(stNormalEl) stNormalEl.checked = !holdNow;
+  const stHoldEl = document.getElementById("fStatusHold"); if(stHoldEl) stHoldEl.checked = holdNow;
+  onDispatchStatusChange();
   const btn=document.getElementById("saveJobBtn"); if(btn) btn.textContent="更新派工";
   syncCityChecks();
   renderAvailableSlots();
