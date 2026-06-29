@@ -5215,6 +5215,8 @@ function renderCompletionStats(){
       + '<div class="completion-bar-val">' + cnt + ' 件</div>'
       + '</div>';
   });
+
+  // 施工項目分佈
   const byItem = {};
   monthJobs.forEach(j=>{ const k=j.workItem||'未填'; byItem[k]=(byItem[k]||0)+1; });
   const itemRows = Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>{
@@ -5226,6 +5228,61 @@ function renderCompletionStats(){
       + '</div>';
   }).join('');
   html += '<div style="margin-top:16px;font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:8px">施工項目分佈</div>' + itemRows;
+
+  // ===== 金額統計 =====
+  function parseAmount(v){ const s=String(v||'').replace(/,/g,'').trim(); if(!s) return NaN; const n=Number(s); return isNaN(n)?NaN:n; }
+  function fmtMoney(n){ return n.toLocaleString('zh-TW') + ' 元'; }
+  const jobsWithAmt = monthJobs.filter(j=>!isNaN(parseAmount(j.amount)));
+  const totalAmt = jobsWithAmt.reduce((s,j)=>s+parseAmount(j.amount),0);
+  const paidJobs = jobsWithAmt.filter(j=>String(j.payment||'').trim() && String(j.payment||'').trim()!=='未付');
+  const paidAmt = paidJobs.reduce((s,j)=>s+parseAmount(j.amount),0);
+  const unpaidAmt = totalAmt - paidAmt;
+
+  // 各工程師金額
+  const engAmtRows = engineers.map(e=>{
+    const ejs = monthJobs.filter(j=>normalizeEngineerName(j.engineer)===e);
+    const ea = ejs.filter(j=>!isNaN(parseAmount(j.amount))).reduce((s,j)=>s+parseAmount(j.amount),0);
+    const maxAmt = engineers.reduce((mx,eng)=>{
+      const a=monthJobs.filter(j=>normalizeEngineerName(j.engineer)===eng && !isNaN(parseAmount(j.amount))).reduce((s,j)=>s+parseAmount(j.amount),0);
+      return Math.max(mx,a);
+    },1);
+    const pct=Math.round(ea/maxAmt*100);
+    return '<div class="completion-bar-wrap">'
+      + '<div class="completion-bar-label">' + escapeHtml(displayEngineer(e)) + '</div>'
+      + '<div class="completion-bar-bg"><div class="completion-bar-fill" style="width:' + pct + '%;background:#8e44ad"></div></div>'
+      + '<div class="completion-bar-val" style="min-width:100px">' + (ea>0?fmtMoney(ea):'—') + '</div>'
+      + '</div>';
+  }).join('');
+
+  // 付款方式分佈
+  const byPayment={};
+  jobsWithAmt.forEach(j=>{ const k=String(j.payment||'').trim()||'未填'; byPayment[k]=(byPayment[k]||{cnt:0,amt:0}); byPayment[k].cnt++; byPayment[k].amt+=parseAmount(j.amount); });
+  const payRows = Object.entries(byPayment).sort((a,b)=>b[1].amt-a[1].amt).map(([k,v])=>
+    '<tr><td style="padding:5px 8px">' + escapeHtml(k) + '</td><td style="padding:5px 8px;text-align:right">' + v.cnt + ' 件</td><td style="padding:5px 8px;text-align:right;font-weight:bold">' + fmtMoney(v.amt) + '</td></tr>'
+  ).join('');
+
+  html += '<div style="margin-top:20px;font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:10px">💰 金額統計</div>'
+    + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'
+    + '<div style="background:#f0f8f0;border:1px solid #a5d6a7;border-radius:6px;padding:10px 18px;min-width:130px">'
+    + '<div style="font-size:12px;color:#555;margin-bottom:4px">本月總金額</div>'
+    + '<div style="font-size:18px;font-weight:bold;color:#218c74">' + (totalAmt>0?fmtMoney(totalAmt):'—') + '</div>'
+    + '<div style="font-size:11px;color:#888;margin-top:2px">' + jobsWithAmt.length + ' 件有金額</div></div>'
+    + '<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:10px 18px;min-width:130px">'
+    + '<div style="font-size:12px;color:#555;margin-bottom:4px">已付款</div>'
+    + '<div style="font-size:18px;font-weight:bold;color:#e67e00">' + (paidAmt>0?fmtMoney(paidAmt):'—') + '</div>'
+    + '<div style="font-size:11px;color:#888;margin-top:2px">' + paidJobs.length + ' 件</div></div>'
+    + '<div style="background:#fce4ec;border:1px solid #f48fb1;border-radius:6px;padding:10px 18px;min-width:130px">'
+    + '<div style="font-size:12px;color:#555;margin-bottom:4px">未付款</div>'
+    + '<div style="font-size:18px;font-weight:bold;color:#c0392b">' + (unpaidAmt>0?fmtMoney(unpaidAmt):'—') + '</div>'
+    + '<div style="font-size:11px;color:#888;margin-top:2px">' + (jobsWithAmt.length-paidJobs.length) + ' 件</div></div>'
+    + '</div>'
+    + '<div style="font-size:12px;font-weight:bold;color:#555;margin-bottom:6px">各工程師金額</div>'
+    + engAmtRows
+    + (payRows ? '<div style="font-size:12px;font-weight:bold;color:#555;margin-top:12px;margin-bottom:6px">付款方式分佈</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:#f0e6f6"><th style="padding:5px 8px;text-align:left">付款方式</th><th style="padding:5px 8px;text-align:right">件數</th><th style="padding:5px 8px;text-align:right">金額</th></tr></thead>'
+    + '<tbody>' + payRows + '</tbody></table>' : '');
+
   box.innerHTML = html;
 }
 
@@ -5544,8 +5601,14 @@ if(typeof showAdminPage === 'function'){
 
     const comp=document.getElementById('adminCompletionContent');
     if(comp){
-      const total=todayJobs.length;
-      comp.innerHTML = engs.map(e=>{ const list=todayJobs.filter(j=>normEng(j.engineer)===e); const done=list.filter(j=>Array.isArray(j.statusList)&&j.statusList.includes('已確認')).length; const pct=list.length?Math.round(done/list.length*100):0; return '<div class="completion-bar-wrap"><div class="completion-bar-label">'+esc(displayEng(e))+'</div><div class="completion-bar-bg"><div class="completion-bar-fill" style="width:'+pct+'%"></div></div><div class="completion-bar-val">'+done+'/'+list.length+'</div></div>'; }).join('') + (!total?'<div class="empty">今日尚無派工。</div>':'');
+      // 如果目前正在顯示「完成率」分頁，改呼叫 renderCompletionStats() 以保留施工項目分佈
+      const completionSection=document.getElementById('adminCompletionSection');
+      if(completionSection && completionSection.style.display!=='none'){
+        if(typeof renderCompletionStats==='function') renderCompletionStats();
+      } else {
+        const total=todayJobs.length;
+        comp.innerHTML = engs.map(e=>{ const list=todayJobs.filter(j=>normEng(j.engineer)===e); const done=list.filter(j=>Array.isArray(j.statusList)&&j.statusList.includes('已確認')).length; const pct=list.length?Math.round(done/list.length*100):0; return '<div class="completion-bar-wrap"><div class="completion-bar-label">'+esc(displayEng(e))+'</div><div class="completion-bar-bg"><div class="completion-bar-fill" style="width:'+pct+'%"></div></div><div class="completion-bar-val">'+done+'/'+list.length+'</div></div>'; }).join('') + (!total?'<div class="empty">今日尚無派工。</div>':'');
+      }
     }
 
     if(typeof renderAdminHistory==='function') { try{ renderAdminHistory(); }catch(e){} }
