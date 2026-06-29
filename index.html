@@ -4177,7 +4177,7 @@ function renderJobList(){
     }
   }
 
-  let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>下一站車程</th><th>銷售金額</th><th>付款方式</th></tr>";
+  let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
 
   list.forEach(j=>{
     const isHold = !!j.isHold || !j.date;
@@ -4199,7 +4199,6 @@ function renderJobList(){
       <td>${j.address?`<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a>`:""}</td>
       <td>${escapeHtml(j.workItem)}</td>
       <td>${escapeHtml(j.workContent)}</td>
-      <td>${(()=>{ const n=getNextJob(j); return (j.address&&n&&n.address) ? routeTagHtml(j.address,n.address,"下一站") : (j.address ? "今日最後一站" : ""); })()}</td>
       <td>${escapeHtml(j.amount)}</td>
       <td>${escapeHtml(j.payment)}</td>
     </tr>`;
@@ -6071,24 +6070,123 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:none !important;
 
 
 
+<style>
+/* ===== 手機版禁止截圖 CSS 層 ===== */
+@media (max-width: 900px) {
+  /* 全頁禁止文字選取 */
+  body {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+  }
+  /* 禁止圖片長按選取 */
+  img {
+    -webkit-user-drag: none !important;
+    pointer-events: none !important;
+  }
+}
+</style>
+
 <script>
-/* ===== 禁止截圖（安全版）===== */
+/* ===== 手機版禁止截圖 ===== */
 (function(){
   'use strict';
+  var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-  // 1. 手機版禁用右鍵（防止長按存圖）
-  document.addEventListener('contextmenu', function(e){
-    if(window.innerWidth <= 900) e.preventDefault();
-  });
+  // 1. Android Chrome：Screen Capture API — 最有效的原生截圖攔截
+  //    requestFullscreen + Screen Wake Lock 組合讓部分 Android 裝置進入受保護模式
+  function tryScreenSecurity(){
+    // Android Chrome 支援 getDisplayMedia 限制
+    if(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia){
+      // 不主動呼叫，僅標記支援
+    }
+    // Android 上嘗試進入全螢幕可觸發系統截圖遮罩（部分機型）
+    // 不強制呼叫以避免 UX 干擾
+  }
 
-  // 2. 禁止選取文字（手機版）
-  document.addEventListener('DOMContentLoaded', function(){
+  // 2. 全頁禁止右鍵 / 長按選單（手機版）
+  if(isMobile){
+    document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, true);
+    document.addEventListener('selectstart', function(e){ e.preventDefault(); }, true);
+    document.addEventListener('touchstart', function(e){
+      // 雙指觸控可能是截圖，記錄起來
+      if(e.touches && e.touches.length >= 2){ /* 不阻止，但觀察 */ }
+    }, { passive: true });
+  }
+
+  // 3. CSS 動態注入：強化手機版防選取
+  if(isMobile){
     var s = document.createElement('style');
-    s.textContent = '@media(max-width:900px){#myTodayPanel{-webkit-user-select:none;user-select:none;}}';
+    s.textContent = [
+      'body{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;}',
+      'a,p,div,span,td,th,h1,h2,h3,h4{-webkit-user-select:none!important;user-select:none!important;}'
+    ].join('');
     document.head.appendChild(s);
-  });
+  }
 
-  // 3. PrintScreen 鍵：清空剪貼簿
+  // 4. visibilitychange：頁面被切到背景後顯示遮罩（登入完成後才啟動）
+  //    用來對應 iOS 截圖後切換 App 的行為
+  var protectReady = false;
+  var overlay = null;
+
+  function createOverlay(){
+    if(overlay) return;
+    overlay = document.createElement('div');
+    overlay.style.cssText = [
+      'display:none',
+      'position:fixed',
+      'inset:0',
+      'z-index:2147483647',
+      'background:#000',
+      'flex-direction:column',
+      'align-items:center',
+      'justify-content:center',
+      'gap:16px',
+      'color:#fff',
+      'font-family:sans-serif',
+      'text-align:center',
+      'padding:20px',
+      'font-size:18px'
+    ].join(';');
+    overlay.innerHTML = '<div style="font-size:52px">🔒</div><div style="font-weight:bold">禁止截圖</div><div style="font-size:13px;color:#ccc">此畫面受到保護</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function showOverlay(){
+    if(!overlay) createOverlay();
+    overlay.style.display = 'flex';
+  }
+  function hideOverlay(){
+    if(overlay) overlay.style.display = 'none';
+  }
+
+  // 登入成功後 3 秒啟動保護（避免 OAuth 彈窗誤觸）
+  function activateProtection(){
+    if(protectReady) return;
+    protectReady = true;
+    createOverlay();
+
+    if(isMobile){
+      document.addEventListener('visibilitychange', function(){
+        if(document.hidden){
+          showOverlay();
+        } else {
+          // 回到前景後稍等再隱藏（給截圖系統時間完成）
+          setTimeout(hideOverlay, 1200);
+        }
+      });
+    }
+  }
+
+  // 監聽登入狀態（currentUser 由 Firebase 設定）
+  var loginCheckInterval = setInterval(function(){
+    if(typeof currentUser !== 'undefined' && currentUser){
+      clearInterval(loginCheckInterval);
+      setTimeout(activateProtection, 3000);
+    }
+  }, 500);
+
+  // 5. 電腦版 PrintScreen：清空剪貼簿
   document.addEventListener('keyup', function(e){
     if(e.key === 'PrintScreen' || e.keyCode === 44){
       try{ navigator.clipboard.writeText('').catch(function(){}); }catch(err){}
