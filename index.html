@@ -6309,6 +6309,20 @@ body.cartridge-scroll-mode {
     <span id="cartridgeCount" style="align-self:center;font-size:13px;color:#555;font-weight:bold;margin-left:8px;"></span>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
+  <div id="cartridgeSummary" style="display:none;margin:0 12px 10px;display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <div id="cSumTotal" style="font-size:26px;font-weight:bold;color:#2f3542;">0</div>
+      <div style="font-size:12px;color:#888;margin-top:2px;">📋 預計換芯</div>
+    </div>
+    <div style="background:#fff;border:1px solid #a3d6b0;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <div id="cSumArranged" style="font-size:26px;font-weight:bold;color:#218c74;">0</div>
+      <div style="font-size:12px;color:#888;margin-top:2px;">✅ 已約換芯</div>
+    </div>
+    <div style="background:#fff;border:1px solid #f5a3a3;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <div id="cSumPending" style="font-size:26px;font-weight:bold;color:#b33939;">0</div>
+      <div style="font-size:12px;color:#888;margin-top:2px;">⏳ 未約換芯</div>
+    </div>
+  </div>
   <div style="margin:0 12px 40px;overflow-x:auto;">
     <table id="cartridgeTable" style="border-collapse:collapse;width:100%;min-width:820px;font-size:13px;"></table>
   </div>
@@ -6396,10 +6410,18 @@ window.renderCartridgeTable = function(){
   if(!cartridgeData.length){
     t.innerHTML='<tr><td colspan="8" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
     if(cnt) cnt.textContent='';
+    var sumDiv=document.getElementById('cartridgeSummary'); if(sumDiv) sumDiv.style.display='none';
     return;
   }
   var arranged = cartridgeData.filter(function(r){ return r._jobId; }).length;
-  if(cnt) cnt.textContent='共 '+cartridgeData.length+' 筆　已安排 '+arranged+' 筆';
+  var pending = cartridgeData.length - arranged;
+  if(cnt) cnt.textContent='';
+  // 更新統計
+  var sumDiv=document.getElementById('cartridgeSummary');
+  if(sumDiv) sumDiv.style.display='flex';
+  var el=document.getElementById('cSumTotal'); if(el) el.textContent=cartridgeData.length;
+  el=document.getElementById('cSumArranged'); if(el) el.textContent=arranged;
+  el=document.getElementById('cSumPending'); if(el) el.textContent=pending;
   var html='<thead><tr style="background:#2f3542;color:#fff;">'
     +['客戶編號','客戶全稱','產品編號','品名規格','上次換芯','周期（月）','下次換芯','安排派工'].map(function(h){
       return '<th style="padding:8px 10px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2;">'+h+'</th>';
