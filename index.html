@@ -6335,7 +6335,7 @@ body.cartridge-scroll-mode {
     <select id="cartridgeMonthFilter" onchange="renderCartridgeTable()" style="padding:7px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;min-width:130px;">
       <option value="">全部月份</option>
     </select>
-    <span id="cartridgeCount" style="align-self:center;font-size:13px;color:#555;font-weight:bold;margin-left:8px;"></span>
+    <button onclick="debugCartridgeData()" style="background:#e67e22;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">🔍 除錯</button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
   <div id="cartridgeSummary" style="display:none;margin:0 12px 10px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -7034,6 +7034,23 @@ window.exportCartridgeExcel=function(){
   saveCD();
   renderCartridgeTable();
   document.getElementById('cartridgeStatus').textContent='已清空。';
+};
+
+// 除錯函式
+window.debugCartridgeData = function(){
+  var raw = localStorage.getItem(CARTRIDGE_KEY);
+  if(!raw){ alert('localStorage 無資料'); return; }
+  var data;
+  try{ data = JSON.parse(raw); }catch(e){ alert('JSON parse 失敗: '+e); return; }
+  var first3 = data.slice(0,3);
+  var info = '共 '+data.length+' 筆\n\n前3筆 keys:\n';
+  first3.forEach(function(r,i){
+    info += '\n['+i+'] '+JSON.stringify(Object.keys(r))+'\n';
+    info += '  下次換芯='+r['下次換芯']+'\n';
+    info += '  _nextYear='+r._nextYear+' _nextMonth='+r._nextMonth+'\n';
+    info += '  日期='+r['日期']+' 周期='+r['周期']+'\n';
+  });
+  alert(info);
 };
 
 // 初始化
