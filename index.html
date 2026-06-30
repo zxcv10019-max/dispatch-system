@@ -6862,17 +6862,17 @@ window.saveContactLogEntry = function(){
   var postponeTo = document.getElementById('clPostpone').value; // e.g. "2026年8月"
   if(!date||!method){ alert('請填寫聯絡日期與聯絡方式'); return; }
   if(!contactLogs[_contactLogCustKey]) contactLogs[_contactLogCustKey]=[];
-  contactLogs[_contactLogCustKey].push({date:date,method:method,note:note,postponeTo:postponeTo,ts:Date.now()});
-  saveContactLogs();
 
-  // 若有選延後月份，把該客戶所有資料列的下次換芯移到目標月份
+  var logEntry = {date:date,method:method,note:note,postponeTo:postponeTo,ts:Date.now()};
+
+  // 若有選延後月份，把該客戶所有資料列的下次換芯移到目標月份，並記錄移動前的原始日期供日後還原
   if(postponeTo){
     // 解析 "2026年8月" → year=2026, month=8
     var match = postponeTo.match(/(\d+)年(\d+)月/);
     if(match){
       var tYear = Number(match[1]);
       var tMonth = Number(match[2]);
-      // 找到原始日期（取第一筆）以取得日(day)，保留原日
+      var snapshot = []; // 記錄每筆受影響資料原本的下次換芯狀態
       cartridgeData.forEach(function(r, i){
         var rKey = r.客戶編號 || ('__'+i);
         if(rKey !== _contactLogCustKey) return;
@@ -6882,6 +6882,8 @@ window.saveContactLogEntry = function(){
           var dp = r.下次換芯.replace(/-/g,'/').split('/');
           if(dp.length>=3) origDay = Number(dp[2])||1;
         }
+        // 記錄移動前快照（用於刪除紀錄時還原）
+        snapshot.push({idx:i, prevNext:r.下次換芯, prevYear:r._nextYear, prevMonth:r._nextMonth});
         // 更新下次換芯
         var newNextDate = new Date(tYear, tMonth-1, origDay);
         // 避免溢位（如8/31 → 9/1）
@@ -6894,6 +6896,7 @@ window.saveContactLogEntry = function(){
           + String(r._nextMonth).padStart(2,'0') + '/'
           + String(newNextDate.getDate()).padStart(2,'0');
       });
+      logEntry._snapshot = snapshot; // 存進這筆聯絡紀錄，刪除時可還原
       saveCD();
       if(typeof localDirty!=='undefined') localDirty = true;
       var targetKey = String(tYear) + '/' + String(tMonth).padStart(2,'0');
@@ -6902,6 +6905,9 @@ window.saveContactLogEntry = function(){
     }
   }
 
+  contactLogs[_contactLogCustKey].push(logEntry);
+  saveContactLogs();
+
   document.getElementById('clNote').value='';
   document.getElementById('clPostpone').value='';
   renderContactLogList();
@@ -6909,13 +6915,29 @@ window.saveContactLogEntry = function(){
   showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo ? '，已移至 '+postponeTo : ''));
 };
 window.deleteContactLogEntry = function(idx){
-  if(!confirm('確定刪除此聯絡紀錄？')) return;
+  if(!confirm('確定刪除此聯絡紀錄？\n若此紀錄曾將換芯日期移月，刪除後會還原回原本月份。')) return;
   var list = contactLogs[_contactLogCustKey]||[];
+  var entry = list[idx];
+
+  // 若此紀錄有移月快照，刪除時還原資料
+  if(entry && entry._snapshot && entry._snapshot.length){
+    entry._snapshot.forEach(function(snap){
+      var r = cartridgeData[snap.idx];
+      if(!r) return;
+      // 只有在目前資料仍是「被這筆紀錄移動後的狀態」時才還原，避免覆蓋掉之後又被其他紀錄移動的結果
+      r.下次換芯 = snap.prevNext;
+      r._nextYear = snap.prevYear;
+      r._nextMonth = snap.prevMonth;
+    });
+    saveCD();
+  }
+
   list.splice(idx,1);
   if(!list.length) delete contactLogs[_contactLogCustKey];
   saveContactLogs();
   renderContactLogList();
   renderCartridgeTable();
+  showCartridgeToast(entry && entry._snapshot && entry._snapshot.length ? '✅ 已刪除紀錄，並還原原本月份' : '✅ 已刪除紀錄');
 };
 
 /* ── Toast ── */
