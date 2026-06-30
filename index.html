@@ -6470,6 +6470,13 @@ body.cartridge-scroll-mode {
 var cartridgeData = [];
 var CARTRIDGE_KEY = 'cartridge_list_v1';
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
+// 修復：確保每筆資料都有 _nextYear / _nextMonth（從下次換芯日期還原）
+cartridgeData.forEach(function(r){
+  if(r.下次換芯 && (!r._nextYear || !r._nextMonth)){
+    var dp = r.下次換芯.replace(/-/g,'/').split('/');
+    if(dp.length>=2){ r._nextYear=Number(dp[0]); r._nextMonth=Number(dp[1]); }
+  }
+});
 (function(){
 'use strict';
 // cartridgeData / CARTRIDGE_KEY 使用全域變數
