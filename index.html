@@ -6359,6 +6359,7 @@ body.cartridge-scroll-mode {
       <option value="">全部月份</option>
     </select>
     <button onclick="debugCartridgeData()" style="background:#e67e22;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">🔍 除錯</button>
+    <button onclick="debugCloudCartridge()" style="background:#c0392b;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">☁️ 雲端除錯</button>
     <button onclick="scrollToNoChangeList()" style="background:#7f8c8d;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🚫 不更換名單 <span id="noChangeCountBadge" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
@@ -7294,6 +7295,38 @@ window.debugCartridgeData = function(){
   info += '\n月份分布：\n';
   Object.keys(monthCount).sort().forEach(function(k){ info += k+' : '+monthCount[k]+'筆\n'; });
   alert(info);
+};
+
+// 直接讀雲端文件，確認雲端實際存的是什麼（排除 localStorage 干擾）
+window.debugCloudCartridge = async function(){
+  if(typeof firebaseDb === 'undefined' || !firebaseDb){
+    alert('firebaseDb 尚未初始化，無法讀取雲端資料。');
+    return;
+  }
+  try{
+    var docRef = firebaseDb.collection('sharedDispatch').doc('main');
+    var snap = await docRef.get();
+    if(!snap.exists){
+      alert('雲端文件 sharedDispatch/main 不存在！');
+      return;
+    }
+    var d = snap.data();
+    var cloudCount = Array.isArray(d.cartridgeData) ? d.cartridgeData.length : '（無此欄位或非陣列）';
+    var localCount = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
+    var info = '── 雲端 Firestore 實際資料 ──\n'
+      + '雲端 cartridgeData 筆數：' + cloudCount + '\n'
+      + '雲端 cartridgeDataCount 欄位：' + (d.cartridgeDataCount!==undefined ? d.cartridgeDataCount : '（無）') + '\n'
+      + '雲端最後更新時間：' + (d.updatedAtLocal || '（無）') + '\n'
+      + '雲端最後更新者：' + (d.updatedBy ? JSON.stringify(d.updatedBy) : '（無）') + '\n'
+      + '\n── 本機目前畫面 ──\n'
+      + '本機 cartridgeData 筆數：' + localCount + '\n'
+      + '\nlocalDirty=' + (typeof localDirty!=='undefined'?localDirty:'?') + '\n'
+      + 'savingCloud=' + (typeof savingCloud!=='undefined'?savingCloud:'?') + '\n'
+      + 'importProtectActive=' + (typeof importProtectActive!=='undefined'?importProtectActive:'?');
+    alert(info);
+  }catch(err){
+    alert('讀取雲端失敗：'+err.message+'\n（可能是 Firestore 規則權限問題）');
+  }
 };
 
 // 初始化
