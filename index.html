@@ -6346,6 +6346,7 @@ body.cartridge-scroll-mode {
       <option value="">全部月份</option>
     </select>
     <button onclick="debugCartridgeData()" style="background:#e67e22;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">🔍 除錯</button>
+    <button onclick="toggleNoChangeList()" style="background:#7f8c8d;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🚫 不更換名單 <span id="noChangeCountBadge" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
   <div id="cartridgeSummary" style="display:none;margin:0 12px 10px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -6364,6 +6365,16 @@ body.cartridge-scroll-mode {
   </div>
   <div style="margin:0 12px 40px;overflow-x:auto;">
     <table id="cartridgeTable" style="border-collapse:collapse;width:100%;min-width:820px;font-size:13px;"></table>
+  </div>
+
+  <!-- 不更換名單 -->
+  <div id="noChangeSection" style="display:none;margin:0 12px 40px;">
+    <div style="background:#f4f4f4;border:1px solid #ccc;border-radius:6px;padding:10px 14px;margin-bottom:8px;font-weight:bold;color:#555;font-size:14px;">
+      🚫 不更換名單（客戶已表示本期不更換濾芯，附原定換芯月份）
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="noChangeTable" style="border-collapse:collapse;width:100%;min-width:760px;font-size:13px;"></table>
+    </div>
   </div>
 </div>
 
@@ -6644,7 +6655,8 @@ window.renderCartridgeTable = function(){
     var rows = group.rows;
     var firstRow = rows[0].r;
     var firstIdx = rows[0].i;
-    var bg = firstRow._jobId ? '#f0fff4' : '#fff';
+    var anyArranged = rows.some(function(item){ return item.r._jobId; });
+    var bg = anyArranged ? '#f0fff4' : '#fff';
 
     // 下次換芯：若有多列，顯示所有不同日期
     var nextDates = [];
@@ -6659,16 +6671,31 @@ window.renderCartridgeTable = function(){
     var cycle = firstRow.周期||'';
 
     // 安排按鈕：用第一列的 index
+    var engCodeMap = {'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'};
+    var arrangedRows = rows.filter(function(item){ return item.r._jobId; });
+    var unarrangedRows = rows.filter(function(item){ return !item.r._jobId; });
+
     var actionCell = '';
-    var allArranged = rows.every(function(item){ return item.r._jobId; });
-    if(allArranged){
-      var eng = firstRow._arranged ? firstRow._arranged.engineer : '';
-      var dt  = firstRow._arranged ? firstRow._arranged.date : '';
-      var engCode = eng ? (({'林川閔':'M','陳昱存':'C','陳義強':'Y','鄧長益':'E'})[eng]||eng) : '';
-      actionCell = '<span class="cart-arranged-badge">✅ ' + escapeHtml(dt) + ' ' + escapeHtml(engCode) + '</span>'
-        + ' <button class="cart-jump-btn" onclick="jumpToArrangedJob('+firstIdx+')">跳至派工</button>';
-    } else {
-      actionCell = '<button class="cart-arrange-btn" onclick="openCartridgeModal('+firstIdx+')">安排</button>';
+    if(arrangedRows.length){
+      // 顯示每一筆已安排的日期＋工程代號（去重）
+      var badgeSet = {};
+      arrangedRows.forEach(function(item){
+        var a = item.r._arranged || {};
+        var eng = a.engineer || '';
+        var engCode = eng ? (engCodeMap[eng]||eng) : '';
+        var dt = a.date || '';
+        var k = dt+'|'+engCode;
+        if(!badgeSet[k]){ badgeSet[k] = {dt:dt, engCode:engCode, idx:item.i}; }
+      });
+      Object.keys(badgeSet).forEach(function(k){
+        var b = badgeSet[k];
+        actionCell += '<span class="cart-arranged-badge">✅ ' + escapeHtml(b.dt) + ' ' + escapeHtml(b.engCode) + '</span>'
+          + ' <button class="cart-jump-btn" onclick="jumpToArrangedJob('+b.idx+')">跳至派工</button><br>';
+      });
+    }
+    if(unarrangedRows.length){
+      actionCell += '<button class="cart-arrange-btn" onclick="openCartridgeModal('+unarrangedRows[0].i+')">'
+        + (arrangedRows.length ? '安排其餘項目' : '安排') + '</button>';
     }
 
     // 聯絡紀錄按鈕
@@ -6698,7 +6725,82 @@ window.renderCartridgeTable = function(){
   });
   html+='</tbody>';
   t.innerHTML=html;
+  renderNoChangeList();
 };
+
+/* ── 不更換名單 ── */
+window.toggleNoChangeList = function(){
+  var sec = document.getElementById('noChangeSection');
+  if(!sec) return;
+  var showing = sec.style.display !== 'none';
+  sec.style.display = showing ? 'none' : 'block';
+  if(!showing) renderNoChangeList();
+};
+
+function renderNoChangeList(){
+  var badge = document.getElementById('noChangeCountBadge');
+  var t = document.getElementById('noChangeTable');
+  if(!t) return;
+
+  // 依客戶編號分組，找出所有被標記不更換的資料列
+  var grouped = {};
+  var order = [];
+  cartridgeData.forEach(function(r, i){
+    if(!r._excluded) return;
+    var key = r.客戶編號 || ('__'+i);
+    if(!grouped[key]){
+      var custInfo = (typeof customers!=='undefined' && Array.isArray(customers))
+        ? customers.find(function(c){ return c.customerNo === r.客戶編號; }) : null;
+      grouped[key] = { 客戶編號:r.客戶編號, 客戶全稱:r.客戶全稱, 地址: custInfo?(custInfo.deliveryAddress||''):'', dates:[] };
+      order.push(key);
+    }
+    if(r.下次換芯 && grouped[key].dates.indexOf(r.下次換芯)<0) grouped[key].dates.push(r.下次換芯);
+  });
+
+  if(badge) badge.textContent = order.length;
+
+  if(!order.length){
+    t.innerHTML = '<tr><td style="padding:16px;text-align:center;color:#999;">目前沒有標記不更換的客戶。</td></tr>';
+    return;
+  }
+
+  // 依地址排序，同邏輯
+  order.sort(function(ka,kb){
+    var a=String(grouped[ka].地址||'').trim(), b=String(grouped[kb].地址||'').trim();
+    if(!a&&b) return 1; if(a&&!b) return -1;
+    if(a!==b) return a.localeCompare(b,'zh-Hant');
+    if(typeof compareCustomerCode==='function') return compareCustomerCode(grouped[ka].客戶編號, grouped[kb].客戶編號);
+    return 0;
+  });
+
+  var html = '<thead><tr style="background:#7f8c8d;color:#fff;">'
+    + ['客戶編號','客戶全稱','地址','原定換芯月份','不更換原因 / 備註','操作'].map(function(h){
+        return '<th style="padding:8px 10px;text-align:left;white-space:nowrap;">'+h+'</th>';
+      }).join('') + '</tr></thead><tbody>';
+
+  order.forEach(function(key){
+    var g = grouped[key];
+    var addrCell = g.地址
+      ? '<a href="'+mapUrl(g.地址)+'" target="_blank" style="color:#1565c0;text-decoration:underline;">'+escapeHtml(g.地址)+'</a>'
+      : '<span style="color:#bbb;">未填</span>';
+
+    // 找出最新一筆 __NO_CHANGE__ 紀錄取得備註與日期
+    var logs = contactLogs[key] || [];
+    var noChangeLog = logs.filter(function(l){ return l.postponeTo==='__NO_CHANGE__'; }).slice(-1)[0];
+    var note = noChangeLog ? (noChangeLog.note || '（無備註）') + '　｜　' + escapeHtml(noChangeLog.date||'') : '';
+
+    html += '<tr style="background:#fafafa;border-bottom:1px solid #e5e5e5;">'
+      + '<td style="padding:7px 10px;">'+escapeHtml(g.客戶編號||'')+'</td>'
+      + '<td style="padding:7px 10px;">'+escapeHtml(g.客戶全稱||'')+'</td>'
+      + '<td style="padding:7px 10px;max-width:200px;">'+addrCell+'</td>'
+      + '<td style="padding:7px 10px;text-align:center;white-space:nowrap;font-weight:bold;color:#b33939;">'+g.dates.map(function(d){return escapeHtml(d);}).join('<br>')+'</td>'
+      + '<td style="padding:7px 10px;font-size:12px;color:#555;">'+note+'</td>'
+      + '<td style="padding:7px 10px;"><button onclick="openContactLog(\''+escapeHtml(key)+'\')" style="background:#8e44ad;color:#fff;padding:4px 10px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">📋 查看紀錄</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody>';
+  t.innerHTML = html;
+}
 
 /* ── 開啟彈窗 ── */
 window.openCartridgeModal = function(idx){
