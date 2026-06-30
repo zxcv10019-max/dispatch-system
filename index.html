@@ -2118,6 +2118,14 @@ async function applyRemoteData(data){
   const remoteCustomersCount = remoteCustomers ? remoteCustomers.length : 0;
   const remoteLeaveRecordsCount = remoteLeaveRecords ? remoteLeaveRecords.length : 0;
   const remoteCartridgeCount = remoteCartridgeData ? remoteCartridgeData.length : 0;
+  function countContactLogEntries(obj){
+    if(!obj || typeof obj!=='object') return 0;
+    var n=0;
+    Object.keys(obj).forEach(function(k){ var v=obj[k]; if(Array.isArray(v)) n+=v.length; });
+    return n;
+  }
+  const localContactLogsCount = (typeof contactLogs!=='undefined' && contactLogs) ? countContactLogEntries(contactLogs) : 0;
+  const remoteContactLogsCount = countContactLogEntries(remoteContactLogs);
 
   // 只要本機有尚未確認的變更，且遠端資料比較少，就不覆蓋。
   // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
@@ -2125,7 +2133,8 @@ async function applyRemoteData(data){
     const remoteLooksOlder = (remoteJobs && remoteJobsCount + 3 < localJobsCount) ||
                              (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) ||
                              (remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) ||
-                             (remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount);
+                             (remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount) ||
+                             (remoteContactLogs && remoteContactLogsCount < localContactLogsCount);
     if(remoteLooksOlder){
       setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
       return;
@@ -7127,6 +7136,7 @@ window.saveContactLogEntry = function(){
 
   contactLogs[_contactLogCustKey].push(logEntry);
   saveContactLogs();
+  if(typeof localDirty!=='undefined') localDirty = true;
 
   renderCartridgeTable();
   showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')));
@@ -7166,6 +7176,7 @@ window.deleteContactLogEntry = function(idx){
   list.splice(idx,1);
   if(!list.length) delete contactLogs[_contactLogCustKey];
   saveContactLogs();
+  if(typeof localDirty!=='undefined') localDirty = true;
   renderContactLogList();
   renderCartridgeTable();
   var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
