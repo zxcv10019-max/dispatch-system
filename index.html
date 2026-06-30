@@ -6562,15 +6562,14 @@ window.renderCartridgeTable = function(){
     grouped[key].rows.push({r:r, i:i});
   });
 
-  var totalShown = groupOrder.length;
-  var arranged = 0;
-  groupOrder.forEach(function(k){
-    grouped[k].rows.forEach(function(item){ if(item.r._jobId) arranged++; });
-  });
-  var pending = cartridgeData.filter(function(r){
-    if(!monthFilter) return !r._jobId;
-    var rKey = r._nextYear + '/' + String(r._nextMonth||0).padStart(2,'0');
-    return rKey === monthFilter && !r._jobId;
+  var totalShown = groupOrder.length; // 當月不重複客編數
+  // 已約：當月有 _jobId 的不重複客編數
+  var arranged = groupOrder.filter(function(k){
+    return grouped[k].rows.some(function(item){ return !!item.r._jobId; });
+  }).length;
+  // 未約：當月沒有任何 _jobId 的不重複客編數
+  var pending = groupOrder.filter(function(k){
+    return grouped[k].rows.every(function(item){ return !item.r._jobId; });
   }).length;
 
   if(cnt) cnt.textContent='';
