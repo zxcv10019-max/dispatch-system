@@ -2098,6 +2098,7 @@ async function applyRemoteData(data){
   if(remoteLeaveRecords) leaveRecords = normalizeLeaveRecords(remoteLeaveRecords);
   if(remoteCartridgeData){
     cartridgeData = remoteCartridgeData;
+    if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
     try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
   }
   // 快取到 localStorage（可能因空間不足而略過）
@@ -6470,29 +6471,32 @@ body.cartridge-scroll-mode {
 var cartridgeData = [];
 var CARTRIDGE_KEY = 'cartridge_list_v1';
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
-// 無條件從日期資料重新計算 _nextYear / _nextMonth，避免重整後遺失
-cartridgeData.forEach(function(r){
-  // 優先從下次換芯字串解析
-  if(r.下次換芯){
-    var dp = r.下次換芯.replace(/-/g,'/').split('/');
-    if(dp.length>=2 && Number(dp[0])>2000){
-      r._nextYear = Number(dp[0]);
-      r._nextMonth = Number(dp[1]);
-      return;
+// 無條件從日期資料重新計算 _nextYear / _nextMonth，避免遺失（全域可重複呼叫）
+window.repairCartridgeNextDates = function(){
+  cartridgeData.forEach(function(r){
+    // 優先從下次換芯字串解析
+    if(r.下次換芯){
+      var dp = r.下次換芯.replace(/-/g,'/').split('/');
+      if(dp.length>=2 && Number(dp[0])>2000){
+        r._nextYear = Number(dp[0]);
+        r._nextMonth = Number(dp[1]);
+        return;
+      }
     }
-  }
-  // 若沒有下次換芯，從上次日期＋周期重算
-  if(r.日期 && r.周期){
-    var bp = (r.日期+'').replace(/-/g,'/').split('/');
-    if(bp.length>=3){
-      var base = new Date(Number(bp[0]), Number(bp[1])-1, Number(bp[2]));
-      base.setMonth(base.getMonth() + Number(r.周期));
-      r._nextYear = base.getFullYear();
-      r._nextMonth = base.getMonth()+1;
-      r.下次換芯 = r._nextYear+'/'+String(r._nextMonth).padStart(2,'0')+'/'+String(base.getDate()).padStart(2,'0');
+    // 若沒有下次換芯，從上次日期＋周期重算
+    if(r.日期 && r.周期){
+      var bp = (r.日期+'').replace(/-/g,'/').split('/');
+      if(bp.length>=3){
+        var base = new Date(Number(bp[0]), Number(bp[1])-1, Number(bp[2]));
+        base.setMonth(base.getMonth() + Number(r.周期));
+        r._nextYear = base.getFullYear();
+        r._nextMonth = base.getMonth()+1;
+        r.下次換芯 = r._nextYear+'/'+String(r._nextMonth).padStart(2,'0')+'/'+String(base.getDate()).padStart(2,'0');
+      }
     }
-  }
-});
+  });
+};
+repairCartridgeNextDates();
 (function(){
 'use strict';
 // cartridgeData / CARTRIDGE_KEY 使用全域變數
@@ -6550,6 +6554,7 @@ function saveContactLogs(){ try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.str
 
 /* ── 表格渲染 ── */
 window.renderCartridgeTable = function(){
+  if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
   var t = document.getElementById('cartridgeTable');
   var cnt = document.getElementById('cartridgeCount');
   var statusEl = document.getElementById('cartridgeStatus');
