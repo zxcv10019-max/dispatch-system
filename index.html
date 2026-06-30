@@ -1807,6 +1807,7 @@ const GOOGLE_MAPS_API_KEY = firebaseConfig.apiKey;
 let firebaseApp=null, firebaseAuth=null, firebaseDb=null;
 let currentUser=null;
 let cloudUnsubscribe=null;
+let cloudFallbackPollTimer=null;
 let isApplyingRemote=false;
 let cloudSaveTimer=null;
 let ignoreRemoteUntil=0; // 匯入後短時間內避免雲端舊資料覆蓋本機新匯入資料
@@ -2149,9 +2150,14 @@ async function applyRemoteData(data){
   if(remoteCustomers){ customers = remoteCustomers; sortCustomersByCode(); }
   if(remoteLeaveRecords) leaveRecords = normalizeLeaveRecords(remoteLeaveRecords);
   if(remoteCartridgeData){
+    const prevCount = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
     cartridgeData = remoteCartridgeData;
     if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
     try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
+    // 給個明顯提示，方便確認即時同步真的有作用（筆數有變才提示，避免雜訊太多）
+    if(prevCount !== cartridgeData.length && typeof showCartridgeToast==='function'){
+      showCartridgeToast('🔄 換芯資料已自動更新（'+prevCount+' → '+cartridgeData.length+' 筆）');
+    }
   }
   if(remoteContactLogs && typeof contactLogs!=='undefined'){
     contactLogs = remoteContactLogs;
@@ -2215,10 +2221,21 @@ function startCloudSync(){
     const isPerm = err && (err.code === "permission-denied" || /permission/i.test(err.message||""));
     setSyncStatus(isPerm ? `雲端讀取被拒絕（${currentUser.email}）：Firestore 規則未允許此帳號讀取，請聯絡管理員` : "雲端讀取失敗，請檢查 Firestore 規則", "err");
   });
+
+  // 安全網：每 20 秒額外主動拉一次雲端資料，避免極少數情況下 onSnapshot 連線中斷卻沒有報錯
+  if(typeof cloudFallbackPollTimer !== 'undefined' && cloudFallbackPollTimer) clearInterval(cloudFallbackPollTimer);
+  cloudFallbackPollTimer = setInterval(async function(){
+    if(!currentUser || !firebaseDb || savingCloud || isApplyingRemote) return;
+    try{
+      const snap = await ref.get();
+      if(snap.exists) await applyRemoteData(snap.data() || {});
+    }catch(e){ /* 安靜失敗，不打擾使用者，onSnapshot 仍是主要機制 */ }
+  }, 20000);
 }
 
 function stopCloudSync(){
   if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
+  if(cloudFallbackPollTimer){clearInterval(cloudFallbackPollTimer);cloudFallbackPollTimer=null;}
   currentUser=null;
   currentRole="none";
   currentEngineer="";
