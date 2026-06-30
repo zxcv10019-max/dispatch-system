@@ -2003,6 +2003,7 @@ async function saveCloudNow(){
       leaveRecordsCount:(leaveRecords||[]).length,
       cartridgeData:Array.isArray(cartridgeData) ? cartridgeData : [],
       cartridgeDataCount:(cartridgeData||[]).length,
+      contactLogs:(typeof contactLogs!=='undefined' && contactLogs) ? contactLogs : {},
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
@@ -2060,6 +2061,7 @@ async function applyRemoteData(data){
   let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
   let remoteLeaveRecords = Array.isArray(data.leaveRecords) ? data.leaveRecords : null;
   let remoteCartridgeData = Array.isArray(data.cartridgeData) ? data.cartridgeData : null;
+  let remoteContactLogs = (data.contactLogs && typeof data.contactLogs==='object') ? data.contactLogs : null;
   if(data.chunked){
     const loaded = await loadCloudChunks(data);
     remoteJobs = loaded.jobs;
@@ -2109,6 +2111,10 @@ async function applyRemoteData(data){
     cartridgeData = remoteCartridgeData;
     if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
     try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
+  }
+  if(remoteContactLogs && typeof contactLogs!=='undefined'){
+    contactLogs = remoteContactLogs;
+    try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
   }
   // 快取到 localStorage（可能因空間不足而略過）
   try{ localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || [])); }catch(e){ try{localStorage.removeItem(JOBS_KEY);}catch(_){} }
@@ -6486,6 +6492,10 @@ body.cartridge-scroll-mode {
           <option value="">（其他）</option>
         </select>
       </div>
+      <div class="cfield">
+        <label>施工內容</label>
+        <textarea id="cWorkContent" placeholder="（選填，可填寫補充說明）" style="width:100%;padding:8px;border:1px solid #aaa;border-radius:4px;font-size:14px;min-height:60px;resize:vertical;"></textarea>
+      </div>
     </div>
     <div class="cfoot">
       <button onclick="closeCartridgeModal()" style="background:#888;color:#fff;border:none;cursor:pointer;">取消</button>
@@ -6529,7 +6539,10 @@ repairCartridgeNextDates();
 'use strict';
 // cartridgeData / CARTRIDGE_KEY 使用全域變數
 
-function saveCD(){ try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){} }
+function saveCD(){
+  try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData)); }catch(e){}
+  if(typeof queueCloudSave==='function') queueCloudSave();
+}
 
 // 填入時間選項
 var timeSel = ['cStartTime','cEndTime'];
@@ -6578,7 +6591,10 @@ function updateCartridgeMonthOptions(){
 var contactLogs = {};
 var CONTACT_LOGS_KEY = 'cartridge_contact_logs_v1';
 try{ contactLogs = JSON.parse(localStorage.getItem(CONTACT_LOGS_KEY)||'{}'); }catch(e){ contactLogs={}; }
-function saveContactLogs(){ try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){} }
+function saveContactLogs(){
+  try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+  if(typeof queueCloudSave==='function') queueCloudSave();
+}
 
 /* ── 表格渲染 ── */
 window.renderCartridgeTable = function(){
@@ -6817,6 +6833,7 @@ window.openCartridgeModal = function(idx){
   document.getElementById('cStartTime').value='09:30';
   document.getElementById('cEndTime').value='10:30';
   document.getElementById('cWorkItem').value='更換GD濾芯';
+  document.getElementById('cWorkContent').value='';
   document.getElementById('cartridgeModal').classList.add('open');
 };
 
@@ -6840,6 +6857,7 @@ window.confirmCartridgeArrange = function(){
   var startT   = document.getElementById('cStartTime').value;
   var endT     = document.getElementById('cEndTime').value;
   var workItem = document.getElementById('cWorkItem').value;
+  var workContent = document.getElementById('cWorkContent').value.trim();
   if(!engineer||!date||!startT){ alert('請填寫工程人員、排工日期、排工時間'); return; }
 
   // 找客戶資料補電話地址
@@ -6862,7 +6880,7 @@ window.confirmCartridgeArrange = function(){
     city: p.city||'', district: p.district||'',
     address: custAddr,
     workItem: workItem||'更換GD濾芯',
-    workContent: (r.品名規格||''),
+    workContent: workContent,
     orderNo:'', amount:'', payment:'', isHold:false,
     _fromCartridge: true
   };
@@ -6872,7 +6890,7 @@ window.confirmCartridgeArrange = function(){
 
   // 標記該換芯列
   r._jobId = newJob.id;
-  r._arranged = { engineer: engineer, date: date, startTime: startT, endTime: endT, workItem: workItem };
+  r._arranged = { engineer: engineer, date: date, startTime: startT, endTime: endT, workItem: workItem, workContent: workContent };
   saveCD();
   renderCartridgeTable();
   closeCartridgeModal();
