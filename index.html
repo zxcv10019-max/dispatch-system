@@ -7047,14 +7047,18 @@ window.debugCartridgeData = function(){
   if(!raw){ alert('localStorage 無資料'); return; }
   var data;
   try{ data = JSON.parse(raw); }catch(e){ alert('JSON parse 失敗: '+e); return; }
-  var first3 = data.slice(0,3);
-  var info = '共 '+data.length+' 筆\n\n前3筆 keys:\n';
-  first3.forEach(function(r,i){
-    info += '\n['+i+'] '+JSON.stringify(Object.keys(r))+'\n';
-    info += '  下次換芯='+r['下次換芯']+'\n';
-    info += '  _nextYear='+r._nextYear+' _nextMonth='+r._nextMonth+'\n';
-    info += '  日期='+r['日期']+' 周期='+r['周期']+'\n';
+  var info = '共 '+data.length+' 筆\n\n前15筆 日期→下次換芯：\n';
+  data.slice(0,15).forEach(function(r,i){
+    info += '['+i+'] 日期='+r['日期']+' 周期='+r['周期']+' → 下次='+r['下次換芯']+' (年'+r._nextYear+'月'+r._nextMonth+')\n';
   });
+  // 統計所有不同月份出現次數
+  var monthCount = {};
+  data.forEach(function(r){
+    var k = r._nextYear+'/'+r._nextMonth;
+    monthCount[k] = (monthCount[k]||0)+1;
+  });
+  info += '\n月份分布：\n';
+  Object.keys(monthCount).sort().forEach(function(k){ info += k+' : '+monthCount[k]+'筆\n'; });
   alert(info);
 };
 
