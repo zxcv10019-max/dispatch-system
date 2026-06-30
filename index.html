@@ -1957,6 +1957,21 @@ function chunkArray(arr, size){
   return out;
 }
 
+// Firestore 不接受欄位值為 undefined，遞迴清除，避免整批寫入失敗
+function stripUndefinedDeep(value){
+  if(Array.isArray(value)) return value.map(stripUndefinedDeep);
+  if(value && typeof value === 'object' && !(value instanceof Date)){
+    const out = {};
+    Object.keys(value).forEach(k=>{
+      const v = value[k];
+      if(v === undefined) return; // 直接略過該欄位
+      out[k] = stripUndefinedDeep(v);
+    });
+    return out;
+  }
+  return value;
+}
+
 async function saveCloudNow(){
   if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
   if(!hasAccess()){
@@ -1991,9 +2006,12 @@ async function saveCloudNow(){
     }
     const jobChunks = chunkArray(jobs || [], 120);
     const customerChunks = chunkArray(customers || [], 250);
-    const cartridgeChunks = chunkArray(cartridgeData || [], 300);
+    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
+    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
     // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
-    const contactLogEntries = (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : [];
+    const contactLogEntries = stripUndefinedDeep(
+      (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : []
+    );
     const contactLogChunks = chunkArray(contactLogEntries, 150);
 
     jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
@@ -2026,7 +2044,7 @@ async function saveCloudNow(){
   }catch(err){
     savingCloud = false;
     console.error("Firestore 同步失敗", err);
-    setSyncStatus("同步失敗，資料已保留在目前畫面，請檢查 Firestore 規則/權限", "err");
+    setSyncStatus("同步失敗："+(err && err.message ? err.message : String(err)), "err");
     return false;
   }
 }
@@ -7038,11 +7056,12 @@ window.saveContactLogEntry = function(){
 
   if(postponeTo === '__NO_CHANGE__'){
     // 客戶不更換：將該客戶所有資料列標記為排除（從換芯名單隱藏），記錄快照供刪除紀錄時還原
+    // 用「客戶編號+產品編號」當穩定比對鍵，避免陣列 index 因重新排序/同步而失效
     var exSnapshot = [];
     cartridgeData.forEach(function(r, i){
       var rKey = r.客戶編號 || ('__'+i);
       if(rKey !== _contactLogCustKey) return;
-      exSnapshot.push({idx:i, prevExcluded: !!r._excluded});
+      exSnapshot.push({custKey:rKey, prodNo:r.產品編號||'', prevExcluded: !!r._excluded});
       r._excluded = true;
     });
     logEntry._exSnapshot = exSnapshot;
@@ -7055,7 +7074,7 @@ window.saveContactLogEntry = function(){
     if(match){
       var tYear = Number(match[1]);
       var tMonth = Number(match[2]);
-      var snapshot = []; // 記錄每筆受影響資料原本的下次換芯狀態
+      var snapshot = []; // 記錄每筆受影響資料原本的下次換芯狀態（用穩定鍵比對，不依賴陣列 index）
       cartridgeData.forEach(function(r, i){
         var rKey = r.客戶編號 || ('__'+i);
         if(rKey !== _contactLogCustKey) return;
@@ -7066,7 +7085,7 @@ window.saveContactLogEntry = function(){
           if(dp.length>=3) origDay = Number(dp[2])||1;
         }
         // 記錄移動前快照（用於刪除紀錄時還原）
-        snapshot.push({idx:i, prevNext:r.下次換芯, prevYear:r._nextYear, prevMonth:r._nextMonth});
+        snapshot.push({custKey:rKey, prodNo:r.產品編號||'', prevNext:r.下次換芯, prevYear:r._nextYear, prevMonth:r._nextMonth});
         // 更新下次換芯
         var newNextDate = new Date(tYear, tMonth-1, origDay);
         // 避免溢位（如8/31 → 9/1）
@@ -7100,12 +7119,14 @@ window.deleteContactLogEntry = function(idx){
   var list = contactLogs[_contactLogCustKey]||[];
   var entry = list[idx];
 
-  // 若此紀錄有移月快照，刪除時還原資料
+  // 若此紀錄有移月快照，刪除時還原資料（用客戶編號+產品編號比對，避免陣列重新排序後 index 失效）
   if(entry && entry._snapshot && entry._snapshot.length){
     entry._snapshot.forEach(function(snap){
-      var r = cartridgeData[snap.idx];
+      var r = cartridgeData.find(function(row){
+        var rKey = row.客戶編號 || '';
+        return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+      });
       if(!r) return;
-      // 只有在目前資料仍是「被這筆紀錄移動後的狀態」時才還原，避免覆蓋掉之後又被其他紀錄移動的結果
       r.下次換芯 = snap.prevNext;
       r._nextYear = snap.prevYear;
       r._nextMonth = snap.prevMonth;
@@ -7114,7 +7135,10 @@ window.deleteContactLogEntry = function(idx){
   }
   if(entry && entry._exSnapshot && entry._exSnapshot.length){
     entry._exSnapshot.forEach(function(snap){
-      var r = cartridgeData[snap.idx];
+      var r = cartridgeData.find(function(row){
+        var rKey = row.客戶編號 || '';
+        return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+      });
       if(!r) return;
       if(snap.prevExcluded) r._excluded = true; else delete r._excluded;
     });
