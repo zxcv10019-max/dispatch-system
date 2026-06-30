@@ -6501,6 +6501,9 @@ function updateCartridgeMonthOptions(){
     months[key] = (r._nextYear||'?') + '年' + (r._nextMonth||'?') + '月';
   });
   var cur = sel.value;
+  // 若尚未選過，預設當月
+  var now = new Date();
+  var defaultKey = now.getFullYear() + '/' + String(now.getMonth()+1).padStart(2,'0');
   while(sel.options.length > 1) sel.remove(1);
   Object.keys(months).sort().forEach(function(k){
     var op = document.createElement('option');
@@ -6508,7 +6511,12 @@ function updateCartridgeMonthOptions(){
     op.textContent = months[k];
     sel.appendChild(op);
   });
-  if(cur && Array.from(sel.options).some(function(o){ return o.value===cur; })) sel.value = cur;
+  // 優先恢復使用者選過的值；若是初始狀態（空）則選當月
+  if(cur && Array.from(sel.options).some(function(o){ return o.value===cur; })){
+    sel.value = cur;
+  } else if(!cur && Array.from(sel.options).some(function(o){ return o.value===defaultKey; })){
+    sel.value = defaultKey;
+  }
 }
 
 /* ── 聯絡紀錄資料 ── */
@@ -6815,16 +6823,54 @@ window.saveContactLogEntry = function(){
   var date = document.getElementById('clDate').value;
   var method = document.getElementById('clMethod').value;
   var note = document.getElementById('clNote').value.trim();
-  var postponeTo = document.getElementById('clPostpone').value;
+  var postponeTo = document.getElementById('clPostpone').value; // e.g. "2026年8月"
   if(!date||!method){ alert('請填寫聯絡日期與聯絡方式'); return; }
   if(!contactLogs[_contactLogCustKey]) contactLogs[_contactLogCustKey]=[];
   contactLogs[_contactLogCustKey].push({date:date,method:method,note:note,postponeTo:postponeTo,ts:Date.now()});
   saveContactLogs();
+
+  // 若有選延後月份，把該客戶所有資料列的下次換芯移到目標月份
+  if(postponeTo){
+    // 解析 "2026年8月" → year=2026, month=8
+    var match = postponeTo.match(/(\d+)年(\d+)月/);
+    if(match){
+      var tYear = Number(match[1]);
+      var tMonth = Number(match[2]);
+      // 找到原始日期（取第一筆）以取得日(day)，保留原日
+      cartridgeData.forEach(function(r, i){
+        var rKey = r.客戶編號 || ('__'+i);
+        if(rKey !== _contactLogCustKey) return;
+        // 取得原本下次換芯的日
+        var origDay = 1;
+        if(r.下次換芯){
+          var dp = r.下次換芯.replace(/-/g,'/').split('/');
+          if(dp.length>=3) origDay = Number(dp[2])||1;
+        }
+        // 更新下次換芯
+        var newNextDate = new Date(tYear, tMonth-1, origDay);
+        // 避免溢位（如8/31 → 9/1）
+        if(newNextDate.getMonth() !== tMonth-1){
+          newNextDate = new Date(tYear, tMonth, 0); // 月底
+        }
+        r._nextYear = newNextDate.getFullYear();
+        r._nextMonth = newNextDate.getMonth()+1;
+        r.下次換芯 = r._nextYear + '/'
+          + String(r._nextMonth).padStart(2,'0') + '/'
+          + String(newNextDate.getDate()).padStart(2,'0');
+      });
+      saveCD();
+      // 切換月份篩選到目標月份
+      var targetKey = String(tYear) + '/' + String(tMonth).padStart(2,'0');
+      var sel = document.getElementById('cartridgeMonthFilter');
+      if(sel) sel.value = targetKey;
+    }
+  }
+
   document.getElementById('clNote').value='';
   document.getElementById('clPostpone').value='';
   renderContactLogList();
   renderCartridgeTable();
-  showCartridgeToast('✅ 聯絡紀錄已儲存');
+  showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo ? '，已移至 '+postponeTo : ''));
 };
 window.deleteContactLogEntry = function(idx){
   if(!confirm('確定刪除此聯絡紀錄？')) return;
