@@ -6604,8 +6604,13 @@ window.renderCartridgeTable = function(){
     grouped[key].rows.push({r:r, i:i});
   });
 
-  // 依客戶編號 A-Z 排序
+  // 依地址 A-Z 排序（無地址的排在最後，地址相同則依客戶編號排序）
   groupOrder.sort(function(ka,kb){
+    var addrA = String(grouped[ka].地址||'').trim();
+    var addrB = String(grouped[kb].地址||'').trim();
+    if(!addrA && addrB) return 1;
+    if(addrA && !addrB) return -1;
+    if(addrA !== addrB) return addrA.localeCompare(addrB, 'zh-Hant');
     if(typeof compareCustomerCode==='function') return compareCustomerCode(grouped[ka].客戶編號, grouped[kb].客戶編號);
     return String(grouped[ka].客戶編號||'').localeCompare(String(grouped[kb].客戶編號||''));
   });
@@ -7059,11 +7064,17 @@ window.importCartridgeExcel = function(event){
           _nextYear:nextDate.getFullYear(),_nextMonth:nextDate.getMonth()+1});
       }
       if(!result.length){ alert('沒有找到有效資料（需有周期欄位且有值）。'); event.target.value=''; return; }
+      if(!confirm('重新匯入將清空目前所有換芯資料與聯絡紀錄（含移月、不更換標記），確定要繼續嗎？')){
+        event.target.value='';
+        return;
+      }
       cartridgeData=result;
+      contactLogs={};
+      saveContactLogs();
       if(typeof localDirty!=='undefined') localDirty = true;
       saveCD();
       renderCartridgeTable();
-      document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料。來源：'+file.name;
+      document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料（已清空舊聯絡紀錄）。來源：'+file.name;
     }catch(err){ alert('匯入失敗：'+err.message); }
     event.target.value='';
   };
@@ -7103,8 +7114,11 @@ window.exportCartridgeExcel=function(){
   };
 
   window.clearCartridgeData=function(){
-  if(!confirm('確定清空換芯名單？')) return;
+  if(!confirm('確定清空換芯名單？這也會一併清空所有聯絡紀錄。')) return;
   cartridgeData=[];
+  contactLogs={};
+  saveContactLogs();
+  if(typeof localDirty!=='undefined') localDirty = true;
   saveCD();
   renderCartridgeTable();
   document.getElementById('cartridgeStatus').textContent='已清空。';
