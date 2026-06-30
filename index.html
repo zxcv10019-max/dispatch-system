@@ -6893,6 +6893,7 @@ window.saveContactLogEntry = function(){
         r.下次換芯 = r._nextYear + '/'
           + String(r._nextMonth).padStart(2,'0') + '/'
           + String(newNextDate.getDate()).padStart(2,'0');
+      });
       saveCD();
       if(typeof localDirty!=='undefined') localDirty = true;
       var targetKey = String(tYear) + '/' + String(tMonth).padStart(2,'0');
