@@ -6412,9 +6412,10 @@ body.cartridge-scroll-mode {
         <textarea id="clNote" placeholder="聯絡說明、客戶回應..."></textarea>
       </div>
       <div class="cfield">
-        <label>本月不希望服務，移至（選擇月份）</label>
+        <label>處理方式</label>
         <select id="clPostpone">
           <option value="">— 不延後 —</option>
+          <option value="__NO_CHANGE__">🚫 客戶不更換（從換芯名單移除）</option>
         </select>
       </div>
     </div>
@@ -6586,6 +6587,7 @@ window.renderCartridgeTable = function(){
   var grouped = {}; // key = 客戶編號
   var groupOrder = [];
   cartridgeData.forEach(function(r, i){
+    if(r._excluded) return; // 客戶已標記不更換，從名單隱藏
     var key = r.客戶編號 || ('__'+i);
     // 月份篩選
     if(monthFilter){
@@ -6593,10 +6595,19 @@ window.renderCartridgeTable = function(){
       if(rKey !== monthFilter) return;
     }
     if(!grouped[key]){
-      grouped[key] = { rows: [], 客戶編號: r.客戶編號, 客戶全稱: r.客戶全稱, _firstIdx: i };
+      var custInfo = (typeof customers!=='undefined' && Array.isArray(customers))
+        ? customers.find(function(c){ return c.customerNo === r.客戶編號; }) : null;
+      grouped[key] = { rows: [], 客戶編號: r.客戶編號, 客戶全稱: r.客戶全稱,
+        地址: custInfo ? (custInfo.deliveryAddress||'') : '', _firstIdx: i };
       groupOrder.push(key);
     }
     grouped[key].rows.push({r:r, i:i});
+  });
+
+  // 依客戶編號 A-Z 排序
+  groupOrder.sort(function(ka,kb){
+    if(typeof compareCustomerCode==='function') return compareCustomerCode(grouped[ka].客戶編號, grouped[kb].客戶編號);
+    return String(grouped[ka].客戶編號||'').localeCompare(String(grouped[kb].客戶編號||''));
   });
 
   var totalShown = groupOrder.length; // 當月不重複客編數
@@ -6619,7 +6630,7 @@ window.renderCartridgeTable = function(){
   el=document.getElementById('cSumPending'); if(el) el.textContent=pending;
 
   var html='<thead><tr>'
-    +['客戶編號','客戶全稱','上次換芯','周期（月）','下次換芯','聯絡紀錄','安排派工'].map(function(h){
+    +['客戶編號','客戶全稱','地址','上次換芯','周期（月）','下次換芯','聯絡紀錄','安排派工'].map(function(h){
       return '<th style="padding:8px 10px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2;">'+h+'</th>';
     }).join('')+'</tr></thead><tbody>';
 
@@ -6665,9 +6676,14 @@ window.renderCartridgeTable = function(){
 
     var contactCell = '<button onclick="openContactLog(\''+escapeHtml(custKey)+'\')" style="background:#8e44ad;color:#fff;padding:4px 10px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">📋 聯絡紀錄'+logBadge+'</button>'+postponeInfo;
 
+    var addrCell = group.地址
+      ? '<a href="'+mapUrl(group.地址)+'" target="_blank" style="color:#1565c0;text-decoration:underline;">'+escapeHtml(group.地址)+'</a>'
+      : '<span style="color:#bbb;">未填</span>';
+
     html+='<tr style="background:'+bg+';border-bottom:1px solid #e5e5e5;">'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶編號||'')+'</td>'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶全稱||'')+'</td>'
+      +'<td style="padding:7px 10px;max-width:220px;">'+addrCell+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;">'+escapeHtml(lastDate)+'</td>'
       +'<td style="padding:7px 10px;text-align:center;">'+escapeHtml(String(cycle))+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;font-weight:bold;color:#b33939;">'+nextDates.map(function(d){ return escapeHtml(d); }).join('<br>')+'</td>'
@@ -6813,9 +6829,9 @@ window.openContactLog = function(custKey){
   document.getElementById('clMethod').value = 'LINE';
   document.getElementById('clNote').value = '';
 
-  // 填入延後月份選項（未來12個月）
+  // 填入延後月份選項（未來12個月），保留前兩個固定選項（不延後／不更換）
   var pSel = document.getElementById('clPostpone');
-  while(pSel.options.length>1) pSel.remove(1);
+  while(pSel.options.length>2) pSel.remove(2);
   var nm = new Date(today.getFullYear(), today.getMonth()+1, 1);
   for(var mi=0;mi<12;mi++){
     var yy = nm.getFullYear(), mm = nm.getMonth()+1;
@@ -6849,7 +6865,8 @@ function renderContactLogList(){
       +'<button class="log-del" onclick="deleteContactLogEntry('+realIdx+')">刪除</button>'
       +'<span class="log-method">'+escapeHtml(log.method||'')+'</span>'
       +'<strong>'+escapeHtml(log.date||'')+'</strong>'
-      +(log.postponeTo?'<span class="log-postpone">➡ '+escapeHtml(log.postponeTo)+'</span>':'')
+      +(log.postponeTo==='__NO_CHANGE__'?'<span class="log-postpone" style="background:#7f8c8d;">🚫 不更換</span>'
+        :log.postponeTo?'<span class="log-postpone">➡ '+escapeHtml(log.postponeTo)+'</span>':'')
       +(log.note?'<br><span style="color:#444;">'+escapeHtml(log.note)+'</span>':'')
       +'</div>';
   });
@@ -6859,14 +6876,26 @@ window.saveContactLogEntry = function(){
   var date = document.getElementById('clDate').value;
   var method = document.getElementById('clMethod').value;
   var note = document.getElementById('clNote').value.trim();
-  var postponeTo = document.getElementById('clPostpone').value; // e.g. "2026年8月"
+  var postponeTo = document.getElementById('clPostpone').value; // "" | "__NO_CHANGE__" | "2026年8月"
   if(!date||!method){ alert('請填寫聯絡日期與聯絡方式'); return; }
   if(!contactLogs[_contactLogCustKey]) contactLogs[_contactLogCustKey]=[];
 
   var logEntry = {date:date,method:method,note:note,postponeTo:postponeTo,ts:Date.now()};
 
-  // 若有選延後月份，把該客戶所有資料列的下次換芯移到目標月份，並記錄移動前的原始日期供日後還原
-  if(postponeTo){
+  if(postponeTo === '__NO_CHANGE__'){
+    // 客戶不更換：將該客戶所有資料列標記為排除（從換芯名單隱藏），記錄快照供刪除紀錄時還原
+    var exSnapshot = [];
+    cartridgeData.forEach(function(r, i){
+      var rKey = r.客戶編號 || ('__'+i);
+      if(rKey !== _contactLogCustKey) return;
+      exSnapshot.push({idx:i, prevExcluded: !!r._excluded});
+      r._excluded = true;
+    });
+    logEntry._exSnapshot = exSnapshot;
+    saveCD();
+    if(typeof localDirty!=='undefined') localDirty = true;
+  } else if(postponeTo){
+    // 若有選延後月份，把該客戶所有資料列的下次換芯移到目標月份，並記錄移動前的原始日期供日後還原
     // 解析 "2026年8月" → year=2026, month=8
     var match = postponeTo.match(/(\d+)年(\d+)月/);
     if(match){
@@ -6908,14 +6937,12 @@ window.saveContactLogEntry = function(){
   contactLogs[_contactLogCustKey].push(logEntry);
   saveContactLogs();
 
-  document.getElementById('clNote').value='';
-  document.getElementById('clPostpone').value='';
-  renderContactLogList();
   renderCartridgeTable();
-  showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo ? '，已移至 '+postponeTo : ''));
+  showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')));
+  closeContactLog();
 };
 window.deleteContactLogEntry = function(idx){
-  if(!confirm('確定刪除此聯絡紀錄？\n若此紀錄曾將換芯日期移月，刪除後會還原回原本月份。')) return;
+  if(!confirm('確定刪除此聯絡紀錄？\n若此紀錄曾將換芯日期移月或標記不更換，刪除後會還原原本狀態。')) return;
   var list = contactLogs[_contactLogCustKey]||[];
   var entry = list[idx];
 
@@ -6931,13 +6958,23 @@ window.deleteContactLogEntry = function(idx){
     });
     saveCD();
   }
+  if(entry && entry._exSnapshot && entry._exSnapshot.length){
+    entry._exSnapshot.forEach(function(snap){
+      var r = cartridgeData[snap.idx];
+      if(!r) return;
+      if(snap.prevExcluded) r._excluded = true; else delete r._excluded;
+    });
+    saveCD();
+  }
 
   list.splice(idx,1);
   if(!list.length) delete contactLogs[_contactLogCustKey];
   saveContactLogs();
   renderContactLogList();
   renderCartridgeTable();
-  showCartridgeToast(entry && entry._snapshot && entry._snapshot.length ? '✅ 已刪除紀錄，並還原原本月份' : '✅ 已刪除紀錄');
+  var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
+    : (entry && entry._exSnapshot && entry._exSnapshot.length) ? '並重新加回換芯名單' : '';
+  showCartridgeToast('✅ 已刪除紀錄' + (restored ? '，'+restored : ''));
 };
 
 /* ── Toast ── */
