@@ -6470,11 +6470,27 @@ body.cartridge-scroll-mode {
 var cartridgeData = [];
 var CARTRIDGE_KEY = 'cartridge_list_v1';
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
-// 修復：確保每筆資料都有 _nextYear / _nextMonth（從下次換芯日期還原）
+// 無條件從日期資料重新計算 _nextYear / _nextMonth，避免重整後遺失
 cartridgeData.forEach(function(r){
-  if(r.下次換芯 && (!r._nextYear || !r._nextMonth)){
+  // 優先從下次換芯字串解析
+  if(r.下次換芯){
     var dp = r.下次換芯.replace(/-/g,'/').split('/');
-    if(dp.length>=2){ r._nextYear=Number(dp[0]); r._nextMonth=Number(dp[1]); }
+    if(dp.length>=2 && Number(dp[0])>2000){
+      r._nextYear = Number(dp[0]);
+      r._nextMonth = Number(dp[1]);
+      return;
+    }
+  }
+  // 若沒有下次換芯，從上次日期＋周期重算
+  if(r.日期 && r.周期){
+    var bp = (r.日期+'').replace(/-/g,'/').split('/');
+    if(bp.length>=3){
+      var base = new Date(Number(bp[0]), Number(bp[1])-1, Number(bp[2]));
+      base.setMonth(base.getMonth() + Number(r.周期));
+      r._nextYear = base.getFullYear();
+      r._nextMonth = base.getMonth()+1;
+      r.下次換芯 = r._nextYear+'/'+String(r._nextMonth).padStart(2,'0')+'/'+String(base.getDate()).padStart(2,'0');
+    }
   }
 });
 (function(){
@@ -7021,7 +7037,21 @@ window.exportCartridgeExcel=function(){
 };
 
 // 初始化
-if(cartridgeData.length) setTimeout(renderCartridgeTable,300);
+if(cartridgeData.length){
+  setTimeout(function(){
+    // 先建月份選單，再強制設定當月為預設
+    updateCartridgeMonthOptions();
+    var sel = document.getElementById('cartridgeMonthFilter');
+    if(sel && !sel.value){
+      var now = new Date();
+      var defaultKey = now.getFullYear()+'/'+String(now.getMonth()+1).padStart(2,'0');
+      if(Array.from(sel.options).some(function(o){ return o.value===defaultKey; })){
+        sel.value = defaultKey;
+      }
+    }
+    renderCartridgeTable();
+  }, 300);
+}
 })();
 </script>
 
