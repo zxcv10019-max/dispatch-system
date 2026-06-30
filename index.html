@@ -6401,6 +6401,7 @@ body.cartridge-scroll-mode {
     </select>
     <button onclick="debugCartridgeData()" style="background:#e67e22;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">🔍 除錯</button>
     <button onclick="debugCloudCartridge()" style="background:#c0392b;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">☁️ 雲端除錯</button>
+    <button onclick="forceCloudSaveDebug()" style="background:#27ae60;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">⬆️ 強制上傳</button>
     <button onclick="scrollToNoChangeList()" style="background:#7f8c8d;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🚫 不更換名單 <span id="noChangeCountBadge" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
@@ -7376,6 +7377,9 @@ window.debugCloudCartridge = async function(){
 
     info += '\n── 本機目前畫面 ──\n'
       + '本機 cartridgeData 筆數：' + localCount + '\n'
+      + '\n登入帳號：' + (typeof currentUser!=='undefined' && currentUser ? currentUser.email : '（未登入）') + '\n'
+      + '目前角色 currentRole=' + (typeof currentRole!=='undefined'?currentRole:'?') + '\n'
+      + '是否可編輯 canEdit()=' + (typeof canEdit==='function' ? canEdit() : '?') + '\n'
       + '\nlocalDirty=' + (typeof localDirty!=='undefined'?localDirty:'?') + '\n'
       + 'savingCloud=' + (typeof savingCloud!=='undefined'?savingCloud:'?') + '\n'
       + 'importProtectActive=' + (typeof importProtectActive!=='undefined'?importProtectActive:'?');
@@ -7383,6 +7387,30 @@ window.debugCloudCartridge = async function(){
   }catch(err){
     alert('讀取雲端失敗：'+err.message+'\n（可能是 Firestore 規則權限問題）');
   }
+};
+
+// 強制立即觸發一次雲端儲存，並直接回報成功/失敗原因（繞過 debounce queue，方便排查）
+window.forceCloudSaveDebug = async function(){
+  if(typeof currentUser==='undefined' || !currentUser){
+    alert('尚未登入，無法上傳。'); return;
+  }
+  if(typeof canEdit==='function' && !canEdit()){
+    alert('目前帳號角色為「'+(typeof roleLabel==='function'?roleLabel():'?')+'」，沒有編輯權限，queueCloudSave() 會被擋下、永遠不會真的上傳。\n請聯絡管理員把這個帳號設為「editor」或「admin」。');
+    return;
+  }
+  if(typeof saveCloudNow !== 'function'){
+    alert('saveCloudNow 函式不存在。'); return;
+  }
+  var before = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
+  var ok;
+  try{
+    ok = await saveCloudNow();
+  }catch(err){
+    alert('上傳時拋出例外：'+(err && err.message ? err.message : String(err)));
+    return;
+  }
+  alert(ok ? ('✅ 上傳完成！本機 cartridgeData 共 '+before+' 筆已送出，請用「☁️ 雲端除錯」確認雲端是否已更新。')
+            : '❌ 上傳失敗（saveCloudNow 回傳 false），請查看畫面上方同步狀態文字或瀏覽器主控台（F12）取得詳細錯誤訊息。');
 };
 
 // 初始化
