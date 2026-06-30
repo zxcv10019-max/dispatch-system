@@ -2069,20 +2069,29 @@ async function applyRemoteData(data){
   const localJobsCount = (jobs||[]).length;
   const localCustomersCount = (customers||[]).length;
   const localLeaveRecordsCount = (leaveRecords||[]).length;
+  const localCartridgeCount = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
   const remoteJobsCount = remoteJobs ? remoteJobs.length : 0;
   const remoteCustomersCount = remoteCustomers ? remoteCustomers.length : 0;
   const remoteLeaveRecordsCount = remoteLeaveRecords ? remoteLeaveRecords.length : 0;
+  const remoteCartridgeCount = remoteCartridgeData ? remoteCartridgeData.length : 0;
 
   // 只要本機有尚未確認的變更，且遠端資料比較少，就不覆蓋。
   // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
   if(localDirty){
     const remoteLooksOlder = (remoteJobs && remoteJobsCount + 3 < localJobsCount) ||
                              (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) ||
-                             (remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount);
+                             (remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) ||
+                             (remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount);
     if(remoteLooksOlder){
       setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
       return;
     }
+  }
+
+  // 換芯資料額外保護：即使 localDirty 為 false（例如重整頁面後），
+  // 若本機 localStorage 已有大量換芯資料，而遠端筆數明顯偏少，視為遠端資料過舊，跳過覆蓋。
+  if(!localDirty && remoteCartridgeData && localCartridgeCount > 0 && remoteCartridgeCount + 5 < localCartridgeCount){
+    remoteCartridgeData = null;
   }
 
   if(importProtectActive && remoteToken === importProtectToken){
@@ -6884,9 +6893,8 @@ window.saveContactLogEntry = function(){
         r.下次換芯 = r._nextYear + '/'
           + String(r._nextMonth).padStart(2,'0') + '/'
           + String(newNextDate.getDate()).padStart(2,'0');
-      });
       saveCD();
-      // 切換月份篩選到目標月份
+      if(typeof localDirty!=='undefined') localDirty = true;
       var targetKey = String(tYear) + '/' + String(tMonth).padStart(2,'0');
       var sel = document.getElementById('cartridgeMonthFilter');
       if(sel) sel.value = targetKey;
@@ -6992,6 +7000,7 @@ window.importCartridgeExcel = function(event){
       }
       if(!result.length){ alert('沒有找到有效資料（需有周期欄位且有值）。'); event.target.value=''; return; }
       cartridgeData=result;
+      if(typeof localDirty!=='undefined') localDirty = true;
       saveCD();
       renderCartridgeTable();
       document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料。來源：'+file.name;
