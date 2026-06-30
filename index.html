@@ -6588,6 +6588,7 @@ window.renderCartridgeTable = function(){
     if(cnt) cnt.textContent='';
     var sumDiv=document.getElementById('cartridgeSummary'); if(sumDiv) sumDiv.style.display='none';
     if(statusEl) statusEl.textContent='尚未匯入資料。';
+    renderNoChangeList();
     return;
   }
 
