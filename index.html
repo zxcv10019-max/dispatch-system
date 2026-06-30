@@ -1991,8 +1991,16 @@ async function saveCloudNow(){
     }
     const jobChunks = chunkArray(jobs || [], 120);
     const customerChunks = chunkArray(customers || [], 250);
+    const cartridgeChunks = chunkArray(cartridgeData || [], 300);
+    // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
+    const contactLogEntries = (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : [];
+    const contactLogChunks = chunkArray(contactLogEntries, 150);
+
     jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
     customerChunks.forEach((items,i)=>{ batch.set(chunks.doc(`customers_${String(i).padStart(4,"0")}`), {type:"customers", index:i, items}); writes++; });
+    cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
+    contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
+
     batch.set(root, {
       chunked:true,
       jobsChunkCount:jobChunks.length,
@@ -2001,9 +2009,10 @@ async function saveCloudNow(){
       customersCount:(customers||[]).length,
       leaveRecords:Array.isArray(leaveRecords) ? leaveRecords : [],
       leaveRecordsCount:(leaveRecords||[]).length,
-      cartridgeData:Array.isArray(cartridgeData) ? cartridgeData : [],
+      cartridgeChunkCount:cartridgeChunks.length,
       cartridgeDataCount:(cartridgeData||[]).length,
-      contactLogs:(typeof contactLogs!=='undefined' && contactLogs) ? contactLogs : {},
+      contactLogsChunkCount:contactLogChunks.length,
+      contactLogsCount:contactLogEntries.length,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
@@ -2030,15 +2039,26 @@ function queueCloudSave(){
 
 async function loadCloudChunks(meta){
   const chunks=chunksColRef();
-  if(!chunks) return {jobs:[], customers:[]};
+  if(!chunks) return {jobs:[], customers:[], cartridgeData:[], contactLogs:{}};
   const snap = await chunks.get();
-  const jobParts=[], customerParts=[];
+  const jobParts=[], customerParts=[], cartridgeParts=[], contactLogParts=[];
   snap.forEach(doc=>{
     const d=doc.data()||{};
     if(d.type==="jobs") jobParts[d.index||0]=Array.isArray(d.items)?d.items:[];
     if(d.type==="customers") customerParts[d.index||0]=Array.isArray(d.items)?d.items:[];
+    if(d.type==="cartridge") cartridgeParts[d.index||0]=Array.isArray(d.items)?d.items:[];
+    if(d.type==="contactlogs") contactLogParts[d.index||0]=Array.isArray(d.items)?d.items:[];
   });
-  return {jobs: jobParts.flat(), customers: customerParts.flat()};
+  const contactLogsObj = {};
+  contactLogParts.flat().forEach(entry=>{
+    if(Array.isArray(entry) && entry.length===2) contactLogsObj[entry[0]] = entry[1];
+  });
+  return {
+    jobs: jobParts.flat(),
+    customers: customerParts.flat(),
+    cartridgeData: cartridgeParts.flat(),
+    contactLogs: contactLogsObj
+  };
 }
 
 async function applyRemoteData(data){
@@ -2066,6 +2086,9 @@ async function applyRemoteData(data){
     const loaded = await loadCloudChunks(data);
     remoteJobs = loaded.jobs;
     remoteCustomers = loaded.customers;
+    // 換芯/聯絡紀錄改用分塊儲存；若文件有分塊計數欄位，以分塊結果為準（即使是空陣列也要套用，才能正確反映清空狀態）
+    if(data.cartridgeChunkCount !== undefined) remoteCartridgeData = loaded.cartridgeData;
+    if(data.contactLogsChunkCount !== undefined) remoteContactLogs = loaded.contactLogs;
   }
 
   const localJobsCount = (jobs||[]).length;
@@ -7311,14 +7334,23 @@ window.debugCloudCartridge = async function(){
       return;
     }
     var d = snap.data();
-    var cloudCount = Array.isArray(d.cartridgeData) ? d.cartridgeData.length : '（無此欄位或非陣列）';
     var localCount = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
-    var info = '── 雲端 Firestore 實際資料 ──\n'
-      + '雲端 cartridgeData 筆數：' + cloudCount + '\n'
-      + '雲端 cartridgeDataCount 欄位：' + (d.cartridgeDataCount!==undefined ? d.cartridgeDataCount : '（無）') + '\n'
+
+    var info = '── 雲端 Firestore 根文件 ──\n'
+      + '是否分塊(chunked)：' + (d.chunked ? '是' : '否（舊版格式）') + '\n'
+      + '雲端 cartridgeChunkCount：' + (d.cartridgeChunkCount!==undefined ? d.cartridgeChunkCount : '（無此欄位）') + '\n'
+      + '雲端 cartridgeDataCount：' + (d.cartridgeDataCount!==undefined ? d.cartridgeDataCount : '（無）') + '\n'
       + '雲端最後更新時間：' + (d.updatedAtLocal || '（無）') + '\n'
-      + '雲端最後更新者：' + (d.updatedBy ? JSON.stringify(d.updatedBy) : '（無）') + '\n'
-      + '\n── 本機目前畫面 ──\n'
+      + '雲端最後更新者：' + (d.updatedBy ? JSON.stringify(d.updatedBy) : '（無）') + '\n';
+
+    if(typeof loadCloudChunks === 'function' && d.chunked){
+      var loaded = await loadCloudChunks(d);
+      info += '\n── 從雲端分塊實際讀回的資料 ──\n'
+        + '實際讀回 cartridgeData 筆數：' + (loaded.cartridgeData ? loaded.cartridgeData.length : 0) + '\n'
+        + '實際讀回 contactLogs 客戶數：' + (loaded.contactLogs ? Object.keys(loaded.contactLogs).length : 0) + '\n';
+    }
+
+    info += '\n── 本機目前畫面 ──\n'
       + '本機 cartridgeData 筆數：' + localCount + '\n'
       + '\nlocalDirty=' + (typeof localDirty!=='undefined'?localDirty:'?') + '\n'
       + 'savingCloud=' + (typeof savingCloud!=='undefined'?savingCloud:'?') + '\n'
