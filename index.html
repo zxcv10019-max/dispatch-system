@@ -8454,6 +8454,12 @@ function isCartridgeWorkJob(j){
 function jobCustomerCode(j){
   return String((j&&j.customerCode) || (j&&j.客編) || '').trim();
 }
+function normalizeDateForCompare(v){
+  v = String(v||'').trim().replace(/-/g,'/');
+  var m = v.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if(!m) return '';
+  return m[1] + '-' + String(Number(m[2])).padStart(2,'0') + '-' + String(Number(m[3])).padStart(2,'0');
+}
 window.syncCurrentMonthCartridgeArranged = async function(){
   if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
   var sel = document.getElementById('cartridgeMonthFilter');
@@ -8487,7 +8493,13 @@ window.syncCurrentMonthCartridgeArranged = async function(){
     if(rowMonth !== monthKey) return;
     touched++;
     var code = String(r.客戶編號 || '').trim();
-    var match = code && jobMap[code] && jobMap[code][0];
+    // 已經超過周期的舊派工（早於或等於上次換芯日期）不算數，避免把上一輪換芯紀錄誤判成這一輪已約
+    var lastChangeDate = normalizeDateForCompare(r.日期);
+    var candidates = (code && jobMap[code]) ? jobMap[code] : [];
+    var match = candidates.find(function(j){
+      var jd = normalizeDateForCompare(j.date);
+      return !lastChangeDate || !jd || jd > lastChangeDate;
+    });
     if(match){
       var newArr = {
         engineer: match.engineer || '',
