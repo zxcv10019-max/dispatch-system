@@ -3824,6 +3824,19 @@ function cleanPhoneForTel(phone){
   return String(phone||"").replace(/[^0-9+]/g, "");
 }
 
+// 若電話欄位有多組號碼（以 / 、頓號或逗號分隔），每組各自換行顯示，並各自可點擊撥打
+function formatPhoneCellMultiline(phoneRaw, linkStyle){
+  const raw = String(phoneRaw||"").trim();
+  if(!raw) return '<span style="color:#bbb;">未填</span>';
+  const parts = raw.split(/\s*[\/、，,]\s*/).map(function(p){ return p.trim(); }).filter(Boolean);
+  if(parts.length<=1){
+    return '<a href="tel:'+escapeHtml(cleanPhoneForTel(raw))+'" style="'+(linkStyle||'')+'">'+escapeHtml(raw)+'</a>';
+  }
+  return parts.map(function(p){
+    return '<a href="tel:'+escapeHtml(cleanPhoneForTel(p))+'" style="'+(linkStyle||'')+'">'+escapeHtml(p)+'</a>';
+  }).join('<br>');
+}
+
 function renderMyTodayPanel(){
   const panel=document.getElementById("myTodayPanel");
   if(!panel) return;
@@ -7275,9 +7288,7 @@ window.renderCartridgeTable = function(){
       : '<span style="color:#bbb;">未填</span>';
 
     var phoneRaw = String(group.電話||'').trim();
-    var phoneCell = phoneRaw
-      ? '<a href="tel:'+escapeHtml(cleanPhoneForTel(phoneRaw))+'" style="color:#1565c0;text-decoration:underline;font-weight:bold;">'+escapeHtml(phoneRaw)+'</a>'
-      : '<span style="color:#bbb;">未填</span>';
+    var phoneCell = formatPhoneCellMultiline(phoneRaw, 'color:#1565c0;text-decoration:underline;font-weight:bold;');
 
     // 接觸狀態：已約 / 已接觸未約 / 尚未接觸
     var statusCell;
@@ -7295,7 +7306,7 @@ window.renderCartridgeTable = function(){
       +'<td style="padding:7px 10px;text-align:center;"><input type="checkbox" class="cart-row-chk" data-key="'+escapeHtml(custKey)+'" '+rowChecked+' onchange="toggleCartridgeSelect(this)"></td>'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶編號||'')+'</td>'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶全稱||'')+'</td>'
-      +'<td class="cart-phone-cell" data-phone="'+escapeHtml(phoneRaw)+'" style="padding:7px 10px;white-space:nowrap;">'+phoneCell+'</td>'
+      +'<td class="cart-phone-cell" data-phone="'+escapeHtml(phoneRaw)+'" style="padding:7px 10px;white-space:normal;">'+phoneCell+'</td>'
       +'<td style="padding:7px 10px;max-width:220px;">'+addrCell+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;">'+escapeHtml(lastDate)+'</td>'
       +'<td style="padding:7px 10px;text-align:center;">'+escapeHtml(String(cycle))+'</td>'
