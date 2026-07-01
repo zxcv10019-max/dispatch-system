@@ -830,6 +830,16 @@ body{
   color:#e65100;
   font-weight:bold;
 }
+/* 請假：與其他派工卡片區隔的底色 */
+.leave-job-card{
+  background:#f3e5f5 !important;
+  border:1px solid #8e24aa !important;
+}
+.leave-job-card .card-main::before{
+  content:"🏖️ 請假｜";
+  color:#8e24aa;
+  font-weight:bold;
+}
 .hold-row td{
   background:#eef0ff !important;
 }
@@ -3795,7 +3805,7 @@ function jobCard(j){
   const compactCity = escapeHtml(String(j.city||"").trim());
   const compactDistrict = escapeHtml(String(j.district||"").trim());
 
-  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))?"leave-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
