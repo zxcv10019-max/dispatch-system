@@ -7390,6 +7390,7 @@ function updateCartridgeMonthOptions(){
   if(!sel) return;
   var months = {};
   cartridgeData.forEach(function(r){
+    if(!r._nextYear || Number(r._nextYear) < 2026) return; // 只顯示 2026 年（含）之後的月份
     var key = r._nextYear + '/' + String(r._nextMonth||0).padStart(2,'0');
     months[key] = (r._nextYear||'?') + '年' + (r._nextMonth||'?') + '月';
   });
@@ -8459,12 +8460,15 @@ window.syncCurrentMonthCartridgeArranged = async function(){
   var monthKey = sel ? sel.value : '';
   if(!monthKey){ alert('請先選擇「顯示月份」，再同步本月已約。'); return; }
   if(!Array.isArray(cartridgeData) || !cartridgeData.length){ alert('目前沒有換芯名單資料。'); return; }
+  var yearKey = monthKey.split('/')[0];
   var allJobs = (typeof jobs!=='undefined' && Array.isArray(jobs)) ? jobs : [];
   var jobMap = {};
   allJobs.forEach(function(j){
     if(!j || j.isHold) return;
     if(j.isLeaveJob || (typeof isValidJob==='function' && !isValidJob(j))) return; // 排除請假/出差等非派工紀錄
-    if(getJobMonthKey(j) !== monthKey) return;
+    var mk = getJobMonthKey(j);
+    if(!mk || mk.split('/')[0] !== yearKey) return; // 同一年度（例如 2026 年）內任何月份都算，不限定剛好是到期月
+    if(!isCartridgeWorkJob(j)) return; // 嚴格要求施工項目/施工內容含「濾芯」字樣，避免誤判其他無關派工
     var code = jobCustomerCode(j);
     if(!code) return;
     if(!jobMap[code]) jobMap[code] = [];
@@ -8472,11 +8476,6 @@ window.syncCurrentMonthCartridgeArranged = async function(){
   });
   Object.keys(jobMap).forEach(function(code){
     jobMap[code].sort(function(a,b){
-      // 優先採用施工項目/內容含「濾芯」字樣的派工，若無則採用最早日期的任一筆派工，
-      // 避免因施工項目寫法不同（如「巡檢設備」）而漏抓已排定的換芯派工。
-      var ac = isCartridgeWorkJob(a) ? 0 : 1;
-      var bc = isCartridgeWorkJob(b) ? 0 : 1;
-      if(ac !== bc) return ac-bc;
       return String(a.date||'').localeCompare(String(b.date||'')) || String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||''));
     });
   });
@@ -8520,7 +8519,7 @@ window.syncCurrentMonthCartridgeArranged = async function(){
   }
   renderCartridgeTable();
 
-  var msg = '🔄 本月已約同步完成：已檢查 '+touched+' 筆，已約 '+arranged+' 筆';
+  var msg = '🔄 '+yearKey+' 年度已換濾芯同步完成：已檢查 '+touched+' 筆，已約 '+arranged+' 筆';
   if(cleared) msg += '，改回未約 '+cleared+' 筆';
   if(typeof showCartridgeToast==='function') showCartridgeToast(msg); else alert(msg);
 
