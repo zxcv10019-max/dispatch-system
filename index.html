@@ -8463,8 +8463,8 @@ window.syncCurrentMonthCartridgeArranged = async function(){
   var jobMap = {};
   allJobs.forEach(function(j){
     if(!j || j.isHold) return;
+    if(j.isLeaveJob || (typeof isValidJob==='function' && !isValidJob(j))) return; // 排除請假/出差等非派工紀錄
     if(getJobMonthKey(j) !== monthKey) return;
-    if(!isCartridgeWorkJob(j)) return;
     var code = jobCustomerCode(j);
     if(!code) return;
     if(!jobMap[code]) jobMap[code] = [];
@@ -8472,6 +8472,11 @@ window.syncCurrentMonthCartridgeArranged = async function(){
   });
   Object.keys(jobMap).forEach(function(code){
     jobMap[code].sort(function(a,b){
+      // 優先採用施工項目/內容含「濾芯」字樣的派工，若無則採用最早日期的任一筆派工，
+      // 避免因施工項目寫法不同（如「巡檢設備」）而漏抓已排定的換芯派工。
+      var ac = isCartridgeWorkJob(a) ? 0 : 1;
+      var bc = isCartridgeWorkJob(b) ? 0 : 1;
+      if(ac !== bc) return ac-bc;
       return String(a.date||'').localeCompare(String(b.date||'')) || String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||''));
     });
   });
