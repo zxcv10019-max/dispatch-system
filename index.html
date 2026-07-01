@@ -7468,7 +7468,7 @@ window.importCartridgeExcel = function(event){
   if(!file){ event.target.value=''; return; }
   if(typeof XLSX==='undefined'){ alert('Excel 套件未載入'); return; }
   var reader=new FileReader();
-  reader.onload=function(e){
+  reader.onload=async function(e){
     try{
       var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false,raw:false});
       var ws=wb.Sheets[wb.SheetNames[0]];
@@ -7559,7 +7559,18 @@ window.importCartridgeExcel = function(event){
       if(typeof localDirty!=='undefined') localDirty = true;
       saveCD();
       renderCartridgeTable();
-      document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料（已清空舊聯絡紀錄與相關派工）。來源：'+file.name;
+      document.getElementById('cartridgeStatus').textContent='已匯入 '+result.length+' 筆換芯資料（已清空舊聯絡紀錄與相關派工），正在同步到所有帳號…來源：'+file.name;
+
+      // 匯入/覆蓋會清掉舊換芯資料、聯絡紀錄與相關派工，必須立即做「完整雲端同步」，不能只等本機或輕量同步。
+      // 否則其他帳號會繼續看到舊資料。
+      if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
+      window.__allowDataShrink = true;
+      var syncOk = true;
+      if(typeof saveCloudNow === 'function') syncOk = await saveCloudNow();
+      window.__allowDataShrink = false;
+      document.getElementById('cartridgeStatus').textContent = syncOk === false
+        ? '已匯入 '+result.length+' 筆，但雲端同步失敗，其他帳號可能尚未更新，請按「強制上傳」或重新整理後再試。來源：'+file.name
+        : '已匯入 '+result.length+' 筆換芯資料（已清空舊聯絡紀錄與相關派工），並已同步到所有帳號。來源：'+file.name;
     }catch(err){ alert('匯入失敗：'+err.message); }
     event.target.value='';
   };
@@ -7598,9 +7609,8 @@ window.exportCartridgeExcel=function(){
     if(changed){ saveCD(); renderCartridgeTable(); }
   };
 
-  window.clearCartridgeData=function(){
+  window.clearCartridgeData=async function(){
   if(!confirm('確定清空換芯名單？這也會一併清空所有聯絡紀錄，以及由換芯名單安排出去的派工。')) return;
-  window.__allowDataShrink = true; setTimeout(function(){ window.__allowDataShrink=false; }, 3000);
 
   // 收集所有由換芯名單建立的派工 id，連同 jobs 一併刪除
   var jobIdsToRemove = {};
@@ -7620,7 +7630,17 @@ window.exportCartridgeExcel=function(){
   if(typeof localDirty!=='undefined') localDirty = true;
   saveCD();
   renderCartridgeTable();
-  document.getElementById('cartridgeStatus').textContent='已清空（含相關派工與聯絡紀錄）。';
+  document.getElementById('cartridgeStatus').textContent='已清空本機資料，正在同步到所有帳號…';
+
+  // 清空是刻意把雲端換芯/聯絡紀錄/相關派工改成 0 筆，必須立即完整同步並暫時放行資料減少防呆。
+  if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
+  window.__allowDataShrink = true;
+  var syncOk = true;
+  if(typeof saveCloudNow === 'function') syncOk = await saveCloudNow();
+  window.__allowDataShrink = false;
+  document.getElementById('cartridgeStatus').textContent = syncOk === false
+    ? '已清空本機資料，但雲端同步失敗，其他帳號可能尚未清空，請按「強制上傳」或重新整理後再試。'
+    : '已清空，並已同步到所有帳號（含相關派工與聯絡紀錄）。';
 };
 
 // 除錯函式
