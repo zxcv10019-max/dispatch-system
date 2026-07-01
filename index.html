@@ -2336,9 +2336,13 @@ async function applyRemoteData(data){
       showCartridgeToast('🔄 換芯資料已自動更新（'+prevCount+' → '+cartridgeData.length+' 筆）');
     }
   }
-  if(remoteContactLogs && typeof contactLogs!=='undefined'){
-    contactLogs = remoteContactLogs;
-    try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+  if(remoteContactLogs){
+    if(typeof window.__setContactLogs === 'function'){
+      window.__setContactLogs(remoteContactLogs);
+    }else{
+      window.contactLogs = remoteContactLogs;
+      try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(remoteContactLogs)); }catch(e){}
+    }
   }
   // 快取到 localStorage（可能因空間不足而略過）
   try{ localStorage.setItem(JOBS_KEY, JSON.stringify(jobs || [])); }catch(e){ try{localStorage.removeItem(JOBS_KEY);}catch(_){} }
@@ -6837,10 +6841,21 @@ function updateCartridgeMonthOptions(){
 }
 
 /* ── 聯絡紀錄資料 ── */
-var contactLogs = {};
 var CONTACT_LOGS_KEY = 'cartridge_contact_logs_v1';
-try{ contactLogs = JSON.parse(localStorage.getItem(CONTACT_LOGS_KEY)||'{}'); }catch(e){ contactLogs={}; }
+// 聯絡紀錄必須掛到 window，讓外層的 saveCloudNow / applyRemoteData 可以讀寫同一份資料。
+// 原本 contactLogs 宣告在這個 IIFE 裡，外層同步程式讀不到，所以只會存在新增那台電腦本機。
+var contactLogs = window.contactLogs || {};
+try{
+  contactLogs = JSON.parse(localStorage.getItem(CONTACT_LOGS_KEY)||'{}') || {};
+}catch(e){ contactLogs = {}; }
+window.contactLogs = contactLogs;
+window.__setContactLogs = function(v){
+  contactLogs = (v && typeof v === 'object') ? v : {};
+  window.contactLogs = contactLogs;
+  try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+};
 function saveContactLogs(){
+  window.contactLogs = contactLogs;
   try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
   if(typeof queueCloudSave==='function') queueCloudSave();
 }
@@ -7495,7 +7510,7 @@ window.importCartridgeExcel = function(event){
       }
 
       cartridgeData=result;
-      contactLogs={};
+      if(typeof window.__setContactLogs === 'function') window.__setContactLogs({}); else contactLogs={};
       saveContactLogs();
       if(typeof localDirty!=='undefined') localDirty = true;
       saveCD();
@@ -7556,7 +7571,7 @@ window.exportCartridgeExcel=function(){
   }
 
   cartridgeData=[];
-  contactLogs={};
+  if(typeof window.__setContactLogs === 'function') window.__setContactLogs({}); else contactLogs={};
   saveContactLogs();
   if(typeof localDirty!=='undefined') localDirty = true;
   saveCD();
