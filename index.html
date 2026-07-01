@@ -2175,9 +2175,11 @@ async function saveCartridgeAndLogsNow(){
     return;
   }
   if(isApplyingRemote) return;
-  // 保險：換芯名單本機是空的不太合理，改走完整同步（含防呆檢查），避免誤刪雲端資料
+  // 保險：換芯名單本機是空的不太合理，直接停止，不改走完整同步。
+  // 因為完整 saveCloudNow() 會重寫所有資料，若本機還沒載完容易失敗或觸發防呆。
   if(!Array.isArray(cartridgeData) || cartridgeData.length===0){
-    return await saveCloudNow();
+    setSyncStatus('同步失敗：本機換芯名單尚未載入完成，請重新整理後再試', 'err');
+    return false;
   }
   const root=sharedRootRef();
   const chunks=chunksColRef();
@@ -6876,9 +6878,10 @@ window.__setContactLogs = function(v){
   try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
 };
 function saveContactLogs(){
+  // 聯絡紀錄只先存本機；真正雲端同步由儲存按鈕後面的 saveCartridgeAndLogsNow() 立即處理。
+  // 不再呼叫 queueCloudSave()，避免 650ms 後又觸發完整 saveCloudNow()，造成全量同步失敗或覆蓋風險。
   window.contactLogs = contactLogs;
   try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
-  if(typeof queueCloudSave==='function') queueCloudSave();
 }
 
 /* ── 表格渲染 ── */
@@ -7671,23 +7674,26 @@ window.forceCloudSaveDebug = async function(){
     alert('尚未登入，無法上傳。'); return;
   }
   if(typeof canEdit==='function' && !canEdit()){
-    alert('目前帳號角色為「'+(typeof roleLabel==='function'?roleLabel():'?')+'」，沒有編輯權限，queueCloudSave() 會被擋下、永遠不會真的上傳。\n請聯絡管理員把這個帳號設為「editor」或「admin」。');
+    alert('目前帳號角色為「'+(typeof roleLabel==='function'?roleLabel():'?')+'」，沒有編輯權限，無法上傳。');
     return;
   }
-  if(typeof saveCloudNow !== 'function'){
-    alert('saveCloudNow 函式不存在。'); return;
-  }
   var before = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
+  var logObj = (typeof getContactLogsForSync==='function') ? getContactLogsForSync() : (window.contactLogs||{});
+  var logTotal = 0;
+  Object.keys(logObj||{}).forEach(function(k){ if(Array.isArray(logObj[k])) logTotal += logObj[k].length; });
   var ok;
   try{
-    ok = await saveCloudNow();
+    // 這顆按鈕主要是排查「換芯名單/聯絡紀錄」，改用輕量同步，不再呼叫完整 saveCloudNow()。
+    ok = (typeof saveCartridgeAndLogsNow==='function') ? await saveCartridgeAndLogsNow() : await saveCloudNow();
   }catch(err){
     alert('上傳時拋出例外：'+(err && err.message ? err.message : String(err)));
     return;
   }
-  alert(ok ? ('✅ 上傳完成！本機 cartridgeData 共 '+before+' 筆已送出，請用「☁️ 雲端除錯」確認雲端是否已更新。')
-            : '❌ 上傳失敗（saveCloudNow 回傳 false），請查看畫面上方同步狀態文字或瀏覽器主控台（F12）取得詳細錯誤訊息。');
-};
+  var statusText = '';
+  try{ statusText = document.getElementById('syncStatus') ? document.getElementById('syncStatus').innerText : ''; }catch(_){}
+  alert(ok ? ('✅ 上傳完成！\n本機換芯名單：'+before+' 筆\n本機聯絡紀錄：'+logTotal+' 筆\n請到另一台按 Ctrl+F5 或等待 3 秒確認。')
+            : ('❌ 上傳失敗。\n目前同步狀態：'+(statusText||'無')+'\n請按 F12 → Console 看紅字錯誤，或截圖給我。'));
+}
 
 // 初始化
 if(cartridgeData.length){
