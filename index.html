@@ -2032,6 +2032,27 @@ function setContactLogsForSync(v){
   if(typeof window.__setContactLogs === 'function') window.__setContactLogs(contactLogs);
 }
 
+// Firestore 不支援「陣列裡面再包陣列」，所以聯絡紀錄分塊不能用 Object.entries(contactLogs)。
+// 統一轉成物件陣列：[{key:"Y1546", logs:[...]}]，讀回時也相容舊格式。
+function buildContactLogEntriesForCloud(){
+  var obj = getContactLogsForSync() || {};
+  return Object.keys(obj).map(function(key){
+    return { key: String(key), logs: Array.isArray(obj[key]) ? obj[key] : [] };
+  });
+}
+function readContactLogEntryFromCloud(entry, target){
+  if(!entry) return;
+  // 新格式：{key, logs}
+  if(typeof entry === 'object' && !Array.isArray(entry) && entry.key !== undefined){
+    target[String(entry.key)] = Array.isArray(entry.logs) ? entry.logs : [];
+    return;
+  }
+  // 舊格式相容：如果曾經有寫入 [key, logs]，也可以讀回。
+  if(Array.isArray(entry) && entry.length === 2){
+    target[String(entry[0])] = Array.isArray(entry[1]) ? entry[1] : [];
+  }
+}
+
 async function saveCloudNow(){
   if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
   if(!hasAccess()){
@@ -2079,12 +2100,15 @@ async function saveCloudNow(){
         Object.keys(__syncLogs||{}).forEach(function(k){ if(Array.isArray(__syncLogs[k])) localLogTotal += __syncLogs[k].length; });
         if(localLogTotal < remoteContactLogEntries.length){
           remoteContactLogEntries.forEach(function(entry){
-            if(!Array.isArray(entry) || entry.length !== 2) return;
-            var key = entry[0], remLogs = entry[1];
-            if(!Array.isArray(remLogs)) return;
-            if(!__syncLogs[key] || __syncLogs[key].length < remLogs.length){
-              __syncLogs[key] = remLogs;
-            }
+            var tmp = {};
+            readContactLogEntryFromCloud(entry, tmp);
+            Object.keys(tmp).forEach(function(key){
+              var remLogs = tmp[key];
+              if(!Array.isArray(remLogs)) return;
+              if(!__syncLogs[key] || __syncLogs[key].length < remLogs.length){
+                __syncLogs[key] = remLogs;
+              }
+            });
           });
           setContactLogsForSync(__syncLogs);
         }
@@ -2117,9 +2141,7 @@ async function saveCloudNow(){
     const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
     const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
     // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
-    const contactLogEntries = stripUndefinedDeep(
-      Object.entries(getContactLogsForSync())
-    );
+    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
     const contactLogChunks = chunkArray(contactLogEntries, 150);
 
     jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
@@ -2206,9 +2228,7 @@ async function saveCartridgeAndLogsNow(){
 
     const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
     const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
-    const contactLogEntries = stripUndefinedDeep(
-      Object.entries(getContactLogsForSync())
-    );
+    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
     const contactLogChunks = chunkArray(contactLogEntries, 150);
 
     cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
@@ -2261,7 +2281,7 @@ async function loadCloudChunks(meta){
   });
   const contactLogsObj = {};
   contactLogParts.flat().forEach(entry=>{
-    if(Array.isArray(entry) && entry.length===2) contactLogsObj[entry[0]] = entry[1];
+    readContactLogEntryFromCloud(entry, contactLogsObj);
   });
   return {
     jobs: jobParts.flat(),
