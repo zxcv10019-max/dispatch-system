@@ -7488,14 +7488,17 @@ window.renderCartridgeTable = function(){
   });
 
   var totalShown = groupOrder.length; // 當月不重複客編數
-  // 已約：當月有 _jobId 的不重複客編數
+  // 已約：當月「所有」品項（同一客戶可能同時有 M / P / R 等多種濾芯）都已排定派工，才算已約，
+  // 避免只換了其中一種（例如只換 P、R）就把整戶誤判成全部已約。
   var arrangedKeys = groupOrder.filter(function(k){
-    return grouped[k].rows.some(function(item){ return !!item.r._jobId; });
+    var rows = grouped[k].rows;
+    return rows.length>0 && rows.every(function(item){ return !!item.r._jobId; });
   });
   var arranged = arrangedKeys.length;
-  // 未約（尚未安排派工）的客戶，再依是否有聯絡紀錄分為「已接觸未約」與「尚未接觸」
+  // 未約（尚未安排派工，含只完成部分品項的情況），再依是否有聯絡紀錄分為「已接觸未約」與「尚未接觸」
   var pendingKeys = groupOrder.filter(function(k){
-    return grouped[k].rows.every(function(item){ return !item.r._jobId; });
+    var rows = grouped[k].rows;
+    return rows.some(function(item){ return !item.r._jobId; });
   });
   var contactedKeys = pendingKeys.filter(function(k){ return (contactLogs[k]||[]).length>0; });
   var uncontactedKeys = pendingKeys.filter(function(k){ return !(contactLogs[k]||[]).length; });
@@ -7552,7 +7555,8 @@ window.renderCartridgeTable = function(){
     var firstRow = rows[0].r;
     var firstIdx = rows[0].i;
     var anyArranged = rows.some(function(item){ return item.r._jobId; });
-    var bg = anyArranged ? '#f0fff4' : '#fff';
+    var fullyArranged = rows.length>0 && rows.every(function(item){ return item.r._jobId; });
+    var bg = fullyArranged ? '#f0fff4' : (anyArranged ? '#fffdf0' : '#fff');
 
     // 下次換芯：若有多列，顯示所有不同日期
     var nextDates = [];
@@ -7611,10 +7615,12 @@ window.renderCartridgeTable = function(){
     var phoneRaw = String(group.電話||'').trim();
     var phoneCell = formatPhoneCellMultiline(phoneRaw, 'color:#1565c0;text-decoration:underline;font-weight:bold;');
 
-    // 接觸狀態：已約 / 已接觸未約 / 尚未接觸
+    // 接觸狀態：已約（全部品項）/ 部分已約 / 已接觸未約 / 尚未接觸
     var statusCell;
-    if(anyArranged){
+    if(fullyArranged){
       statusCell = '<span style="background:#d4edda;color:#155724;border:1px solid #a3d6b0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✅ 已約</span>';
+    } else if(anyArranged){
+      statusCell = '<span style="background:#fff3cd;color:#8a6d1f;border:1px solid #f0d878;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">🟡 部分已約</span>';
     } else if(logs.length>0){
       statusCell = '<span style="background:#fdebd0;color:#9c5b0e;border:1px solid #f5cf87;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">📞 已接觸未約</span>';
     } else {
@@ -8454,6 +8460,23 @@ function isCartridgeWorkJob(j){
 function jobCustomerCode(j){
   return String((j&&j.customerCode) || (j&&j.客編) || '').trim();
 }
+// 依「品名規格」判斷這是 M(GDMAX) / P(GDPRO) / R(GDRESIN) 哪一種品項；判斷不出來回傳空字串
+function getCartridgeItemCode(prodName){
+  var s = String(prodName||'').toUpperCase();
+  if(/MAX/.test(s)) return 'M';
+  if(/RESIN/.test(s)) return 'R'; // 要在 PRO 之前判斷，避免 RESIN 誤觸其他規則
+  if(/PRO/.test(s)) return 'P';
+  return '';
+}
+// 解析施工內容文字，只要字串中出現 M、P、R 字元（不分大小寫）就算對應品項有換
+function extractWorkContentCodes(text){
+  var s = String(text||'').toUpperCase();
+  var codes = {};
+  if(s.indexOf('M')>=0) codes.M = true;
+  if(s.indexOf('P')>=0) codes.P = true;
+  if(s.indexOf('R')>=0) codes.R = true;
+  return codes;
+}
 function normalizeDateForCompare(v){
   v = String(v||'').trim().replace(/-/g,'/');
   var m = v.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
@@ -8486,19 +8509,43 @@ window.syncCurrentMonthCartridgeArranged = async function(){
     });
   });
 
-  var touched = 0, arranged = 0, cleared = 0, changed = false;
+  // 同一客戶若有「多種濾芯品項」（M=GDMAX / P=GDPRO / R=GDRESIN，各自獨立周期），
+  // 會依「品名規格」判斷這筆是哪一種，再檢查施工內容裡有沒有出現對應的 M/P/R 字母來精準比對；
+  // 只有在品名規格判斷不出來時，才會跳過改用「安排派工」手動確認。
+  var codeRowCounts = {};
+  cartridgeData.forEach(function(r){
+    if(!r || r._excluded) return;
+    var code = String(r.客戶編號 || '').trim();
+    if(!code) return;
+    codeRowCounts[code] = (codeRowCounts[code] || 0) + 1;
+  });
+
+  var touched = 0, arranged = 0, cleared = 0, skippedMulti = 0, changed = false;
   cartridgeData.forEach(function(r, i){
     if(!r || r._excluded) return;
     var rowMonth = r._nextYear + '/' + String(r._nextMonth||0).padStart(2,'0');
     if(rowMonth !== monthKey) return;
     touched++;
     var code = String(r.客戶編號 || '').trim();
+    var isMulti = !!(code && codeRowCounts[code] > 1);
+    var itemCode = isMulti ? getCartridgeItemCode(r.品名規格) : '';
+    if(isMulti && !itemCode){
+      // 多品項客戶，但這筆品名規格無法判斷是 M/P/R 哪一種，維持原樣，請手動確認
+      skippedMulti++;
+      return;
+    }
     // 已經超過周期的舊派工（早於或等於上次換芯日期）不算數，避免把上一輪換芯紀錄誤判成這一輪已約
     var lastChangeDate = normalizeDateForCompare(r.日期);
     var candidates = (code && jobMap[code]) ? jobMap[code] : [];
     var match = candidates.find(function(j){
       var jd = normalizeDateForCompare(j.date);
-      return !lastChangeDate || !jd || jd > lastChangeDate;
+      if(!(!lastChangeDate || !jd || jd > lastChangeDate)) return false;
+      if(isMulti){
+        // 多品項客戶：施工內容裡要出現這個品項對應的 M/P/R 代號才算對得上
+        var codes = extractWorkContentCodes(j.workContent);
+        return !!codes[itemCode];
+      }
+      return true;
     });
     if(match){
       var newArr = {
@@ -8533,6 +8580,7 @@ window.syncCurrentMonthCartridgeArranged = async function(){
 
   var msg = '🔄 '+yearKey+' 年度已換濾芯同步完成：已檢查 '+touched+' 筆，已約 '+arranged+' 筆';
   if(cleared) msg += '，改回未約 '+cleared+' 筆';
+  if(skippedMulti) msg += '，'+skippedMulti+' 筆因品名規格無法判斷是 M/P/R 哪一種已跳過（請手動安排/確認）';
   if(typeof showCartridgeToast==='function') showCartridgeToast(msg); else alert(msg);
 
   if(changed && typeof saveCartridgeAndLogsNow === 'function'){
