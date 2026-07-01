@@ -818,15 +818,15 @@ body{
 }
 /* 出差日：排班表格背景變色標示，派工卡片本身正常顯示、不受影響 */
 .trip-slot-active{
-  background:#fff3e0 !important;
+  background:#ffb74d !important;
 }
 .trip-job-card{
-  background:#ffe8cc !important;
-  border:1px solid #f0a04b !important;
+  background:#fff3e0 !important;
+  border:1px solid #e65100 !important;
 }
 .trip-job-card .card-main::before{
   content:"✈️ 出差｜";
-  color:#c9720b;
+  color:#e65100;
   font-weight:bold;
 }
 .hold-row td{
@@ -7002,6 +7002,12 @@ body.cartridge-scroll-mode {
 #batchContactModal .cfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;background:#f8f9fa;border-top:1px solid #ddd;}
 #batchContactModal .cfoot button{padding:8px 18px;font-size:14px;border-radius:6px;}
 .cart-row-chk, #cartridgeSelectAllChk{width:16px;height:16px;cursor:pointer;}
+
+/* 出差日格子變色：提高權重，確保蓋過原本派工格的淡黃色底色 */
+.week-schedule-table td.slot.trip-slot-active,
+.week-schedule-table td.slot.job-slot-active.trip-slot-active{
+  background:#ffb74d !important;
+}
 </style>
 <div id="contactLogModal">
   <div class="cbox">
