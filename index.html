@@ -2153,15 +2153,16 @@ async function applyRemoteData(data){
   const localContactLogsCount = (typeof contactLogs!=='undefined' && contactLogs) ? countContactLogEntries(contactLogs) : 0;
   const remoteContactLogsCount = countContactLogEntries(remoteContactLogs);
 
-  // 只要本機有尚未確認的變更，且遠端某項資料比較少，就不覆蓋該資料（各自獨立判斷，不整批跳過）。
-  // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
+  // 只要本機有尚未確認的變更，且遠端某項資料比較少或本機剛做過任何編輯，就不覆蓋該資料。
+  // cartridgeData 特別注意：_excluded、_arranged 等欄位變動不會改變筆數，
+  // 所以只要 localDirty=true，就整批保護 cartridgeData，避免舊快照把 _excluded 狀態洗掉。
   if(localDirty){
     if(remoteJobs && remoteJobsCount + 3 < localJobsCount) remoteJobs = null;
     if(remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) remoteCustomers = null;
     if(remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) remoteLeaveRecords = null;
-    if(remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount) remoteCartridgeData = null;
+    if(remoteCartridgeData) remoteCartridgeData = null; // 有待存變更時，整批保護換芯資料（含 _excluded 等 metadata）
     if(remoteContactLogs && remoteContactLogsCount < localContactLogsCount) remoteContactLogs = null;
-    // 若所有資料都被保護掉，才真正跳過這次快照（等自己的上傳完成後雲端會回送正確版本）
+    // 若所有資料都被保護掉，才真正跳過這次快照
     if(!remoteJobs && !remoteCustomers && !remoteLeaveRecords && !remoteCartridgeData && !remoteContactLogs){
       setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
       return;
