@@ -2010,6 +2010,28 @@ function stripUndefinedDeep(value){
   return value;
 }
 
+// ===== 聯絡紀錄全域同步橋接（必須放在雲端同步函式之前） =====
+// 換芯聯絡紀錄原本在換芯模組 IIFE 裡，saveCloudNow/applyRemoteData 可能讀到不同作用域。
+// 這裡建立唯一的 window.contactLogs 來源，所有雲端同步都從這裡讀寫。
+var CONTACT_LOGS_KEY = window.CONTACT_LOGS_KEY || 'cartridge_contact_logs_v1';
+var contactLogs = window.contactLogs || {};
+try{
+  var __savedContactLogs = JSON.parse(localStorage.getItem(CONTACT_LOGS_KEY)||'{}') || {};
+  if(!window.contactLogs || Object.keys(window.contactLogs).length===0) contactLogs = __savedContactLogs;
+}catch(e){ contactLogs = window.contactLogs || {}; }
+window.contactLogs = contactLogs;
+function getContactLogsForSync(){
+  if(window.contactLogs && typeof window.contactLogs === 'object') return window.contactLogs;
+  if(typeof contactLogs !== 'undefined' && contactLogs && typeof contactLogs === 'object') return contactLogs;
+  return {};
+}
+function setContactLogsForSync(v){
+  contactLogs = (v && typeof v === 'object') ? v : {};
+  window.contactLogs = contactLogs;
+  try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+  if(typeof window.__setContactLogs === 'function') window.__setContactLogs(contactLogs);
+}
+
 async function saveCloudNow(){
   if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
   if(!hasAccess()){
@@ -2051,19 +2073,20 @@ async function saveCloudNow(){
       const dangerous = shrinkChecks.find(c=> c.remote >= 5 && c.local === 0);
 
       // 若雲端有聯絡紀錄但本機沒有（或比雲端少），先把雲端的合併到本機再上傳，避免覆蓋掉雲端較豐富的聯絡紀錄
-      if(remoteContactLogEntries.length > 0 && typeof contactLogs !== 'undefined'){
+      if(remoteContactLogEntries.length > 0){
+        var __syncLogs = getContactLogsForSync();
         var localLogTotal = 0;
-        Object.keys(contactLogs||{}).forEach(function(k){ if(Array.isArray(contactLogs[k])) localLogTotal += contactLogs[k].length; });
+        Object.keys(__syncLogs||{}).forEach(function(k){ if(Array.isArray(__syncLogs[k])) localLogTotal += __syncLogs[k].length; });
         if(localLogTotal < remoteContactLogEntries.length){
           remoteContactLogEntries.forEach(function(entry){
             if(!Array.isArray(entry) || entry.length !== 2) return;
             var key = entry[0], remLogs = entry[1];
             if(!Array.isArray(remLogs)) return;
-            if(!contactLogs[key] || contactLogs[key].length < remLogs.length){
-              contactLogs[key] = remLogs;
+            if(!__syncLogs[key] || __syncLogs[key].length < remLogs.length){
+              __syncLogs[key] = remLogs;
             }
           });
-          try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+          setContactLogsForSync(__syncLogs);
         }
       }
       if(dangerous){
@@ -2095,7 +2118,7 @@ async function saveCloudNow(){
     const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
     // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
     const contactLogEntries = stripUndefinedDeep(
-      (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : []
+      Object.entries(getContactLogsForSync())
     );
     const contactLogChunks = chunkArray(contactLogEntries, 150);
 
@@ -2182,7 +2205,7 @@ async function saveCartridgeAndLogsNow(){
     const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
     const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
     const contactLogEntries = stripUndefinedDeep(
-      (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : []
+      Object.entries(getContactLogsForSync())
     );
     const contactLogChunks = chunkArray(contactLogEntries, 150);
 
@@ -2290,7 +2313,7 @@ async function applyRemoteData(data){
     Object.keys(obj).forEach(function(k){ var v=obj[k]; if(Array.isArray(v)) n+=v.length; });
     return n;
   }
-  const localContactLogsCount = (typeof contactLogs!=='undefined' && contactLogs) ? countContactLogEntries(contactLogs) : 0;
+  const localContactLogsCount = countContactLogEntries(getContactLogsForSync());
   const remoteContactLogsCount = countContactLogEntries(remoteContactLogs);
 
   // 只要本機有尚未確認的變更，且遠端某項資料比較少或本機剛做過任何編輯，就不覆蓋該資料。
@@ -2340,8 +2363,7 @@ async function applyRemoteData(data){
     if(typeof window.__setContactLogs === 'function'){
       window.__setContactLogs(remoteContactLogs);
     }else{
-      window.contactLogs = remoteContactLogs;
-      try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(remoteContactLogs)); }catch(e){}
+      setContactLogsForSync(remoteContactLogs);
     }
   }
   // 快取到 localStorage（可能因空間不足而略過）
@@ -2382,7 +2404,7 @@ function startCloudSync(){
         const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0) + Number(data.leaveRecordsCount || 0) + Number(data.cartridgeDataCount || 0);
         const remoteHasContactLogs = Number(data.contactLogsCount || 0) > 0;
         const localCartridgeLen = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
-        const localContactLogsLen = (typeof contactLogs!=='undefined' && contactLogs) ? Object.keys(contactLogs).length : 0;
+        const localContactLogsLen = Object.keys(getContactLogsForSync()).length;
         const localCount = (jobs||[]).length + (customers||[]).length + (leaveRecords||[]).length + localCartridgeLen;
         // 只有在「雲端完全沒有任何資料（含聯絡紀錄）」且「本機有資料」時，才自動補上
         if(remoteCount === 0 && !remoteHasContactLogs && localCount > 0 && canEdit()){
@@ -6841,10 +6863,9 @@ function updateCartridgeMonthOptions(){
 }
 
 /* ── 聯絡紀錄資料 ── */
-var CONTACT_LOGS_KEY = 'cartridge_contact_logs_v1';
-// 聯絡紀錄必須掛到 window，讓外層的 saveCloudNow / applyRemoteData 可以讀寫同一份資料。
-// 原本 contactLogs 宣告在這個 IIFE 裡，外層同步程式讀不到，所以只會存在新增那台電腦本機。
-var contactLogs = window.contactLogs || {};
+CONTACT_LOGS_KEY = 'cartridge_contact_logs_v1';
+// 使用全域 contactLogs；不可在 IIFE 內重新 var，否則雲端同步會讀到另一份資料。
+contactLogs = window.contactLogs || contactLogs || {};
 try{
   contactLogs = JSON.parse(localStorage.getItem(CONTACT_LOGS_KEY)||'{}') || {};
 }catch(e){ contactLogs = {}; }
