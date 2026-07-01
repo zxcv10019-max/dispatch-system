@@ -1713,7 +1713,9 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
           <input type="time" id="lpEndTime" value="18:00" style="padding:7px 8px;font-size:13px">
         </div>
       </div>
-      <button onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
+      <button id="lpAddBtn" onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
+      <button id="lpCancelEditBtn" onclick="cancelEditLeaveRecordLP()" style="display:none;background:#95a5a6;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">取消編輯</button>
+      <span id="lpEditingHint" style="display:none;font-size:12px;color:#e67e22;font-weight:bold;">✏️ 編輯中，改好後按「更新」即可同步派工表</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
       <label style="font-size:13px;font-weight:bold;color:#333;">🔍 出差地區篩選：</label>
@@ -5909,6 +5911,8 @@ function renderLeaveList(){
 }
 
 // ===== 獨立休假管理頁籤 JS =====
+let lpEditingId = null;
+
 function lpTypeChange(){
   const t = (document.getElementById('lpType')||{}).value;
   const area = document.getElementById('lpTripArea');
@@ -5932,7 +5936,73 @@ function addLeaveRecordLP(){
     // 只有當使用者調整成「非整天（09:30~18:00）」的區間時才視為半天／自訂時段，否則維持預設整天不特別標記
     if(st && et && (st !== '09:30' || et !== '18:00')){ startTime = st; endTime = et; }
   }
-  addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime);
+  if(lpEditingId){
+    updateLeaveRecordById(lpEditingId, eng, date, fullType, startTime, endTime);
+  }else{
+    addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime);
+  }
+}
+
+// 依 id 直接更新一筆休假紀錄（可修改日期／工程師／類型／時段），並自動同步派工表
+function updateLeaveRecordById(id, eng, date, fullType, startTime, endTime){
+  eng = normalizeEngineerName(eng || '');
+  if(!date){ alert('請選擇休假日期'); return; }
+  if(!eng){ alert('請選擇工程師'); return; }
+  const rec = leaveRecords.find(r=>Number(r.id)===Number(id));
+  if(!rec){ alert('找不到這筆紀錄，可能已被刪除。'); cancelEditLeaveRecordLP(); return; }
+  rec.engineer = eng;
+  rec.date = date;
+  rec.type = fullType;
+  rec.updatedAt = new Date().toISOString();
+  if(startTime) rec.startTime = startTime; else delete rec.startTime;
+  if(endTime) rec.endTime = endTime; else delete rec.endTime;
+  upsertLeaveJob(rec);
+  saveLeaveRecords();
+  saveJobs();
+  renderLeaveList();
+  renderLeaveListLP();
+  renderSchedule();
+  renderJobList();
+  renderMyTodayPanel();
+  cancelEditLeaveRecordLP();
+  alert('已更新休假紀錄，並同步更新派工表。');
+}
+
+// 點清單上的「編輯」：把該筆資料帶入表單，切換成編輯模式
+function editLeaveRecordLP(id){
+  const rec = leaveRecords.find(r=>Number(r.id)===Number(id));
+  if(!rec) return;
+  lpEditingId = Number(id);
+
+  const engEl = document.getElementById('lpEngineer'); if(engEl) engEl.value = rec.engineer;
+  const dateEl = document.getElementById('lpDate'); if(dateEl) dateEl.value = rec.date;
+
+  let baseType = rec.type, region = '北部';
+  const m = String(rec.type||'').match(/^出差（(.+)）$/);
+  if(m){ baseType = '出差'; region = m[1]; }
+  const typeEl = document.getElementById('lpType'); if(typeEl) typeEl.value = baseType;
+  const regionEl = document.getElementById('lpTripRegion'); if(regionEl) regionEl.value = region;
+
+  lpTypeChange();
+
+  const stEl = document.getElementById('lpStartTime');
+  const etEl = document.getElementById('lpEndTime');
+  if(stEl) stEl.value = rec.startTime || '09:30';
+  if(etEl) etEl.value = rec.endTime || '18:00';
+
+  const addBtn = document.getElementById('lpAddBtn'); if(addBtn) addBtn.textContent = '更新';
+  const cancelBtn = document.getElementById('lpCancelEditBtn'); if(cancelBtn) cancelBtn.style.display = 'inline-block';
+  const hint = document.getElementById('lpEditingHint'); if(hint) hint.style.display = 'inline';
+
+  const card = document.querySelector('#leavePage .form-card');
+  if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function cancelEditLeaveRecordLP(){
+  lpEditingId = null;
+  const addBtn = document.getElementById('lpAddBtn'); if(addBtn) addBtn.textContent = '新增';
+  const cancelBtn = document.getElementById('lpCancelEditBtn'); if(cancelBtn) cancelBtn.style.display = 'none';
+  const hint = document.getElementById('lpEditingHint'); if(hint) hint.style.display = 'none';
 }
 
 function renderLeaveListLP(){
@@ -5981,7 +6051,8 @@ function renderLeaveListLP(){
       + '<span class="leave-badge ' + cls + '">' + escapeHtml(r.type) + '</span>'
       + '<span style="font-weight:bold">' + escapeHtml(r.engineer) + '</span>'
       + '<span>' + escapeHtml(r.date) + timeTag + '</span>'
-      + '<button onclick="deleteLeaveRecordLP(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto;color:#fff;border:none;border-radius:4px;cursor:pointer">刪除</button>'
+      + '<button onclick="editLeaveRecordLP(' + r.id + ')" style="background:#2f80ed;padding:3px 9px;font-size:12px;margin-left:auto;color:#fff;border:none;border-radius:4px;cursor:pointer">編輯</button>'
+      + '<button onclick="deleteLeaveRecordLP(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;color:#fff;border:none;border-radius:4px;cursor:pointer">刪除</button>'
       + '</div>';
   }).join('');
   renderTripStatsTable();
