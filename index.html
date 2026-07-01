@@ -1693,6 +1693,14 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       </div>
       <button onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;">
+      <label style="font-size:13px;font-weight:bold;color:#333;">🔍 出差地區篩選：</label>
+      <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
+        <option value="">全部（不篩選）</option>
+        <option value="北部">🚗 只看北部出差</option>
+        <option value="南部">🚗 只看南部出差</option>
+      </select>
+    </div>
     <div id="lpList"></div>
   </div>
 </div>
@@ -5814,10 +5822,19 @@ function addLeaveRecordLP(){
 
 function renderLeaveListLP(){
   const box = document.getElementById('lpList'); if(!box) return;
-  if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
+  const regionFilter = (document.getElementById('lpRegionFilter')||{}).value || '';
+  const filtered = regionFilter
+    ? leaveRecords.filter(r => r.type && String(r.type).indexOf('出差（'+regionFilter+'）') > -1)
+    : leaveRecords;
+  if(!filtered.length){
+    box.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">'
+      + (regionFilter ? ('尚無「'+regionFilter+'出差」紀錄。') : '尚無休假紀錄。')
+      + '</div>';
+    return;
+  }
   const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
   const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
-  box.innerHTML = leaveRecords.map(r=>{
+  box.innerHTML = filtered.map(r=>{
     const cls = getTripCls(r.type);
     return '<div class="leave-item">'
       + '<span class="leave-badge ' + cls + '">' + escapeHtml(r.type) + '</span>'
