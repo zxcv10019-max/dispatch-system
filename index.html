@@ -1998,9 +1998,13 @@ async function saveCloudNow(){
     // 刻意清空（清空按鈕／匯入時選擇覆蓋）會先設定 window.__allowDataShrink = true 來放行。
     if(!window.__allowDataShrink){
       const remoteCountsByType = {};
+      const remoteContactLogEntries = [];
       oldSnap.docs.forEach(d=>{
         const dd = d.data() || {};
-        if(Array.isArray(dd.items)) remoteCountsByType[dd.type] = (remoteCountsByType[dd.type]||0) + dd.items.length;
+        if(Array.isArray(dd.items)){
+          remoteCountsByType[dd.type] = (remoteCountsByType[dd.type]||0) + dd.items.length;
+          if(dd.type === 'contactlogs') dd.items.forEach(e=>remoteContactLogEntries.push(e));
+        }
       });
       const shrinkChecks = [
         {label:"派工", remote: remoteCountsByType["jobs"]||0, local:(jobs||[]).length},
@@ -2008,6 +2012,23 @@ async function saveCloudNow(){
         {label:"換芯名單", remote: remoteCountsByType["cartridge"]||0, local:(typeof cartridgeData!=='undefined'?(cartridgeData||[]).length:0)}
       ];
       const dangerous = shrinkChecks.find(c=> c.remote >= 5 && c.local === 0);
+
+      // 若雲端有聯絡紀錄但本機沒有（或比雲端少），先把雲端的合併到本機再上傳，避免覆蓋掉雲端較豐富的聯絡紀錄
+      if(remoteContactLogEntries.length > 0 && typeof contactLogs !== 'undefined'){
+        var localLogTotal = 0;
+        Object.keys(contactLogs||{}).forEach(function(k){ if(Array.isArray(contactLogs[k])) localLogTotal += contactLogs[k].length; });
+        if(localLogTotal < remoteContactLogEntries.length){
+          remoteContactLogEntries.forEach(function(entry){
+            if(!Array.isArray(entry) || entry.length !== 2) return;
+            var key = entry[0], remLogs = entry[1];
+            if(!Array.isArray(remLogs)) return;
+            if(!contactLogs[key] || contactLogs[key].length < remLogs.length){
+              contactLogs[key] = remLogs;
+            }
+          });
+          try{ localStorage.setItem(CONTACT_LOGS_KEY, JSON.stringify(contactLogs)); }catch(e){}
+        }
+      }
       if(dangerous){
         savingCloud = false;
         const msg = `⚠️ 已阻擋一次可能誤刪雲端資料的上傳：本機「${dangerous.label}」目前是 0 筆，但雲端原本有 ${dangerous.remote} 筆。\n為避免覆蓋掉大家的資料，這次上傳已自動取消。\n\n請先重新整理頁面，確認本機資料正常顯示後再操作；若是刻意要清空，請改用畫面上的「清空」按鈕。`;
@@ -2234,13 +2255,21 @@ function startCloudSync(){
         const data = doc.data() || {};
         // 如果共用雲端還是空的，而本機有資料且有編輯權，優先把本機資料補上雲端
         // 注意：localDirty 不列為必要條件，頁面剛載入時也要能自動補上
+        // 同時檢查 contactLogsCount：雲端有聯絡紀錄但 cartridgeData=0 時，不能用本機空的聯絡紀錄去覆蓋
         const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0) + Number(data.leaveRecordsCount || 0) + Number(data.cartridgeDataCount || 0);
+        const remoteHasContactLogs = Number(data.contactLogsCount || 0) > 0;
         const localCartridgeLen = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
+        const localContactLogsLen = (typeof contactLogs!=='undefined' && contactLogs) ? Object.keys(contactLogs).length : 0;
         const localCount = (jobs||[]).length + (customers||[]).length + (leaveRecords||[]).length + localCartridgeLen;
-        if(remoteCount === 0 && localCount > 0 && canEdit()){
-          window.__allowDataShrink = false; // 本機有資料所以不需要解鎖，正常上傳即可
+        // 只有在「雲端完全沒有任何資料（含聯絡紀錄）」且「本機有資料」時，才自動補上
+        if(remoteCount === 0 && !remoteHasContactLogs && localCount > 0 && canEdit()){
+          window.__allowDataShrink = false;
           await saveCloudNow();
           return;
+        }
+        // 若雲端有聯絡紀錄但本機沒有，先把雲端資料拉下來（不做自動上傳，避免覆蓋掉雲端的聯絡紀錄）
+        if(remoteHasContactLogs && localContactLogsLen === 0 && remoteCount === 0 && localCount > 0 && canEdit()){
+          // 等 applyRemoteData 把聯絡紀錄同步到本機後，再讓使用者決定是否上傳換芯資料
         }
         await applyRemoteData(data);
         setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
