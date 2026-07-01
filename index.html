@@ -1809,6 +1809,7 @@ let currentUser=null;
 let cloudUnsubscribe=null;
 let cloudFallbackPollTimer=null;
 let isApplyingRemote=false;
+window.__allowDataShrink = false; // 刻意清空/覆蓋匯入時會暫時設為 true，放行上傳清空後的資料
 let cloudSaveTimer=null;
 let ignoreRemoteUntil=0; // 匯入後短時間內避免雲端舊資料覆蓋本機新匯入資料
 let importProtectToken=""; // 匯入後用來辨識雲端是否已收到最新資料
@@ -1992,6 +1993,30 @@ async function saveCloudNow(){
   const token = importProtectToken || ("save_" + Date.now());
   try{
     const oldSnap = await chunks.get();
+
+    // 安全防呆：上傳前比對本機 vs 雲端既有筆數，避免本機資料還沒載入完成（或誤觸）就把雲端整批洗成空的。
+    // 刻意清空（清空按鈕／匯入時選擇覆蓋）會先設定 window.__allowDataShrink = true 來放行。
+    if(!window.__allowDataShrink){
+      const remoteCountsByType = {};
+      oldSnap.docs.forEach(d=>{
+        const dd = d.data() || {};
+        if(Array.isArray(dd.items)) remoteCountsByType[dd.type] = (remoteCountsByType[dd.type]||0) + dd.items.length;
+      });
+      const shrinkChecks = [
+        {label:"派工", remote: remoteCountsByType["jobs"]||0, local:(jobs||[]).length},
+        {label:"客戶", remote: remoteCountsByType["customers"]||0, local:(customers||[]).length},
+        {label:"換芯名單", remote: remoteCountsByType["cartridge"]||0, local:(typeof cartridgeData!=='undefined'?(cartridgeData||[]).length:0)}
+      ];
+      const dangerous = shrinkChecks.find(c=> c.remote >= 5 && c.local === 0);
+      if(dangerous){
+        savingCloud = false;
+        const msg = `⚠️ 已阻擋一次可能誤刪雲端資料的上傳：本機「${dangerous.label}」目前是 0 筆，但雲端原本有 ${dangerous.remote} 筆。\n為避免覆蓋掉大家的資料，這次上傳已自動取消。\n\n請先重新整理頁面，確認本機資料正常顯示後再操作；若是刻意要清空，請改用畫面上的「清空」按鈕。`;
+        setSyncStatus("已阻擋可能誤刪雲端資料的上傳，請重新整理頁面", "err");
+        try{ alert(msg); }catch(_){}
+        return false;
+      }
+    }
+
     let batch = firebaseDb.batch();
     let writes = 0;
     async function commitIfNeeded(force=false){
@@ -2019,6 +2044,7 @@ async function saveCloudNow(){
     customerChunks.forEach((items,i)=>{ batch.set(chunks.doc(`customers_${String(i).padStart(4,"0")}`), {type:"customers", index:i, items}); writes++; });
     cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
     contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
+
 
     batch.set(root, {
       chunked:true,
@@ -2127,15 +2153,16 @@ async function applyRemoteData(data){
   const localContactLogsCount = (typeof contactLogs!=='undefined' && contactLogs) ? countContactLogEntries(contactLogs) : 0;
   const remoteContactLogsCount = countContactLogEntries(remoteContactLogs);
 
-  // 只要本機有尚未確認的變更，且遠端資料比較少，就不覆蓋。
+  // 只要本機有尚未確認的變更，且遠端某項資料比較少，就不覆蓋該資料（各自獨立判斷，不整批跳過）。
   // 這是避免「剛匯入 1770 筆 → 遠端舊空資料回來 → 畫面跳空」的核心保護。
   if(localDirty){
-    const remoteLooksOlder = (remoteJobs && remoteJobsCount + 3 < localJobsCount) ||
-                             (remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) ||
-                             (remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) ||
-                             (remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount) ||
-                             (remoteContactLogs && remoteContactLogsCount < localContactLogsCount);
-    if(remoteLooksOlder){
+    if(remoteJobs && remoteJobsCount + 3 < localJobsCount) remoteJobs = null;
+    if(remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) remoteCustomers = null;
+    if(remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) remoteLeaveRecords = null;
+    if(remoteCartridgeData && remoteCartridgeCount + 5 < localCartridgeCount) remoteCartridgeData = null;
+    if(remoteContactLogs && remoteContactLogsCount < localContactLogsCount) remoteContactLogs = null;
+    // 若所有資料都被保護掉，才真正跳過這次快照（等自己的上傳完成後雲端會回送正確版本）
+    if(!remoteJobs && !remoteCustomers && !remoteLeaveRecords && !remoteCartridgeData && !remoteContactLogs){
       setSyncStatus("保留剛匯入的本機資料，等待雲端同步…", "wait");
       return;
     }
@@ -3728,6 +3755,7 @@ function clearAllJobs(){
   if(!requireEdit("清空派工")) return;
   if(confirm("確定清空全部派工資料？")){
     writeLog("clear",{type:"派工",count:jobs.length});
+    window.__allowDataShrink = true; setTimeout(function(){ window.__allowDataShrink=false; }, 3000);
     jobs=[];saveJobs();renderSchedule();renderJobList();
   }
 }
@@ -3879,7 +3907,7 @@ function restoreBackup(event){
 
 function clearCustomers(){
   if(!requireEdit("清空客戶")) return;
-  if(confirm("確定清空全部客戶資料？")){customers=[];saveCustomers();renderCustomers();document.getElementById("importStatus").innerHTML="已清空客戶資料。"}
+  if(confirm("確定清空全部客戶資料？")){window.__allowDataShrink=true; setTimeout(function(){window.__allowDataShrink=false;},3000); customers=[];saveCustomers();renderCustomers();document.getElementById("importStatus").innerHTML="已清空客戶資料。"}
 }
 function updateCustomerCodeList(){
   const list=document.getElementById("customerCodeList");
@@ -7272,6 +7300,7 @@ window.importCartridgeExcel = function(event){
       }
 
       // 收集舊換芯名單建立的派工 id，一併刪除
+      window.__allowDataShrink = true; setTimeout(function(){ window.__allowDataShrink=false; }, 3000);
       var jobIdsToRemove = {};
       cartridgeData.forEach(function(r){
         if(r._jobId) jobIdsToRemove[r._jobId] = true;
@@ -7330,6 +7359,7 @@ window.exportCartridgeExcel=function(){
 
   window.clearCartridgeData=function(){
   if(!confirm('確定清空換芯名單？這也會一併清空所有聯絡紀錄，以及由換芯名單安排出去的派工。')) return;
+  window.__allowDataShrink = true; setTimeout(function(){ window.__allowDataShrink=false; }, 3000);
 
   // 收集所有由換芯名單建立的派工 id，連同 jobs 一併刪除
   var jobIdsToRemove = {};
