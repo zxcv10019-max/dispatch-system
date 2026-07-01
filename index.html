@@ -3743,7 +3743,8 @@ function renderSchedule(){
         const holdCls = activeJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
         const tripType = holdCls ? "" : getEngineerTripRegion(dateStr, engineer);
         const tripCls = tripType ? "trip-slot-active" : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
+        const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))) ? "leave-slot-active" : "";
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -7135,6 +7136,12 @@ body.cartridge-scroll-mode {
 .week-schedule-table td.slot.trip-slot-active,
 .week-schedule-table td.slot.job-slot-active.trip-slot-active{
   background:#ffb74d !important;
+}
+
+/* 請假格子變色：提高權重，確保蓋過原本派工格的淡黃色底色 */
+.week-schedule-table td.slot.leave-slot-active,
+.week-schedule-table td.slot.job-slot-active.leave-slot-active{
+  background:#e1bee7 !important;
 }
 </style>
 <div id="contactLogModal">
