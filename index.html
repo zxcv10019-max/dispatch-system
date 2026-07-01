@@ -1714,8 +1714,8 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
         </select>
       </div>
     </div>
-    <div id="tripStatsTableWrap" style="border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);border:1px solid #e5e9f0;">
-      <table id="tripStatsTable" style="border-collapse:collapse;width:100%;font-size:14px;"></table>
+    <div id="tripStatsTableWrap" style="border-radius:12px;overflow-x:auto;overflow-y:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);border:1px solid #e5e9f0;">
+      <table id="tripStatsTable" style="border-collapse:collapse;width:100%;min-width:560px;font-size:14px;"></table>
     </div>
   </div>
 </div>
@@ -5898,7 +5898,11 @@ function renderTripStatsTable(){
   }
   const selMonth = monthSel ? monthSel.value : '';
 
+  const engList = (typeof engineers!=='undefined' && Array.isArray(engineers) && engineers.length)
+    ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
+
   const counts = {}; // eng -> {north, south}
+  engList.forEach(function(eng){ counts[eng] = {north:0, south:0}; });
   allTrips.forEach(function(r){
     if(selMonth && String(r.date||'').slice(0,7) !== selMonth) return;
     const t = String(r.type||'');
@@ -5911,7 +5915,11 @@ function renderTripStatsTable(){
     const c = counts[eng];
     return {eng:eng, north:c.north, south:c.south, total:c.north+c.south};
   });
-  rows.sort(function(a,b){ return b.total - a.total; });
+  // 依總計數由多到少排序；總計相同則依工程師清單原始順序排列
+  rows.sort(function(a,b){
+    if(b.total !== a.total) return b.total - a.total;
+    return engList.indexOf(a.eng) - engList.indexOf(b.eng);
+  });
 
   if(!rows.length){
     box.innerHTML = '<tr><td style="padding:26px;text-align:center;color:#999;font-size:13px;">'
