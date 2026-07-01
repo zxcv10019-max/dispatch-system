@@ -655,10 +655,11 @@ body{
 }
 
 
-/* 非派工表頁面可上下滑動：新增派工資料 / 客戶資料 / 派工明細 */
+/* 非派工表頁面可上下滑動：新增派工資料 / 客戶資料 / 派工明細 / 休假管理 */
 #dispatchPage.page.active,
 #customerPage.page.active,
-#listPage.page.active{
+#listPage.page.active,
+#leavePage.page.active{
   display:block !important;
   flex:1 1 auto !important;
   min-height:0 !important;
@@ -1703,6 +1704,14 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
           <option value="北部">北部</option>
           <option value="南部">南部</option>
         </select>
+      </div>
+      <div id="lpLeaveTimeWrap" style="display:none">
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">請假時間（可留空＝整天）</label>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="time" id="lpStartTime" value="09:30" style="padding:7px 8px;font-size:13px">
+          <span style="font-size:13px;color:#666;">～</span>
+          <input type="time" id="lpEndTime" value="18:00" style="padding:7px 8px;font-size:13px">
+        </div>
       </div>
       <button onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
     </div>
@@ -5731,15 +5740,28 @@ try{ leaveRecords = normalizeLeaveRecords(JSON.parse(localStorage.getItem(LEAVE_
 
 // 修補：確保每一筆休假／出差紀錄在派工表(jobs)裡都有對應的卡片
 // （避免舊資料在「同步派工表」功能上線前就已存在，導致派工表上看不到）
+// 同時清掉「孤兒」休假卡片：例如在別的裝置/帳號刪除了休假紀錄，
+// 但雲端同步回來的 jobs 清單裡仍殘留舊卡片，導致刪除後畫面沒有真的消失。
 function syncAllLeaveJobs(){
-  if(!Array.isArray(leaveRecords) || !leaveRecords.length) return;
   let changed = false;
-  leaveRecords.forEach(function(rec){
+
+  // 1) 補建缺少的休假／出差卡片
+  (leaveRecords||[]).forEach(function(rec){
     const before = jobs.length;
     const beforeIdx = jobs.findIndex(j=>Number(j.leaveId)===Number(rec.id) || isSameLegacyLeaveJob(j, rec));
     upsertLeaveJob(rec);
     if(beforeIdx < 0 && jobs.length > before) changed = true;
   });
+
+  // 2) 移除找不到對應休假紀錄的孤兒卡片
+  const validIds = new Set((leaveRecords||[]).map(function(r){ return Number(r.id); }));
+  const beforeCount = jobs.length;
+  jobs = jobs.filter(function(j){
+    if(!j || !j.isLeaveJob) return true;
+    return validIds.has(Number(j.leaveId));
+  });
+  if(jobs.length !== beforeCount) changed = true;
+
   if(changed) saveJobs();
 }
 syncAllLeaveJobs();
@@ -5747,7 +5769,7 @@ syncAllLeaveJobs();
 function normalizeLeaveRecords(list){
   return (Array.isArray(list)?list:[]).map(function(r){
     const id = Number(r.id || r.leaveId || Date.now() + Math.floor(Math.random()*9999));
-    return {
+    const out = {
       id,
       engineer: normalizeEngineerName(r.engineer || ''),
       date: String(r.date || ''),
@@ -5755,6 +5777,10 @@ function normalizeLeaveRecords(list){
       createdAt: r.createdAt || new Date().toISOString(),
       updatedAt: r.updatedAt || r.createdAt || new Date().toISOString()
     };
+    // 請假時段（可選）：若有指定開始/結束時間才保留，否則預設整天
+    if(r.startTime) out.startTime = String(r.startTime);
+    if(r.endTime) out.endTime = String(r.endTime);
+    return out;
   }).filter(r=>r.engineer && r.date && r.type)
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.engineer).localeCompare(String(b.engineer)));
 }
@@ -5769,13 +5795,15 @@ function saveLeaveRecords(){
 function makeLeaveJob(rec){
   const eng = normalizeEngineerName(rec.engineer || '');
   const fullType = String(rec.type || '');
+  const st = rec.startTime || '09:30';
+  const et = rec.endTime || '18:00';
   return {
     id: Date.now() + Math.floor(Math.random()*9999),
     leaveId: Number(rec.id),
     isLeaveJob: true,
     engineer: eng,
     date: rec.date,
-    startTime:'09:30', time:'09:30', endTime:'18:00',
+    startTime:st, time:st, endTime:et,
     codeName: eng + ' ' + fullType,
     customerCode:'', customerName: eng,
     workItem: fullType, workContent: fullType,
@@ -5811,7 +5839,7 @@ function deleteLeaveJobByRecord(rec){
   return jobs.length !== before;
 }
 
-function addOrUpdateLeaveRecord(eng, date, fullType){
+function addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime){
   eng = normalizeEngineerName(eng || '');
   if(!date){ alert('請選擇休假日期'); return; }
   if(!eng){ alert('請選擇工程師'); return; }
@@ -5820,9 +5848,13 @@ function addOrUpdateLeaveRecord(eng, date, fullType){
   if(existing){
     existing.type = fullType;
     existing.updatedAt = new Date().toISOString();
+    if(startTime) existing.startTime = startTime; else delete existing.startTime;
+    if(endTime) existing.endTime = endTime; else delete existing.endTime;
     rec = existing;
   }else{
     rec = { id: Date.now() + Math.floor(Math.random()*9999), engineer: eng, date, type: fullType, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    if(startTime) rec.startTime = startTime;
+    if(endTime) rec.endTime = endTime;
     leaveRecords.push(rec);
   }
   upsertLeaveJob(rec);
@@ -5880,6 +5912,8 @@ function lpTypeChange(){
   const t = (document.getElementById('lpType')||{}).value;
   const area = document.getElementById('lpTripArea');
   if(area) area.style.display = (t==='出差') ? 'block' : 'none';
+  const timeWrap = document.getElementById('lpLeaveTimeWrap');
+  if(timeWrap) timeWrap.style.display = (t==='請假') ? 'block' : 'none';
 }
 
 function addLeaveRecordLP(){
@@ -5888,7 +5922,16 @@ function addLeaveRecordLP(){
   const type = (document.getElementById('lpType')||{}).value;
   const region = (document.getElementById('lpTripRegion')||{}).value || '北部';
   const fullType = (type==='出差') ? '出差（'+region+'）' : type;
-  addOrUpdateLeaveRecord(eng, date, fullType);
+  let startTime = '', endTime = '';
+  if(type==='請假'){
+    const stEl = document.getElementById('lpStartTime');
+    const etEl = document.getElementById('lpEndTime');
+    const st = stEl ? stEl.value : '';
+    const et = etEl ? etEl.value : '';
+    // 只有當使用者調整成「非整天（09:30~18:00）」的區間時才視為半天／自訂時段，否則維持預設整天不特別標記
+    if(st && et && (st !== '09:30' || et !== '18:00')){ startTime = st; endTime = et; }
+  }
+  addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime);
 }
 
 function renderLeaveListLP(){
@@ -5930,10 +5973,13 @@ function renderLeaveListLP(){
   const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
   box.innerHTML = filtered.map(r=>{
     const cls = getTripCls(r.type);
+    const timeTag = (r.startTime && r.endTime)
+      ? ' <span style="font-size:11px;color:#e65100;background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:1px 7px;">⏰ '+escapeHtml(r.startTime)+'～'+escapeHtml(r.endTime)+'</span>'
+      : '';
     return '<div class="leave-item">'
       + '<span class="leave-badge ' + cls + '">' + escapeHtml(r.type) + '</span>'
       + '<span style="font-weight:bold">' + escapeHtml(r.engineer) + '</span>'
-      + '<span>' + escapeHtml(r.date) + '</span>'
+      + '<span>' + escapeHtml(r.date) + timeTag + '</span>'
       + '<button onclick="deleteLeaveRecordLP(' + r.id + ')" style="background:#d63031;padding:3px 9px;font-size:12px;margin-left:auto;color:#fff;border:none;border-radius:4px;cursor:pointer">刪除</button>'
       + '</div>';
   }).join('');
