@@ -2787,7 +2787,7 @@ function showPage(pageId){
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
   if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgeTable();}
-  if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");renderLeaveListLP();}
+  if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");if(typeof lpTypeChange==='function')lpTypeChange();renderLeaveListLP();}
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
     if(tab) tab.classList.add("active");
@@ -4895,6 +4895,7 @@ renderCityChecks();
 updateCustomerCodeList();
 enableDragScroll();
 renderSchedule();
+if(typeof lpTypeChange==='function') lpTypeChange();
 renderCustomers();
 renderJobList();
 
