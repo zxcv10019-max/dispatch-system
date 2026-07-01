@@ -1693,12 +1693,16 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       </div>
       <button onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;">
+    <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
       <label style="font-size:13px;font-weight:bold;color:#333;">🔍 出差地區篩選：</label>
       <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
         <option value="">全部（不篩選）</option>
         <option value="北部">🚗 只看北部出差</option>
         <option value="南部">🚗 只看南部出差</option>
+      </select>
+      <label style="font-size:13px;font-weight:bold;color:#333;margin-left:8px;">📅 月份篩選：</label>
+      <select id="lpMonthFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
+        <option value="">全部月份</option>
       </select>
     </div>
     <div id="lpList"></div>
@@ -5851,12 +5855,34 @@ function addLeaveRecordLP(){
 function renderLeaveListLP(){
   const box = document.getElementById('lpList'); if(!box) return;
   const regionFilter = (document.getElementById('lpRegionFilter')||{}).value || '';
-  const filtered = regionFilter
+
+  // 動態產生月份篩選選項（依所有休假紀錄的日期）
+  const monthSel = document.getElementById('lpMonthFilter');
+  if(monthSel){
+    const months = Array.from(new Set((leaveRecords||[]).map(function(r){
+      return String(r.date||'').slice(0,7);
+    }).filter(Boolean))).sort().reverse();
+    const prevVal = monthSel.value;
+    monthSel.innerHTML = '<option value="">全部月份</option>' + months.map(function(m){
+      const label = m.replace('-', ' 年 ') + ' 月';
+      return '<option value="'+m+'">'+label+'</option>';
+    }).join('');
+    if(months.indexOf(prevVal) > -1) monthSel.value = prevVal;
+  }
+  const monthFilter = monthSel ? monthSel.value : '';
+
+  let filtered = regionFilter
     ? leaveRecords.filter(r => r.type && String(r.type).indexOf('出差（'+regionFilter+'）') > -1)
     : leaveRecords;
+  if(monthFilter){
+    filtered = filtered.filter(r => String(r.date||'').slice(0,7) === monthFilter);
+  }
   if(!filtered.length){
+    const parts = [];
+    if(regionFilter) parts.push(regionFilter+'出差');
+    if(monthFilter) parts.push(monthFilter.replace('-',' 年 ')+' 月');
     box.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">'
-      + (regionFilter ? ('尚無「'+regionFilter+'出差」紀錄。') : '尚無休假紀錄。')
+      + (parts.length ? ('尚無「'+parts.join('、')+'」紀錄。') : '尚無休假紀錄。')
       + '</div>';
     renderTripStatsTable();
     return;
