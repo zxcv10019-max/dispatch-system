@@ -2450,6 +2450,7 @@ async function applyRemoteData(data){
   if(remoteJobs) jobs = remoteJobs;
   if(remoteCustomers){ customers = remoteCustomers; sortCustomersByCode(); }
   if(remoteLeaveRecords) leaveRecords = normalizeLeaveRecords(remoteLeaveRecords);
+  if(typeof syncAllLeaveJobs==='function') syncAllLeaveJobs();
   if(remoteCartridgeData){
     const prevCount = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
     cartridgeData = remoteCartridgeData;
@@ -5704,6 +5705,21 @@ function renderCompletionStats(){
 const LEAVE_KEY = 'admin_leave_records';
 let leaveRecords = [];
 try{ leaveRecords = normalizeLeaveRecords(JSON.parse(localStorage.getItem(LEAVE_KEY) || '[]')); }catch(e){ leaveRecords = []; }
+
+// 修補：確保每一筆休假／出差紀錄在派工表(jobs)裡都有對應的卡片
+// （避免舊資料在「同步派工表」功能上線前就已存在，導致派工表上看不到）
+function syncAllLeaveJobs(){
+  if(!Array.isArray(leaveRecords) || !leaveRecords.length) return;
+  let changed = false;
+  leaveRecords.forEach(function(rec){
+    const before = jobs.length;
+    const beforeIdx = jobs.findIndex(j=>Number(j.leaveId)===Number(rec.id) || isSameLegacyLeaveJob(j, rec));
+    upsertLeaveJob(rec);
+    if(beforeIdx < 0 && jobs.length > before) changed = true;
+  });
+  if(changed) saveJobs();
+}
+syncAllLeaveJobs();
 
 function normalizeLeaveRecords(list){
   return (Array.isArray(list)?list:[]).map(function(r){
