@@ -7124,12 +7124,59 @@ function renderNoChangeList(){
       + '<td style="padding:7px 10px;max-width:200px;">'+addrCell+'</td>'
       + '<td style="padding:7px 10px;text-align:center;white-space:nowrap;font-weight:bold;color:#b33939;">'+g.dates.map(function(d){return escapeHtml(d);}).join('<br>')+'</td>'
       + '<td style="padding:7px 10px;font-size:12px;color:#555;">'+note+'</td>'
-      + '<td style="padding:7px 10px;"><button onclick="openContactLog(\''+escapeHtml(key)+'\')" style="background:#8e44ad;color:#fff;padding:4px 10px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">📋 查看紀錄</button></td>'
+      + '<td style="padding:7px 10px;white-space:nowrap;">'
+      + '<button onclick="openContactLog(\''+escapeHtml(key)+'\')" style="background:#8e44ad;color:#fff;padding:4px 10px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;margin-right:6px;">📋 查看紀錄</button>'
+      + '<button onclick="restoreNoChangeCustomer(\''+escapeHtml(key)+'\')" style="background:#218c74;color:#fff;padding:4px 10px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">↩ 加回換芯名單</button>'
+      + '</td>'
       + '</tr>';
   });
   html += '</tbody>';
   t.innerHTML = html;
 }
+
+
+/* ── 不更換名單：手動加回換芯名單 ── */
+window.restoreNoChangeCustomer = async function(custKey){
+  if(!custKey) return;
+  if(!confirm('確定要把 '+custKey+' 加回換芯名單嗎？\n這會清除該客戶的「不更換」狀態。')) return;
+
+  var changed = false;
+  cartridgeData.forEach(function(r, i){
+    var rKey = r.客戶編號 || ('__'+i);
+    if(rKey === custKey && r._excluded){
+      delete r._excluded;
+      changed = true;
+    }
+  });
+
+  // 同步清除該客戶聯絡紀錄中「不更換」的標記，避免下次 render 又被判定為不更換
+  if(contactLogs && contactLogs[custKey] && Array.isArray(contactLogs[custKey])){
+    var beforeLen = contactLogs[custKey].length;
+    contactLogs[custKey] = contactLogs[custKey].filter(function(l){ return l.postponeTo !== '__NO_CHANGE__'; });
+    if(contactLogs[custKey].length !== beforeLen) changed = true;
+    if(!contactLogs[custKey].length) delete contactLogs[custKey];
+  }
+
+  window.contactLogs = contactLogs;
+  if(changed){
+    saveCD();
+    saveContactLogs();
+    if(typeof localDirty !== 'undefined') localDirty = true;
+  }
+
+  renderCartridgeTable();
+
+  if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
+  var syncOk = true;
+  if(typeof saveCartridgeAndLogsNow === 'function'){
+    syncOk = await saveCartridgeAndLogsNow();
+  }
+  if(syncOk === false){
+    showCartridgeToast('⚠️ 已加回本機換芯名單，但雲端同步失敗，請檢查網路後再試一次');
+  }else{
+    showCartridgeToast('✅ 已加回換芯名單並同步');
+  }
+};
 
 /* ── 開啟彈窗 ── */
 window.openCartridgeModal = function(idx){
@@ -7430,13 +7477,29 @@ window.deleteContactLogEntry = async function(idx){
   }
 
   list.splice(idx,1);
+
+  // 自動加回換芯名單：
+  // 舊版本的不更換紀錄可能沒有 _exSnapshot，刪除紀錄後只刪到 contactLogs，
+  // 但 cartridgeData 裡的 _excluded 還留著，所以會繼續卡在「不更換名單」。
+  // 因此刪除後只要該客戶已經沒有任何 __NO_CHANGE__ 紀錄，就自動清掉 _excluded。
+  var stillHasNoChange = list.some(function(l){ return l && l.postponeTo === '__NO_CHANGE__'; });
+  if(!stillHasNoChange){
+    cartridgeData.forEach(function(r, i){
+      var rKey = r.客戶編號 || ('__'+i);
+      if(rKey === _contactLogCustKey && r._excluded){
+        delete r._excluded;
+      }
+    });
+    saveCD();
+  }
+
   if(!list.length) delete contactLogs[_contactLogCustKey];
   saveContactLogs();
   if(typeof localDirty!=='undefined') localDirty = true;
   renderContactLogList();
   renderCartridgeTable();
   var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
-    : (entry && entry._exSnapshot && entry._exSnapshot.length) ? '並重新加回換芯名單' : '';
+    : ((entry && entry._exSnapshot && entry._exSnapshot.length) || !stillHasNoChange) ? '並重新加回換芯名單' : '';
 
   // 強制立即同步雲端，避免使用者太快關閉/重新整理造成還原動作遺失
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
