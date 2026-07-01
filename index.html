@@ -2137,6 +2137,85 @@ async function saveCloudNow(){
   }
 }
 
+// ── 輕量同步：只上傳「換芯名單」與「聯絡紀錄」，跳過重寫派工/客戶資料 ──
+// saveCloudNow() 每次都會把 jobs / customers / cartridge / contactLogs 全部刪掉重寫，
+// 資料量大時會明顯變慢。但「標記不更換／延後月份／刪除聯絡紀錄」這幾個動作
+// 只會改到換芯名單和聯絡紀錄，所以改用這個只動兩種分塊的版本，上傳速度快很多。
+async function saveCartridgeAndLogsNow(){
+  if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
+  if(!hasAccess()){
+    setSyncStatus(`已登入：${currentUser.email}（未授權）`, "err");
+    return;
+  }
+  if(!canEdit()){
+    setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}，不可編輯）`, "ok");
+    return;
+  }
+  if(isApplyingRemote) return;
+  // 保險：換芯名單本機是空的不太合理，改走完整同步（含防呆檢查），避免誤刪雲端資料
+  if(!Array.isArray(cartridgeData) || cartridgeData.length===0){
+    return await saveCloudNow();
+  }
+  const root=sharedRootRef();
+  const chunks=chunksColRef();
+  if(!root || !chunks) return;
+  setSyncStatus("同步中…", "wait");
+  savingCloud = true;
+  showSyncLock();
+  const token = importProtectToken || ("save_" + Date.now());
+  try{
+    // 只查「cartridge」「contactlogs」這兩種分塊，不用讀 jobs/customers，省下一大段資料傳輸時間
+    const oldSnap = await chunks.where('type','in',['cartridge','contactlogs']).get();
+
+    let batch = firebaseDb.batch();
+    let writes = 0;
+    async function commitIfNeeded(force=false){
+      if(writes >= 430 || (force && writes>0)){
+        await batch.commit();
+        batch = firebaseDb.batch();
+        writes = 0;
+      }
+    }
+    oldSnap.docs.forEach(d=>{ batch.delete(d.ref); writes++; });
+    await commitIfNeeded();
+
+    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
+    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
+    const contactLogEntries = stripUndefinedDeep(
+      (typeof contactLogs!=='undefined' && contactLogs) ? Object.entries(contactLogs) : []
+    );
+    const contactLogChunks = chunkArray(contactLogEntries, 150);
+
+    cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
+    contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
+
+    // 只 merge 更新換芯/聯絡紀錄相關欄位，不動 jobsCount/customersCount 等其他欄位
+    batch.set(root, {
+      chunked:true,
+      cartridgeChunkCount:cartridgeChunks.length,
+      cartridgeDataCount:(cartridgeData||[]).length,
+      contactLogsChunkCount:contactLogChunks.length,
+      contactLogsCount:contactLogEntries.length,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAtLocal: new Date().toISOString(),
+      updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
+      clientImportToken: token
+    }, {merge:true}); writes++;
+    await commitIfNeeded(true);
+    localDirty = false;
+    savingCloud = false;
+    hideSyncLock();
+    setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
+    return true;
+  }catch(err){
+    savingCloud = false;
+    hideSyncLock();
+    console.error("Firestore 同步失敗（輕量）", err);
+    setSyncStatus("同步失敗："+(err && err.message ? err.message : String(err)), "err");
+    return false;
+  }
+}
+
 function queueCloudSave(){
   if(!currentUser || isApplyingRemote || !canEdit()) return;
   clearTimeout(cloudSaveTimer);
@@ -7246,8 +7325,8 @@ window.saveContactLogEntry = async function(){
   if(btn){ btn.disabled = true; btn.textContent = '⏳ 同步中，請稍候…'; }
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
-  if(typeof saveCloudNow === 'function'){
-    syncOk = await saveCloudNow();
+  if(typeof saveCartridgeAndLogsNow === 'function'){
+    syncOk = await saveCartridgeAndLogsNow();
   }
   if(btn){ btn.disabled = false; btn.textContent = '✅ 儲存紀錄'; }
 
@@ -7303,8 +7382,8 @@ window.deleteContactLogEntry = async function(idx){
   // 強制立即同步雲端，避免使用者太快關閉/重新整理造成還原動作遺失
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
-  if(typeof saveCloudNow === 'function'){
-    syncOk = await saveCloudNow();
+  if(typeof saveCartridgeAndLogsNow === 'function'){
+    syncOk = await saveCartridgeAndLogsNow();
   }
   if(syncOk === false){
     showCartridgeToast('⚠️ 已在本機刪除，但雲端同步失敗，請檢查網路後再確認一次');
