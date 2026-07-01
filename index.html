@@ -2232,9 +2232,12 @@ function startCloudSync(){
       if(doc.exists){
         const data = doc.data() || {};
         // 如果共用雲端還是空的，而本機有資料且有編輯權，優先把本機資料補上雲端
-        const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0) + Number(data.leaveRecordsCount || 0);
-        const localCount = (jobs||[]).length + (customers||[]).length + (leaveRecords||[]).length;
-        if(remoteCount === 0 && localCount > 0 && canEdit() && localDirty){
+        // 注意：localDirty 不列為必要條件，頁面剛載入時也要能自動補上
+        const remoteCount = Number(data.jobsCount || 0) + Number(data.customersCount || 0) + Number(data.leaveRecordsCount || 0) + Number(data.cartridgeDataCount || 0);
+        const localCartridgeLen = (typeof cartridgeData!=='undefined' && cartridgeData) ? cartridgeData.length : 0;
+        const localCount = (jobs||[]).length + (customers||[]).length + (leaveRecords||[]).length + localCartridgeLen;
+        if(remoteCount === 0 && localCount > 0 && canEdit()){
+          window.__allowDataShrink = false; // 本機有資料所以不需要解鎖，正常上傳即可
           await saveCloudNow();
           return;
         }
