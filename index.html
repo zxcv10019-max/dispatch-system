@@ -7112,6 +7112,7 @@ body.cartridge-scroll-mode {
     <button onclick="copyCartridgePhones()" style="background:#16a085;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">📋 複製本頁電話</button>
     <button onclick="scrollToNoChangeList()" style="background:#7f8c8d;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🚫 不更換名單 <span id="noChangeCountBadge" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
     <button onclick="openBatchContactModal()" style="background:#8e44ad;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🗂️ 批次新增聯繫資料 <span id="batchSelCount" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
+    <button onclick="syncCurrentMonthCartridgeArranged()" style="background:#218c74;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🔄 同步本月已約</button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
   <div id="cartridgeSummary" style="display:none;margin:0 12px 10px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -8430,6 +8431,98 @@ window.importCartridgeExcel = function(event){
     event.target.value='';
   };
   reader.readAsArrayBuffer(file);
+};
+
+
+/* ── 同步本月已約：不重建派工，只比對派工明細既有資料 ── */
+function normalizeCartMonthKey(v){
+  v = String(v||'').trim();
+  if(!v) return '';
+  v = v.replace(/-/g,'/');
+  var m = v.match(/^(\d{4})\/(\d{1,2})/);
+  if(!m) return '';
+  return m[1] + '/' + String(Number(m[2])).padStart(2,'0');
+}
+function getJobMonthKey(j){
+  return normalizeCartMonthKey(j && (j.date || j.dispatchDate || j.排工日期));
+}
+function isCartridgeWorkJob(j){
+  var txt = String((j&&j.workItem)||'') + ' ' + String((j&&j.workContent)||'') + ' ' + String((j&&j.施工項目)||'') + ' ' + String((j&&j.施工內容)||'');
+  return /更換GD濾芯|更換其他濾芯|更換全戶濾芯|濾芯/.test(txt);
+}
+function jobCustomerCode(j){
+  return String((j&&j.customerCode) || (j&&j.客編) || '').trim();
+}
+window.syncCurrentMonthCartridgeArranged = async function(){
+  if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
+  var sel = document.getElementById('cartridgeMonthFilter');
+  var monthKey = sel ? sel.value : '';
+  if(!monthKey){ alert('請先選擇「顯示月份」，再同步本月已約。'); return; }
+  if(!Array.isArray(cartridgeData) || !cartridgeData.length){ alert('目前沒有換芯名單資料。'); return; }
+  var allJobs = (typeof jobs!=='undefined' && Array.isArray(jobs)) ? jobs : [];
+  var jobMap = {};
+  allJobs.forEach(function(j){
+    if(!j || j.isHold) return;
+    if(getJobMonthKey(j) !== monthKey) return;
+    if(!isCartridgeWorkJob(j)) return;
+    var code = jobCustomerCode(j);
+    if(!code) return;
+    if(!jobMap[code]) jobMap[code] = [];
+    jobMap[code].push(j);
+  });
+  Object.keys(jobMap).forEach(function(code){
+    jobMap[code].sort(function(a,b){
+      return String(a.date||'').localeCompare(String(b.date||'')) || String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||''));
+    });
+  });
+
+  var touched = 0, arranged = 0, cleared = 0, changed = false;
+  cartridgeData.forEach(function(r, i){
+    if(!r || r._excluded) return;
+    var rowMonth = r._nextYear + '/' + String(r._nextMonth||0).padStart(2,'0');
+    if(rowMonth !== monthKey) return;
+    touched++;
+    var code = String(r.客戶編號 || '').trim();
+    var match = code && jobMap[code] && jobMap[code][0];
+    if(match){
+      var newArr = {
+        engineer: match.engineer || '',
+        date: match.date || '',
+        startTime: match.startTime || match.time || '',
+        endTime: match.endTime || '',
+        workItem: match.workItem || '',
+        workContent: match.workContent || ''
+      };
+      if(r._jobId !== match.id || JSON.stringify(r._arranged||{}) !== JSON.stringify(newArr)){
+        r._jobId = match.id;
+        r._arranged = newArr;
+        changed = true;
+      }
+      arranged++;
+    }else{
+      if(r._jobId || r._arranged){
+        delete r._jobId;
+        delete r._arranged;
+        changed = true;
+        cleared++;
+      }
+    }
+  });
+
+  if(changed){
+    saveCD();
+    if(typeof localDirty !== 'undefined') localDirty = true;
+  }
+  renderCartridgeTable();
+
+  var msg = '🔄 本月已約同步完成：已檢查 '+touched+' 筆，已約 '+arranged+' 筆';
+  if(cleared) msg += '，改回未約 '+cleared+' 筆';
+  if(typeof showCartridgeToast==='function') showCartridgeToast(msg); else alert(msg);
+
+  if(changed && typeof saveCartridgeAndLogsNow === 'function'){
+    var syncOk = await saveCartridgeAndLogsNow('同步本月已約');
+    if(syncOk === false && typeof showCartridgeToast==='function') showCartridgeToast('⚠️ 本機已同步，但雲端同步失敗，請稍後再試');
+  }
 };
 
 /* ── 匯出 ── */
