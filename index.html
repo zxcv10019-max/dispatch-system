@@ -1489,6 +1489,8 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   </div>
 </div>
 
+<div id="otherSyncBanner" style="display:none;position:sticky;top:0;z-index:9998;background:#fff3cd;color:#8a6300;border-bottom:1px solid #ffe08a;padding:8px 14px;font-size:13px;font-weight:bold;align-items:center;gap:8px;justify-content:center;"></div>
+
 <div id="syncLockOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,20,25,.55);z-index:99999;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:10px;padding:22px 30px;box-shadow:0 8px 30px rgba(0,0,0,.3);display:flex;align-items:center;gap:14px;max-width:90vw;">
     <div style="width:22px;height:22px;border:3px solid #ddd;border-top-color:#8e44ad;border-radius:50%;animation:syncSpin .8s linear infinite;flex-shrink:0;"></div>
@@ -1816,6 +1818,7 @@ let firebaseApp=null, firebaseAuth=null, firebaseDb=null;
 let currentUser=null;
 let cloudUnsubscribe=null;
 let cloudFallbackPollTimer=null;
+let activityUnsubscribe=null;
 let isApplyingRemote=false;
 window.__allowDataShrink = false; // 刻意清空/覆蓋匯入時會暫時設為 true，放行上傳清空後的資料
 let cloudSaveTimer=null;
@@ -1954,6 +1957,48 @@ function rolesColRef(){
 function cloudDocRef(){
   return sharedRootRef();
 }
+function activityRef(){
+  const root=sharedRootRef();
+  return root ? root.collection("presence").doc("syncActivity") : null;
+}
+// 廣播「目前正在同步資料」給其他登入中的帳號看到（best-effort，失敗不影響主要儲存流程）
+let _syncActivityLabel = "";
+function announceSyncActivity(active, label){
+  const ref = activityRef();
+  if(!ref || !currentUser) return;
+  if(active){ _syncActivityLabel = label || ""; }
+  try{
+    ref.set({
+      active: !!active,
+      email: currentUser.email || "",
+      name: currentUser.displayName || "",
+      label: active ? (label || "") : "",
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true}).catch(function(){ /* 安靜失敗，不影響主要同步 */ });
+  }catch(e){ /* 安靜失敗 */ }
+}
+let otherSyncingTimer = null;
+function handleActivitySnapshot(doc){
+  const banner = document.getElementById("otherSyncBanner");
+  if(!banner) return;
+  if(otherSyncingTimer){ clearTimeout(otherSyncingTimer); otherSyncingTimer=null; }
+  if(!doc || !doc.exists){ banner.style.display="none"; return; }
+  const data = doc.data() || {};
+  const isSelf = currentUser && data.email && data.email === currentUser.email;
+  const tsMillis = data.ts && typeof data.ts.toMillis === "function" ? data.ts.toMillis() : 0;
+  const fresh = tsMillis > 0 && (Date.now() - tsMillis) < 20000;
+  if(data.active && !isSelf && fresh){
+    const who = data.name || data.email || "其他使用者";
+    const what = data.label ? `（${escapeHtml(data.label)}）` : "";
+    banner.innerHTML = `🔄 <b>${escapeHtml(who)}</b> 正在同步資料，請稍候再操作同一筆資料${what}…`;
+    banner.style.display = "flex";
+    // 保險：若對方畫面異常關閉沒有清除狀態，最多顯示 20 秒後自動隱藏
+    otherSyncingTimer = setTimeout(function(){ banner.style.display="none"; }, Math.max(1000, 20000-(Date.now()-tsMillis)));
+  }else{
+    banner.style.display = "none";
+  }
+}
+
 
 async function loadUserRole(){
   lastRoleLoadError = null;
@@ -2070,6 +2115,7 @@ async function saveCloudNow(){
   setSyncStatus("同步中…", "wait");
   savingCloud = true;
   showSyncLock();
+  announceSyncActivity(true, "完整同步");
   const token = importProtectToken || ("save_" + Date.now());
   try{
     const oldSnap = await chunks.get();
@@ -2116,6 +2162,7 @@ async function saveCloudNow(){
       if(dangerous){
         savingCloud = false;
         hideSyncLock();
+        announceSyncActivity(false);
         const msg = `⚠️ 已阻擋一次可能誤刪雲端資料的上傳：本機「${dangerous.label}」目前是 0 筆，但雲端原本有 ${dangerous.remote} 筆。\n為避免覆蓋掉大家的資料，這次上傳已自動取消。\n\n請先重新整理頁面，確認本機資料正常顯示後再操作；若是刻意要清空，請改用畫面上的「清空」按鈕。`;
         setSyncStatus("已阻擋可能誤刪雲端資料的上傳，請重新整理頁面", "err");
         try{ alert(msg); }catch(_){}
@@ -2171,11 +2218,13 @@ async function saveCloudNow(){
     localDirty = false;
     savingCloud = false;
     hideSyncLock();
+    announceSyncActivity(false);
     setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
     return true;
   }catch(err){
     savingCloud = false;
     hideSyncLock();
+    announceSyncActivity(false);
     console.error("Firestore 同步失敗", err);
     setSyncStatus("同步失敗："+(err && err.message ? err.message : String(err)), "err");
     return false;
@@ -2186,7 +2235,7 @@ async function saveCloudNow(){
 // saveCloudNow() 每次都會把 jobs / customers / cartridge / contactLogs 全部刪掉重寫，
 // 資料量大時會明顯變慢。但「標記不更換／延後月份／刪除聯絡紀錄」這幾個動作
 // 只會改到換芯名單和聯絡紀錄，所以改用這個只動兩種分塊的版本，上傳速度快很多。
-async function saveCartridgeAndLogsNow(){
+async function saveCartridgeAndLogsNow(label){
   if(!currentUser){ setSyncStatus("未登入，資料暫存在本機", "wait"); return; }
   if(!hasAccess()){
     setSyncStatus(`已登入：${currentUser.email}（未授權）`, "err");
@@ -2209,6 +2258,7 @@ async function saveCartridgeAndLogsNow(){
   setSyncStatus("同步中…", "wait");
   savingCloud = true;
   showSyncLock();
+  announceSyncActivity(true, label || "換芯名單／聯絡紀錄");
   const token = importProtectToken || ("save_" + Date.now());
   try{
     // 只查「cartridge」「contactlogs」這兩種分塊，不用讀 jobs/customers，省下一大段資料傳輸時間
@@ -2250,11 +2300,13 @@ async function saveCartridgeAndLogsNow(){
     localDirty = false;
     savingCloud = false;
     hideSyncLock();
+    announceSyncActivity(false);
     setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
     return true;
   }catch(err){
     savingCloud = false;
     hideSyncLock();
+    announceSyncActivity(false);
     console.error("Firestore 同步失敗（輕量）", err);
     setSyncStatus("同步失敗："+(err && err.message ? err.message : String(err)), "err");
     return false;
@@ -2467,11 +2519,23 @@ function startCloudSync(){
       if(snap.exists) await applyRemoteData(snap.data() || {});
     }catch(e){ /* 安靜失敗，不打擾使用者，onSnapshot 仍是主要機制 */ }
   }, 20000);
+
+  // 監聽「有人正在同步資料」的提示，讓其他登入中的帳號即時看到
+  if(activityUnsubscribe) activityUnsubscribe();
+  const actRef = activityRef();
+  if(actRef){
+    activityUnsubscribe = actRef.onSnapshot(function(doc){
+      handleActivitySnapshot(doc);
+    }, function(err){ console.error("讀取同步狀態失敗", err); });
+  }
 }
 
 function stopCloudSync(){
   if(cloudUnsubscribe){cloudUnsubscribe();cloudUnsubscribe=null;}
   if(cloudFallbackPollTimer){clearInterval(cloudFallbackPollTimer);cloudFallbackPollTimer=null;}
+  if(activityUnsubscribe){activityUnsubscribe();activityUnsubscribe=null;}
+  const banner = document.getElementById("otherSyncBanner");
+  if(banner) banner.style.display="none";
   currentUser=null;
   currentRole="none";
   currentEngineer="";
@@ -7362,7 +7426,7 @@ window.restoreNoChangeCustomer = async function(custKey){
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
   if(typeof saveCartridgeAndLogsNow === 'function'){
-    syncOk = await saveCartridgeAndLogsNow();
+    syncOk = await saveCartridgeAndLogsNow('加回換芯名單');
   }
   if(syncOk === false){
     showCartridgeToast('⚠️ 已加回本機換芯名單，但雲端同步失敗，請檢查網路後再試一次');
@@ -7625,7 +7689,7 @@ window.saveContactLogEntry = async function(){
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
   if(typeof saveCartridgeAndLogsNow === 'function'){
-    syncOk = await saveCartridgeAndLogsNow();
+    syncOk = await saveCartridgeAndLogsNow('新增聯絡紀錄');
   }
   if(btn){ btn.disabled = false; btn.textContent = '✅ 儲存紀錄'; }
 
@@ -7698,7 +7762,7 @@ window.deleteContactLogEntry = async function(idx){
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
   if(typeof saveCartridgeAndLogsNow === 'function'){
-    syncOk = await saveCartridgeAndLogsNow();
+    syncOk = await saveCartridgeAndLogsNow('刪除聯絡紀錄');
   }
   if(syncOk === false){
     showCartridgeToast('⚠️ 已在本機刪除，但雲端同步失敗，請檢查網路後再確認一次');
@@ -7834,7 +7898,7 @@ window.saveBatchContactEntry = async function(){
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
   var syncOk = true;
   if(typeof saveCartridgeAndLogsNow === 'function'){
-    syncOk = await saveCartridgeAndLogsNow();
+    syncOk = await saveCartridgeAndLogsNow('批次新增聯繫資料');
   }
   if(btn){ btn.disabled = false; btn.textContent = '✅ 批次新增'; }
 
@@ -8119,7 +8183,7 @@ window.forceCloudSaveDebug = async function(){
   var ok;
   try{
     // 這顆按鈕主要是排查「換芯名單/聯絡紀錄」，改用輕量同步，不再呼叫完整 saveCloudNow()。
-    ok = (typeof saveCartridgeAndLogsNow==='function') ? await saveCartridgeAndLogsNow() : await saveCloudNow();
+    ok = (typeof saveCartridgeAndLogsNow==='function') ? await saveCartridgeAndLogsNow('除錯強制上傳') : await saveCloudNow();
   }catch(err){
     alert('上傳時拋出例外：'+(err && err.message ? err.message : String(err)));
     return;
