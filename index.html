@@ -1705,8 +1705,18 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   </div>
 
   <div class="form-card" style="max-width:700px">
-    <h3>📊 工程師出差統計（北部／南部）</h3>
-    <table id="tripStatsTable" style="border-collapse:collapse;width:100%;font-size:14px;"></table>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <h3 style="margin:0;">📊 工程師出差統計（北部／南部）</h3>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:13px;font-weight:bold;color:#555;">📅 月份篩選：</label>
+        <select id="tripStatsMonth" onchange="renderTripStatsTable()" style="padding:6px 10px;font-size:13px;border:1px solid #cbd5e0;border-radius:6px;background:#fff;color:#333;">
+          <option value="">全部月份</option>
+        </select>
+      </div>
+    </div>
+    <div id="tripStatsTableWrap" style="border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);border:1px solid #e5e9f0;">
+      <table id="tripStatsTable" style="border-collapse:collapse;width:100%;font-size:14px;"></table>
+    </div>
   </div>
 </div>
 
@@ -5865,15 +5875,34 @@ function renderLeaveListLP(){
   renderTripStatsTable();
 }
 
-// 工程師出差統計表（依北部／南部出差紀錄統計，不受上方地區篩選影響，永遠顯示全部總計）
+// 工程師出差統計表（依北部／南部出差紀錄統計，可依月份篩選）
 function renderTripStatsTable(){
   const box = document.getElementById('tripStatsTable'); if(!box) return;
+  const monthSel = document.getElementById('tripStatsMonth');
+
+  // 蒐集所有出差紀錄的月份（YYYY-MM），動態填入月份篩選選單
+  const allTrips = (leaveRecords||[]).filter(function(r){
+    const t = String(r.type||'');
+    return t.indexOf('出差（北部）') > -1 || t.indexOf('出差（南部）') > -1;
+  });
+  if(monthSel){
+    const months = Array.from(new Set(allTrips.map(function(r){
+      return String(r.date||'').slice(0,7);
+    }).filter(Boolean))).sort().reverse();
+    const prevVal = monthSel.value;
+    monthSel.innerHTML = '<option value="">全部月份</option>' + months.map(function(m){
+      const label = m.replace('-', ' 年 ') + ' 月';
+      return '<option value="'+m+'">'+label+'</option>';
+    }).join('');
+    if(months.indexOf(prevVal) > -1) monthSel.value = prevVal;
+  }
+  const selMonth = monthSel ? monthSel.value : '';
+
   const counts = {}; // eng -> {north, south}
-  (leaveRecords||[]).forEach(function(r){
+  allTrips.forEach(function(r){
+    if(selMonth && String(r.date||'').slice(0,7) !== selMonth) return;
     const t = String(r.type||'');
     const isNorth = t.indexOf('出差（北部）') > -1;
-    const isSouth = t.indexOf('出差（南部）') > -1;
-    if(!isNorth && !isSouth) return;
     const eng = r.engineer || '未知';
     if(!counts[eng]) counts[eng] = {north:0, south:0};
     if(isNorth) counts[eng].north++; else counts[eng].south++;
@@ -5883,27 +5912,57 @@ function renderTripStatsTable(){
     return {eng:eng, north:c.north, south:c.south, total:c.north+c.south};
   });
   rows.sort(function(a,b){ return b.total - a.total; });
+
   if(!rows.length){
-    box.innerHTML = '<tr><td style="padding:14px;text-align:center;color:#999;">尚無出差紀錄。</td></tr>';
+    box.innerHTML = '<tr><td style="padding:26px;text-align:center;color:#999;font-size:13px;">'
+      + (selMonth ? '此月份尚無出差紀錄。' : '尚無出差紀錄。') + '</td></tr>';
     return;
   }
-  const rowColors = ['#f3e6f9','#dff0fb','#e3f3ea','#fff6dc','#fde3e3','#e8e8f7'];
+
+  const avatarColors = ['#8e5fd6','#2f8fd6','#2f8f5f','#d68f2f','#d65f5f','#5f7fd6'];
+  const grandNorth = rows.reduce(function(s,r){return s+r.north;},0);
+  const grandSouth = rows.reduce(function(s,r){return s+r.south;},0);
+  const grandTotal = rows.reduce(function(s,r){return s+r.total;},0);
+  const maxTotal = Math.max.apply(null, rows.map(function(r){return r.total;})) || 1;
+
   let html = '<thead><tr>'
-    + '<th style="border:1px solid #ccc;padding:8px 16px;background:#eee;color:#333;">工程師</th>'
-    + '<th style="border:1px solid #ccc;padding:8px 16px;background:#2f5fa3;color:#fff;">北部</th>'
-    + '<th style="border:1px solid #ccc;padding:8px 16px;background:#2f8f5f;color:#fff;">南部</th>'
-    + '<th style="border:1px solid #ccc;padding:8px 16px;background:#8b1a2b;color:#fff;">總計</th>'
+    + '<th style="padding:12px 16px;background:linear-gradient(135deg,#3a4a63,#2c3547);color:#fff;text-align:left;font-size:13px;letter-spacing:.5px;">工程師</th>'
+    + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3a6fc4,#2f5fa3);color:#fff;font-size:13px;">🔵 北部</th>'
+    + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3aa876,#2f8f5f);color:#fff;font-size:13px;">🟢 南部</th>'
+    + '<th style="padding:12px 14px;background:linear-gradient(135deg,#a83a4c,#8b1a2b);color:#fff;font-size:13px;">📌 總計</th>'
+    + '<th style="padding:12px 14px;background:#eef1f6;color:#555;font-size:12px;min-width:110px;">比重</th>'
     + '</tr></thead><tbody>';
+
   rows.forEach(function(r, i){
-    const bg = rowColors[i % rowColors.length];
-    html += '<tr>'
-      + '<td style="border:1px solid #ccc;padding:7px 16px;background:'+bg+';font-weight:bold;">'+escapeHtml(r.eng)+'</td>'
-      + '<td style="border:1px solid #ccc;padding:7px 16px;text-align:center;color:#2f5fa3;font-weight:bold;">'+r.north+'</td>'
-      + '<td style="border:1px solid #ccc;padding:7px 16px;text-align:center;color:#2f8f5f;font-weight:bold;">'+r.south+'</td>'
-      + '<td style="border:1px solid #ccc;padding:7px 16px;text-align:center;color:#8b1a2b;font-weight:bold;">'+r.total+'</td>'
+    const rowBg = i % 2 === 0 ? '#ffffff' : '#f7f9fc';
+    const avColor = avatarColors[i % avatarColors.length];
+    const initial = escapeHtml(String(r.eng).slice(0,1));
+    const barPct = Math.round((r.total / maxTotal) * 100);
+    html += '<tr style="background:'+rowBg+';transition:background .15s;" onmouseover="this.style.background=\'#eef4fb\'" onmouseout="this.style.background=\''+rowBg+'\'">'
+      + '<td style="padding:10px 16px;border-bottom:1px solid #edf0f5;">'
+        + '<div style="display:flex;align-items:center;gap:10px;">'
+          + '<div style="width:28px;height:28px;border-radius:50%;background:'+avColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;flex-shrink:0;">'+initial+'</div>'
+          + '<span style="font-weight:bold;color:#2c3547;">'+escapeHtml(r.eng)+'</span>'
+        + '</div>'
+      + '</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f5fa3;font-weight:bold;font-size:15px;">'+r.north+'</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f8f5f;font-weight:bold;font-size:15px;">'+r.south+'</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#8b1a2b;font-weight:bold;font-size:15px;">'+r.total+'</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;">'
+        + '<div style="background:#e3e8f0;border-radius:6px;height:8px;overflow:hidden;">'
+          + '<div style="width:'+barPct+'%;height:100%;background:linear-gradient(90deg,#8e5fd6,#2f5fa3);border-radius:6px;"></div>'
+        + '</div>'
+      + '</td>'
       + '</tr>';
   });
-  html += '</tbody>';
+
+  html += '</tbody><tfoot><tr>'
+    + '<td style="padding:11px 16px;background:#2c3547;color:#fff;font-weight:bold;">總計</td>'
+    + '<td style="padding:11px 14px;background:#2c3547;color:#a8c8ff;text-align:center;font-weight:bold;">'+grandNorth+'</td>'
+    + '<td style="padding:11px 14px;background:#2c3547;color:#a8f0cc;text-align:center;font-weight:bold;">'+grandSouth+'</td>'
+    + '<td style="padding:11px 14px;background:#2c3547;color:#ffc2c2;text-align:center;font-weight:bold;">'+grandTotal+'</td>'
+    + '<td style="padding:11px 14px;background:#2c3547;"></td>'
+    + '</tr></tfoot>';
   box.innerHTML = html;
 }
 
