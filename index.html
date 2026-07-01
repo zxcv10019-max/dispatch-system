@@ -6640,6 +6640,9 @@ body.cartridge-scroll-mode {
   border-radius:4px !important;border:none !important;cursor:pointer !important;
   white-space:nowrap;
 }
+.cart-stat-card{cursor:pointer;user-select:none;transition:box-shadow .15s,transform .15s;}
+.cart-stat-card:hover{filter:brightness(.97);}
+.cart-stat-card.active{transform:translateY(-1px);}
 </style>
 
 <!-- 換芯名單頁面 -->
@@ -6656,19 +6659,20 @@ body.cartridge-scroll-mode {
     <button onclick="debugCartridgeData()" style="background:#e67e22;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">🔍 除錯</button>
     <button onclick="debugCloudCartridge()" style="background:#c0392b;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">☁️ 雲端除錯</button>
     <button onclick="forceCloudSaveDebug()" style="background:#27ae60;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;">⬆️ 強制上傳</button>
+    <button onclick="copyCartridgePhones()" style="background:#16a085;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">📋 複製本頁電話</button>
     <button onclick="scrollToNoChangeList()" style="background:#7f8c8d;color:#fff;padding:6px 12px;font-size:12px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">🚫 不更換名單 <span id="noChangeCountBadge" style="background:rgba(255,255,255,.3);border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
   </div>
   <div id="cartridgeStatus" style="margin:8px 12px;background:#fff;border:1px solid #ccc;padding:8px;font-size:13px;">尚未匯入資料。</div>
   <div id="cartridgeSummary" style="display:none;margin:0 12px 10px;display:flex;gap:12px;flex-wrap:wrap;">
-    <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+    <div id="cCardTotal" class="cart-stat-card" onclick="setCartridgeStatusFilter('all')" title="點擊顯示全部" style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
       <div id="cSumTotal" style="font-size:26px;font-weight:bold;color:#2f3542;">0</div>
       <div style="font-size:12px;color:#888;margin-top:2px;">📋 預計換芯</div>
     </div>
-    <div style="background:#fff;border:1px solid #a3d6b0;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+    <div id="cCardArranged" class="cart-stat-card" onclick="setCartridgeStatusFilter('arranged')" title="點擊只顯示已約換芯" style="background:#fff;border:1px solid #a3d6b0;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
       <div id="cSumArranged" style="font-size:26px;font-weight:bold;color:#218c74;">0</div>
       <div style="font-size:12px;color:#888;margin-top:2px;">✅ 已約換芯</div>
     </div>
-    <div style="background:#fff;border:1px solid #f5a3a3;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+    <div id="cCardPending" class="cart-stat-card" onclick="setCartridgeStatusFilter('pending')" title="點擊只顯示未約換芯" style="background:#fff;border:1px solid #f5a3a3;border-radius:8px;padding:12px 20px;min-width:130px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);">
       <div id="cSumPending" style="font-size:26px;font-weight:bold;color:#b33939;">0</div>
       <div style="font-size:12px;color:#888;margin-top:2px;">⏳ 未約換芯</div>
     </div>
@@ -6804,6 +6808,7 @@ body.cartridge-scroll-mode {
 <script>
 // 全域：讓 saveCloudNow / applyRemoteData 可存取
 var cartridgeData = [];
+var cartridgeStatusFilter = ''; // '' = 全部 | 'arranged' = 只顯示已約 | 'pending' = 只顯示未約
 var CARTRIDGE_KEY = 'cartridge_list_v1';
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
 // 無條件從日期資料重新計算 _nextYear / _nextMonth，避免遺失（全域可重複呼叫）
@@ -6915,7 +6920,7 @@ window.renderCartridgeTable = function(){
   updateCartridgeMonthOptions();
 
   if(!cartridgeData.length){
-    t.innerHTML='<tr><td colspan="7" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
+    t.innerHTML='<tr><td colspan="9" style="padding:24px;text-align:center;color:#888;">尚無資料，請匯入換芯 Excel。</td></tr>';
     if(cnt) cnt.textContent='';
     var sumDiv=document.getElementById('cartridgeSummary'); if(sumDiv) sumDiv.style.display='none';
     if(statusEl) statusEl.textContent='尚未匯入資料。';
@@ -6941,7 +6946,7 @@ window.renderCartridgeTable = function(){
       var custInfo = (typeof customers!=='undefined' && Array.isArray(customers))
         ? customers.find(function(c){ return c.customerNo === r.客戶編號; }) : null;
       grouped[key] = { rows: [], 客戶編號: r.客戶編號, 客戶全稱: r.客戶全稱,
-        地址: custInfo ? (custInfo.deliveryAddress||'') : '', _firstIdx: i };
+        地址: custInfo ? (custInfo.deliveryAddress||'') : '', 電話: custInfo ? (custInfo.mobile||'') : '', _firstIdx: i };
       groupOrder.push(key);
     }
     grouped[key].rows.push({r:r, i:i});
@@ -6969,7 +6974,9 @@ window.renderCartridgeTable = function(){
   }).length;
 
   if(cnt) cnt.textContent='';
-  if(statusEl) statusEl.textContent='共顯示 '+totalShown+' 位客戶（來自 '+(monthFilter?'篩選後':'全部')+' 資料）。';
+  var filterLabel = cartridgeStatusFilter==='arranged' ? '，僅顯示已約換芯'
+    : cartridgeStatusFilter==='pending' ? '，僅顯示未約換芯' : '';
+  if(statusEl) statusEl.textContent='共顯示 '+totalShown+' 位客戶（來自 '+(monthFilter?'篩選後':'全部')+' 資料'+filterLabel+'）。';
 
   var sumDiv=document.getElementById('cartridgeSummary');
   if(sumDiv) sumDiv.style.display='flex';
@@ -6977,12 +6984,34 @@ window.renderCartridgeTable = function(){
   el=document.getElementById('cSumArranged'); if(el) el.textContent=arranged;
   el=document.getElementById('cSumPending'); if(el) el.textContent=pending;
 
+  // 摘要卡片可點擊篩選：套用目前選取狀態的醒目樣式
+  function setCardActive(id, active){
+    var card = document.getElementById(id);
+    if(!card) return;
+    card.classList.toggle('active', active);
+    card.style.boxShadow = active ? '0 0 0 3px rgba(64,115,158,.35), 0 1px 4px rgba(0,0,0,.06)' : '0 1px 4px rgba(0,0,0,.06)';
+  }
+  setCardActive('cCardTotal', cartridgeStatusFilter==='');
+  setCardActive('cCardArranged', cartridgeStatusFilter==='arranged');
+  setCardActive('cCardPending', cartridgeStatusFilter==='pending');
+
+  // 依目前選取的已約/未約篩選，決定實際要畫出來的列（卡片數字本身不受此篩選影響，永遠顯示當月總數）
+  var displayOrder = groupOrder;
+  if(cartridgeStatusFilter==='arranged'){
+    displayOrder = groupOrder.filter(function(k){ return grouped[k].rows.some(function(item){ return !!item.r._jobId; }); });
+  } else if(cartridgeStatusFilter==='pending'){
+    displayOrder = groupOrder.filter(function(k){ return grouped[k].rows.every(function(item){ return !item.r._jobId; }); });
+  }
+
   var html='<thead><tr>'
-    +['客戶編號','客戶全稱','地址','上次換芯','周期（月）','下次換芯','聯絡紀錄','安排派工'].map(function(h){
+    +['客戶編號','客戶全稱','電話','地址','上次換芯','周期（月）','下次換芯','聯絡紀錄','安排派工'].map(function(h){
       return '<th style="padding:8px 10px;text-align:left;white-space:nowrap;position:sticky;top:0;z-index:2;">'+h+'</th>';
     }).join('')+'</tr></thead><tbody>';
 
-  groupOrder.forEach(function(custKey){
+  if(!displayOrder.length){
+    html += '<tr><td colspan="9" style="padding:20px;text-align:center;color:#999;">篩選條件下沒有符合的客戶。</td></tr>';
+  }
+  displayOrder.forEach(function(custKey){
     var group = grouped[custKey];
     var rows = group.rows;
     var firstRow = rows[0].r;
@@ -7044,9 +7073,15 @@ window.renderCartridgeTable = function(){
       ? '<a href="'+mapUrl(group.地址)+'" target="_blank" style="color:#1565c0;text-decoration:underline;">'+escapeHtml(group.地址)+'</a>'
       : '<span style="color:#bbb;">未填</span>';
 
+    var phoneRaw = String(group.電話||'').trim();
+    var phoneCell = phoneRaw
+      ? '<a href="tel:'+escapeHtml(cleanPhoneForTel(phoneRaw))+'" style="color:#1565c0;text-decoration:underline;font-weight:bold;">'+escapeHtml(phoneRaw)+'</a>'
+      : '<span style="color:#bbb;">未填</span>';
+
     html+='<tr style="background:'+bg+';border-bottom:1px solid #e5e5e5;">'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶編號||'')+'</td>'
       +'<td style="padding:7px 10px;">'+escapeHtml(group.客戶全稱||'')+'</td>'
+      +'<td class="cart-phone-cell" data-phone="'+escapeHtml(phoneRaw)+'" style="padding:7px 10px;white-space:nowrap;">'+phoneCell+'</td>'
       +'<td style="padding:7px 10px;max-width:220px;">'+addrCell+'</td>'
       +'<td style="padding:7px 10px;text-align:center;white-space:nowrap;">'+escapeHtml(lastDate)+'</td>'
       +'<td style="padding:7px 10px;text-align:center;">'+escapeHtml(String(cycle))+'</td>'
@@ -7058,6 +7093,54 @@ window.renderCartridgeTable = function(){
   html+='</tbody>';
   t.innerHTML=html;
   renderNoChangeList();
+};
+
+/* ── 摘要卡片點擊篩選（已約／未約／全部） ── */
+window.setCartridgeStatusFilter = function(mode){
+  if(mode === 'all'){
+    cartridgeStatusFilter = '';
+  } else {
+    cartridgeStatusFilter = (cartridgeStatusFilter === mode) ? '' : mode;
+  }
+  renderCartridgeTable();
+};
+
+/* ── 一鍵複製目前畫面顯示的電話（會跟著月份/已約未約篩選變動） ── */
+window.copyCartridgePhones = function(){
+  var t = document.getElementById('cartridgeTable');
+  if(!t) return;
+  var phones = [];
+  t.querySelectorAll('td.cart-phone-cell').forEach(function(td){
+    var p = (td.getAttribute('data-phone')||'').trim();
+    if(p && phones.indexOf(p)<0) phones.push(p);
+  });
+  if(!phones.length){
+    showCartridgeToast('⚠️ 目前畫面沒有可複製的電話');
+    return;
+  }
+  var text = phones.join('\n');
+  function fallbackCopy(txt){
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      showCartridgeToast('📋 已複製 '+phones.length+' 組電話（本頁篩選結果）');
+    }).catch(function(){
+      fallbackCopy(text);
+      showCartridgeToast('📋 已複製 '+phones.length+' 組電話（本頁篩選結果）');
+    });
+  } else {
+    fallbackCopy(text);
+    showCartridgeToast('📋 已複製 '+phones.length+' 組電話（本頁篩選結果）');
+  }
 };
 
 /* ── 不更換名單 ── */
