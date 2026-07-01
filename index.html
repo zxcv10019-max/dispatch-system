@@ -1489,6 +1489,14 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   </div>
 </div>
 
+<div id="syncLockOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,20,25,.55);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:10px;padding:22px 30px;box-shadow:0 8px 30px rgba(0,0,0,.3);display:flex;align-items:center;gap:14px;max-width:90vw;">
+    <div style="width:22px;height:22px;border:3px solid #ddd;border-top-color:#8e44ad;border-radius:50%;animation:syncSpin .8s linear infinite;flex-shrink:0;"></div>
+    <div style="font-size:15px;font-weight:bold;color:#2f3542;">☁️ 同步中，請勿關閉或重新整理頁面…</div>
+  </div>
+</div>
+<style>@keyframes syncSpin{to{transform:rotate(360deg)}}</style>
+
 <div id="loginGate">
   <div class="login-card">
     <div class="gate-icon">🔐</div>
@@ -1833,6 +1841,34 @@ function setSyncStatus(text, type="wait"){
   el.innerHTML=`<span class="sync-dot ${type}"></span>${escapeHtml(text)}`;
 }
 
+// ── 同步鎖定遮罩：上傳雲端期間顯示，避免使用者太快關閉/重新整理導致變更遺失 ──
+let _syncLockCount = 0;
+function showSyncLock(msg){
+  _syncLockCount++;
+  const el = document.getElementById("syncLockOverlay");
+  if(el){
+    if(msg){
+      const txt = el.querySelector("div > div:last-child");
+      if(txt) txt.textContent = msg;
+    }
+    el.style.display = "flex";
+  }
+}
+function hideSyncLock(){
+  _syncLockCount = Math.max(0, _syncLockCount - 1);
+  if(_syncLockCount === 0){
+    const el = document.getElementById("syncLockOverlay");
+    if(el) el.style.display = "none";
+  }
+}
+window.addEventListener("beforeunload", function(e){
+  if(typeof savingCloud !== "undefined" && savingCloud){
+    e.preventDefault();
+    e.returnValue = "資料同步中，現在離開可能會遺失剛剛的變更，確定要離開嗎？";
+    return e.returnValue;
+  }
+});
+
 function isMobileDevice(){
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
 }
@@ -1990,6 +2026,7 @@ async function saveCloudNow(){
   if(!root || !chunks) return;
   setSyncStatus("同步中…", "wait");
   savingCloud = true;
+  showSyncLock();
   const token = importProtectToken || ("save_" + Date.now());
   try{
     const oldSnap = await chunks.get();
@@ -2031,6 +2068,7 @@ async function saveCloudNow(){
       }
       if(dangerous){
         savingCloud = false;
+        hideSyncLock();
         const msg = `⚠️ 已阻擋一次可能誤刪雲端資料的上傳：本機「${dangerous.label}」目前是 0 筆，但雲端原本有 ${dangerous.remote} 筆。\n為避免覆蓋掉大家的資料，這次上傳已自動取消。\n\n請先重新整理頁面，確認本機資料正常顯示後再操作；若是刻意要清空，請改用畫面上的「清空」按鈕。`;
         setSyncStatus("已阻擋可能誤刪雲端資料的上傳，請重新整理頁面", "err");
         try{ alert(msg); }catch(_){}
@@ -2087,10 +2125,12 @@ async function saveCloudNow(){
     await commitIfNeeded(true);
     localDirty = false;
     savingCloud = false;
+    hideSyncLock();
     setSyncStatus(`已同步共用派工表：${currentUser.email}（${roleLabel()}）`, "ok");
     return true;
   }catch(err){
     savingCloud = false;
+    hideSyncLock();
     console.error("Firestore 同步失敗", err);
     setSyncStatus("同步失敗："+(err && err.message ? err.message : String(err)), "err");
     return false;
@@ -6575,7 +6615,7 @@ body.cartridge-scroll-mode {
     </div>
     <div class="cfoot">
       <button onclick="closeContactLog()" style="background:#888;color:#fff;border:none;cursor:pointer;">關閉</button>
-      <button onclick="saveContactLogEntry()" style="background:#8e44ad;color:#fff;border:none;cursor:pointer;">✅ 儲存紀錄</button>
+      <button id="clSaveBtn" onclick="saveContactLogEntry()" style="background:#8e44ad;color:#fff;border:none;cursor:pointer;">✅ 儲存紀錄</button>
     </div>
   </div>
 </div>
@@ -7132,7 +7172,7 @@ function renderContactLogList(){
   });
   div.innerHTML=html;
 }
-window.saveContactLogEntry = function(){
+window.saveContactLogEntry = async function(){
   var date = document.getElementById('clDate').value;
   var method = document.getElementById('clMethod').value;
   var note = document.getElementById('clNote').value.trim();
@@ -7200,10 +7240,27 @@ window.saveContactLogEntry = function(){
   if(typeof localDirty!=='undefined') localDirty = true;
 
   renderCartridgeTable();
-  showCartridgeToast('✅ 聯絡紀錄已儲存' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')));
+
+  // 強制立即同步雲端（不用等 650ms 防抖），並鎖住畫面避免使用者太快關閉/重新整理造成變更遺失
+  var btn = document.getElementById('clSaveBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ 同步中，請稍候…'; }
+  if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
+  var syncOk = true;
+  if(typeof saveCloudNow === 'function'){
+    syncOk = await saveCloudNow();
+  }
+  if(btn){ btn.disabled = false; btn.textContent = '✅ 儲存紀錄'; }
+
+  if(syncOk === false){
+    showCartridgeToast('⚠️ 已存在本機，但雲端同步失敗，請檢查網路後重新操作一次，避免其他裝置看不到這筆變更');
+  } else if(syncOk === true){
+    showCartridgeToast('✅ 聯絡紀錄已儲存並同步完成' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')));
+  } else {
+    showCartridgeToast('✅ 已儲存在本機' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')) + '（尚未同步到雲端，請確認登入狀態）');
+  }
   closeContactLog();
 };
-window.deleteContactLogEntry = function(idx){
+window.deleteContactLogEntry = async function(idx){
   if(!confirm('確定刪除此聯絡紀錄？\n若此紀錄曾將換芯日期移月或標記不更換，刪除後會還原原本狀態。')) return;
   var list = contactLogs[_contactLogCustKey]||[];
   var entry = list[idx];
@@ -7242,7 +7299,20 @@ window.deleteContactLogEntry = function(idx){
   renderCartridgeTable();
   var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
     : (entry && entry._exSnapshot && entry._exSnapshot.length) ? '並重新加回換芯名單' : '';
-  showCartridgeToast('✅ 已刪除紀錄' + (restored ? '，'+restored : ''));
+
+  // 強制立即同步雲端，避免使用者太快關閉/重新整理造成還原動作遺失
+  if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
+  var syncOk = true;
+  if(typeof saveCloudNow === 'function'){
+    syncOk = await saveCloudNow();
+  }
+  if(syncOk === false){
+    showCartridgeToast('⚠️ 已在本機刪除，但雲端同步失敗，請檢查網路後再確認一次');
+  } else if(syncOk === true){
+    showCartridgeToast('✅ 已刪除紀錄並同步' + (restored ? '，'+restored : ''));
+  } else {
+    showCartridgeToast('✅ 已在本機刪除紀錄' + (restored ? '，'+restored : '') + '（尚未同步到雲端，請確認登入狀態）');
+  }
 };
 
 /* ── Toast ── */
