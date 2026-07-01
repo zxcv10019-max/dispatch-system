@@ -816,6 +816,19 @@ body{
 .hold-slot-active{
   background:#e8eaf6 !important;
 }
+/* 出差日：排班表格背景變色標示，派工卡片本身正常顯示、不受影響 */
+.trip-slot-active{
+  background:#fff3e0 !important;
+}
+.trip-job-card{
+  background:#ffe8cc !important;
+  border:1px solid #f0a04b !important;
+}
+.trip-job-card .card-main::before{
+  content:"✈️ 出差｜";
+  color:#c9720b;
+  font-weight:bold;
+}
 .hold-row td{
   background:#eef0ff !important;
 }
@@ -3651,6 +3664,14 @@ function getEngineerDayPlaceLabel(dateStr, engineer){
   return cities.length ? cities.join("、") : "";
 }
 
+// 該工程師當天是否有「出差」紀錄（用於排班表變色標示，不影響原本派工卡片顯示）
+function getEngineerTripRegion(dateStr, engineer){
+  if(typeof leaveRecords === 'undefined' || !Array.isArray(leaveRecords)) return '';
+  const eng = normalizeEngineerName(engineer);
+  const rec = leaveRecords.find(r=>normalizeEngineerName(r.engineer)===eng && String(r.date)===String(dateStr) && String(r.type||'').startsWith('出差'));
+  return rec ? String(rec.type||'') : '';
+}
+
 function renderSchedule(){
   // normalize old imported engineer names/codes
   jobs.forEach(j=>{ j.engineer=normalizeEngineerName(j.engineer); });
@@ -3699,7 +3720,9 @@ function renderSchedule(){
           return s>=0 && idx>=s && idx<=end;
         });
         const holdCls = activeJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls}" ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
+        const tripType = holdCls ? "" : getEngineerTripRegion(dateStr, engineer);
+        const tripCls = tripType ? "trip-slot-active" : "";
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -3761,7 +3784,7 @@ function jobCard(j){
   const compactCity = escapeHtml(String(j.city||"").trim());
   const compactDistrict = escapeHtml(String(j.district||"").trim());
 
-  return `<div class="job ${j.isHold?"hold-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
