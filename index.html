@@ -7442,6 +7442,17 @@ var cartridgeStatusFilter = ''; // '' = 全部 | 'arranged' = 只顯示已約 | 
 var cartridgeSelectedKeys = {}; // 批次新增聯繫資料：已勾選的客戶編號
 var CARTRIDGE_KEY = 'cartridge_list_v1';
 try{ cartridgeData = JSON.parse(localStorage.getItem(CARTRIDGE_KEY)||'[]'); }catch(e){ cartridgeData=[]; }
+// 日期加上 N 個月，若目標月份沒有那麼多天（例如 12/31 +6個月 → 6月沒有31號），
+// 自動夾住在目標月最後一天，不會像原生 setMonth 那樣溢位跳到下個月初
+function addMonthsClamped(y, m0, d, months){
+  // y=年, m0=月(0-based), d=日, months=要加的月數
+  var totalMonth = y*12 + m0 + months;
+  var targetY = Math.floor(totalMonth/12);
+  var targetM0 = totalMonth - targetY*12; // 0-based
+  var lastDayOfTargetMonth = new Date(targetY, targetM0+1, 0).getDate();
+  var clampedDay = Math.min(d, lastDayOfTargetMonth);
+  return new Date(targetY, targetM0, clampedDay);
+}
 // 無條件從日期資料重新計算 _nextYear / _nextMonth，避免遺失（全域可重複呼叫）
 window.repairCartridgeNextDates = function(){
   cartridgeData.forEach(function(r){
@@ -7458,8 +7469,7 @@ window.repairCartridgeNextDates = function(){
     if(r.日期 && r.周期){
       var bp = (r.日期+'').replace(/-/g,'/').split('/');
       if(bp.length>=3){
-        var base = new Date(Number(bp[0]), Number(bp[1])-1, Number(bp[2]));
-        base.setMonth(base.getMonth() + Number(r.周期));
+        var base = addMonthsClamped(Number(bp[0]), Number(bp[1])-1, Number(bp[2]), Number(r.周期));
         r._nextYear = base.getFullYear();
         r._nextMonth = base.getMonth()+1;
         r.下次換芯 = r._nextYear+'/'+String(r._nextMonth).padStart(2,'0')+'/'+String(base.getDate()).padStart(2,'0');
@@ -8571,9 +8581,7 @@ window.importCartridgeExcel = function(event){
           var parts = date.replace(/-/g,'/').split('/');
           if(parts.length>=3){
             var y=Number(parts[0]), m=Number(parts[1])-1, d=Number(parts[2]);
-            var base = new Date(y, m, d);
-            base.setMonth(base.getMonth() + Number(cycle));
-            nextDate = base;
+            nextDate = addMonthsClamped(y, m, d, Number(cycle));
           }
         }
 
