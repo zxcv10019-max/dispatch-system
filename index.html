@@ -7615,12 +7615,10 @@ window.renderCartridgeTable = function(){
     var phoneRaw = String(group.電話||'').trim();
     var phoneCell = formatPhoneCellMultiline(phoneRaw, 'color:#1565c0;text-decoration:underline;font-weight:bold;');
 
-    // 接觸狀態：已約（全部品項）/ 部分已約 / 已接觸未約 / 尚未接觸
+    // 接觸狀態：已約（全部品項都排定）/ 已接觸未約 / 尚未接觸
     var statusCell;
     if(fullyArranged){
       statusCell = '<span style="background:#d4edda;color:#155724;border:1px solid #a3d6b0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✅ 已約</span>';
-    } else if(anyArranged){
-      statusCell = '<span style="background:#fff3cd;color:#8a6d1f;border:1px solid #f0d878;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">🟡 部分已約</span>';
     } else if(logs.length>0){
       statusCell = '<span style="background:#fdebd0;color:#9c5b0e;border:1px solid #f5cf87;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">📞 已接觸未約</span>';
     } else {
@@ -8460,22 +8458,42 @@ function isCartridgeWorkJob(j){
 function jobCustomerCode(j){
   return String((j&&j.customerCode) || (j&&j.客編) || '').trim();
 }
-// 依「品名規格」判斷這是 M(GDMAX) / P(GDPRO) / R(GDRESIN) 哪一種品項；判斷不出來回傳空字串
-function getCartridgeItemCode(prodName){
-  var s = String(prodName||'').toUpperCase();
-  if(/MAX/.test(s)) return 'M';
-  if(/RESIN/.test(s)) return 'R'; // 要在 PRO 之前判斷，避免 RESIN 誤觸其他規則
-  if(/PRO/.test(s)) return 'P';
-  return '';
+// 把施工內容/施工項目拆成一個個代號（用 + / 、 , 空白分隔），例如「M+ACT+T」→['M','ACT','T']
+function extractCodeTokens(text){
+  return String(text||'')
+    .toUpperCase()
+    .replace(/[（）()]/g,' ')
+    .split(/[+\/,、，\s]+/)
+    .map(function(t){ return t.trim(); })
+    .filter(Boolean);
 }
-// 解析施工內容文字，只要字串中出現 M、P、R 字元（不分大小寫）就算對應品項有換
-function extractWorkContentCodes(text){
-  var s = String(text||'').toUpperCase();
-  var codes = {};
-  if(s.indexOf('M')>=0) codes.M = true;
-  if(s.indexOf('P')>=0) codes.P = true;
-  if(s.indexOf('R')>=0) codes.R = true;
-  return codes;
+// 判斷某一筆換芯品項（依 產品編號／品名規格）是否對應到這筆派工的施工內容代號
+// 例如換芯名單品項代號是「M」，派工施工內容寫「M+ACT+T」會比對成功；
+// 品項代號「PBS-400」，施工內容剛好也寫「PBS-400」也會比對成功。
+function cartridgeRowMatchesJob(r, j){
+  var rowCode = String((r && r.產品編號) || '').trim().toUpperCase();
+  var rowName = String((r && r.品名規格) || '').trim().toUpperCase();
+  if(!rowCode && !rowName) return null; // 無法判斷（名單本身沒有代號資訊）
+  var jobTokens = extractCodeTokens((j&&j.workContent)||'').concat(extractCodeTokens((j&&j.workItem)||''));
+  if(!jobTokens.length) return false;
+  return jobTokens.some(function(t){
+    if(!t) return false;
+    if(rowCode){
+      if(t===rowCode) return true;
+      if(t.length>=2 && rowCode.indexOf(t)>=0) return true; // 如 t="PBS" 出現在 rowCode="PBS-400" 裡
+      if(rowCode.length>=2 && t.indexOf(rowCode)>=0) return true; // 如代號完整出現在較長的施工內容片段中
+    }
+    if(rowName){
+      if(t===rowName) return true;
+      if(t.length>=2 && rowName.indexOf(t)>=0) return true;
+      if(rowName.length>=2 && t.indexOf(rowName)>=0) return true;
+    }
+    return false;
+  });
+}
+function jobWorkItemIsCartridge(j){
+  var txt = String((j&&j.workItem)||'') + ' ' + String((j&&j.施工項目)||'');
+  return /濾芯/.test(txt);
 }
 function normalizeDateForCompare(v){
   v = String(v||'').trim().replace(/-/g,'/');
@@ -8497,7 +8515,7 @@ window.syncCurrentMonthCartridgeArranged = async function(){
     if(j.isLeaveJob || (typeof isValidJob==='function' && !isValidJob(j))) return; // 排除請假/出差等非派工紀錄
     var mk = getJobMonthKey(j);
     if(!mk || mk.split('/')[0] !== yearKey) return; // 同一年度（例如 2026 年）內任何月份都算，不限定剛好是到期月
-    if(!isCartridgeWorkJob(j)) return; // 嚴格要求施工項目/施工內容含「濾芯」字樣，避免誤判其他無關派工
+    if(!jobWorkItemIsCartridge(j)) return; // 施工項目必須含「濾芯」字樣，才算是換芯派工
     var code = jobCustomerCode(j);
     if(!code) return;
     if(!jobMap[code]) jobMap[code] = [];
@@ -8509,9 +8527,9 @@ window.syncCurrentMonthCartridgeArranged = async function(){
     });
   });
 
-  // 同一客戶若有「多種濾芯品項」（M=GDMAX / P=GDPRO / R=GDRESIN，各自獨立周期），
-  // 會依「品名規格」判斷這筆是哪一種，再檢查施工內容裡有沒有出現對應的 M/P/R 字母來精準比對；
-  // 只有在品名規格判斷不出來時，才會跳過改用「安排派工」手動確認。
+  // 同一客戶若有「多種濾芯品項」（例如 M / P / R 各自獨立周期），優先用施工內容裡的品項代號
+  // （如「M+ACT+T」「PBS-400」）精準比對是換哪一種；只有在名單本身也沒有可比對的代號時，
+  // 才會因為無法判斷而跳過，請改用「安排派工」逐項手動確認。
   var codeRowCounts = {};
   cartridgeData.forEach(function(r){
     if(!r || r._excluded) return;
@@ -8527,26 +8545,28 @@ window.syncCurrentMonthCartridgeArranged = async function(){
     if(rowMonth !== monthKey) return;
     touched++;
     var code = String(r.客戶編號 || '').trim();
-    var isMulti = !!(code && codeRowCounts[code] > 1);
-    var itemCode = isMulti ? getCartridgeItemCode(r.品名規格) : '';
-    if(isMulti && !itemCode){
-      // 多品項客戶，但這筆品名規格無法判斷是 M/P/R 哪一種，維持原樣，請手動確認
-      skippedMulti++;
-      return;
-    }
     // 已經超過周期的舊派工（早於或等於上次換芯日期）不算數，避免把上一輪換芯紀錄誤判成這一輪已約
     var lastChangeDate = normalizeDateForCompare(r.日期);
     var candidates = (code && jobMap[code]) ? jobMap[code] : [];
-    var match = candidates.find(function(j){
+    var dateFiltered = candidates.filter(function(j){
       var jd = normalizeDateForCompare(j.date);
-      if(!(!lastChangeDate || !jd || jd > lastChangeDate)) return false;
-      if(isMulti){
-        // 多品項客戶：施工內容裡要出現這個品項對應的 M/P/R 代號才算對得上
-        var codes = extractWorkContentCodes(j.workContent);
-        return !!codes[itemCode];
-      }
-      return true;
+      return !lastChangeDate || !jd || jd > lastChangeDate;
     });
+
+    var isMulti = codeRowCounts[code] > 1;
+    var match = null;
+    // 先嘗試用產品編號／品名規格對照施工內容裡的代號，精準比對是哪一個品項
+    var productMatches = dateFiltered.filter(function(j){ return cartridgeRowMatchesJob(r, j) === true; });
+    if(productMatches.length){
+      match = productMatches[0];
+    } else if(!isMulti){
+      // 單一品項客戶：沒有代號可比對（或代號沒對上）也沒關係，直接採用日期最早的一筆
+      match = dateFiltered[0] || null;
+    } else {
+      // 多品項客戶又比對不到明確代號：無法判斷是哪一種，跳過，維持原狀態不動
+      skippedMulti++;
+      return;
+    }
     if(match){
       var newArr = {
         engineer: match.engineer || '',
@@ -8580,7 +8600,7 @@ window.syncCurrentMonthCartridgeArranged = async function(){
 
   var msg = '🔄 '+yearKey+' 年度已換濾芯同步完成：已檢查 '+touched+' 筆，已約 '+arranged+' 筆';
   if(cleared) msg += '，改回未約 '+cleared+' 筆';
-  if(skippedMulti) msg += '，'+skippedMulti+' 筆因品名規格無法判斷是 M/P/R 哪一種已跳過（請手動安排/確認）';
+  if(skippedMulti) msg += '，'+skippedMulti+' 筆因同客戶有多種濾芯品項無法自動判斷已跳過（請手動安排/確認）';
   if(typeof showCartridgeToast==='function') showCartridgeToast(msg); else alert(msg);
 
   if(changed && typeof saveCartridgeAndLogsNow === 'function'){
