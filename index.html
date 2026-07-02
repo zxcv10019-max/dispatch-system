@@ -7663,21 +7663,20 @@ window.renderCartridgeTable = function(){
   });
 
   var totalShown = groupOrder.length; // 當月不重複客編數
-  // 已約：當月「所有」品項（同一客戶可能同時有 M / P / R 等多種濾芯）都已排定派工，才算已約，
-  // 避免只換了其中一種（例如只換 P、R）就把整戶誤判成全部已約。若使用者手動覆蓋過狀態，優先採用手動設定。
+  // 已約：當月只要有排定任一品項的派工就算已約。若使用者手動覆蓋過狀態，優先採用手動設定。
   var arrangedKeys = groupOrder.filter(function(k){
     var rows = grouped[k].rows;
     var manual = groupManualStatus(rows);
     if(manual) return manual==='arranged';
-    return rows.length>0 && rows.every(function(item){ return !!item.r._jobId; });
+    return rows.some(function(item){ return !!item.r._jobId; });
   });
   var arranged = arrangedKeys.length;
-  // 未約（尚未安排派工，含只完成部分品項的情況），再依是否有聯絡紀錄分為「已接觸未約」與「尚未接觸」
+  // 未約（完全沒有排定派工），再依是否有聯絡紀錄分為「已接觸未約」與「尚未接觸」
   var pendingKeys = groupOrder.filter(function(k){
     var rows = grouped[k].rows;
     var manual = groupManualStatus(rows);
     if(manual) return manual!=='arranged';
-    return rows.some(function(item){ return !item.r._jobId; });
+    return !rows.some(function(item){ return !!item.r._jobId; });
   });
   var contactedKeys = pendingKeys.filter(function(k){
     var manual = groupManualStatus(grouped[k].rows);
@@ -7745,7 +7744,7 @@ window.renderCartridgeTable = function(){
     var fullyArranged = rows.length>0 && rows.every(function(item){ return item.r._jobId; });
     var manualStatus = groupManualStatus(rows);
     var bg = manualStatus ? (manualStatus==='arranged' ? '#f0fff4' : '#fff')
-      : (fullyArranged ? '#f0fff4' : (anyArranged ? '#fffdf0' : '#fff'));
+      : (anyArranged ? '#f0fff4' : '#fff');
 
     // 下次換芯：若有多列，顯示所有不同日期
     var nextDates = [];
@@ -7805,7 +7804,7 @@ window.renderCartridgeTable = function(){
     var phoneCell = formatPhoneCellMultiline(phoneRaw, 'color:#1565c0;text-decoration:underline;font-weight:bold;');
 
     // 接觸狀態：已約（全部品項都排定）/ 已接觸未約 / 尚未接觸；可手動覆蓋
-    var effectiveStatus = manualStatus || (fullyArranged ? 'arranged' : (logs.length>0 ? 'contacted' : 'uncontacted'));
+    var effectiveStatus = manualStatus || (anyArranged ? 'arranged' : (logs.length>0 ? 'contacted' : 'uncontacted'));
     var pillHtml;
     if(effectiveStatus==='arranged'){
       pillHtml = '<span style="background:#d4edda;color:#155724;border:1px solid #a3d6b0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✅ 已約</span>';
