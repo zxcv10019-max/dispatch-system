@@ -5676,6 +5676,17 @@ document.addEventListener("click", function(e){
     return dates;
   }
 
+  function getConsecutiveDates(n){
+    // 從今天開始，連續取 n 天日期（不跳過六、日／假日）
+    const dates = [];
+    const cursor = new Date();
+    for(let i=0;i<n;i++){
+      dates.push(formatDateLocal(cursor));
+      cursor.setDate(cursor.getDate()+1);
+    }
+    return dates;
+  }
+
   function captionForDate(dateLabel){
     const wdNames = ['日','一','二','三','四','五','六'];
     const todayStr = formatDateLocal(new Date());
@@ -5696,17 +5707,19 @@ document.addEventListener("click", function(e){
     if(!panel) return;
     if(!currentUser || !hasAccess()){ panel.innerHTML = ""; return; }
 
-    const [today, tomorrow, dayAfter2] = getWeekdayDates(3);
-
     const adminMode = (typeof isAdmin === "function" && isAdmin());
     const targetEngineer = currentEngineer || "";
+
+    // 管理員帳號（主帳號、gd044@gungdai.com）：連續三天，不跳過假日
+    // 一般綁定工程師帳號：維持原本跳過六、日，只看工作天
+    const [today, tomorrow, dayAfter2] = adminMode ? getConsecutiveDates(3) : getWeekdayDates(3);
 
     let title = "三日派工表";
     let sub = "以今天為主，跳過六、日，往下查看接下來的工作天派工。";
 
     if(adminMode){
       title = "三日派工表｜全部工程";
-      sub = "主帳號手機版顯示 4 位工程師接下來三個工作天（跳過六、日）的派工資料。";
+      sub = "主帳號手機版顯示 4 位工程師接下來連續三天（含假日）的派工資料。";
     }else if(targetEngineer){
       title = `三日派工表｜${mobileEngineerLabel(targetEngineer)}`;
       sub = `依登入帳號 ${currentUser.email} 綁定工程師顯示，已跳過六、日，顯示接下來三個工作天。`;
