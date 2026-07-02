@@ -654,6 +654,61 @@ body{
   width:auto !important;
 }
 
+/* 施工項目多選下拉 */
+.multi-select-wrap{
+  position:relative;
+}
+.multi-select-display{
+  border:1px solid #ccc;
+  border-radius:4px;
+  padding:7px 10px;
+  background:#fff;
+  cursor:pointer;
+  min-height:18px;
+  font-size:13px;
+  color:#333;
+  user-select:none;
+}
+.multi-select-display:hover{
+  border-color:#999;
+}
+.multi-select-display.placeholder{
+  color:#999;
+}
+.multi-select-panel{
+  position:absolute;
+  top:calc(100% + 4px);
+  left:0;
+  z-index:50;
+  background:#fff;
+  border:1px solid #ccc;
+  border-radius:6px;
+  box-shadow:0 4px 14px rgba(0,0,0,.15);
+  padding:6px;
+  min-width:200px;
+  max-height:260px;
+  overflow-y:auto;
+}
+.multi-select-panel label{
+  display:flex !important;
+  align-items:center;
+  gap:6px;
+  font-weight:normal !important;
+  font-size:13px !important;
+  padding:6px 8px;
+  border-radius:4px;
+  margin:0 !important;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.multi-select-panel label:hover{
+  background:#f2f6ff;
+}
+.multi-select-panel input{
+  width:auto !important;
+  margin:0;
+}
+
 
 /* 非派工表頁面可上下滑動：新增派工資料 / 客戶資料 / 派工明細 / 休假管理 */
 #dispatchPage.page.active,
@@ -1621,23 +1676,26 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
       <div id="engineerSuggestion" style="display:none;"></div>
 
       <div class="field">
-        <label>施工項目</label>
-        <select id="fWorkItem">
-          <option value=""></option>
-          <option>安裝新機</option>
-          <option>巡檢設備</option>
-          <option>更換GD濾芯</option>
-          <option>更換其他濾芯</option>
-          <option>更換氣瓶</option>
-          <option>大保養拆機</option>
-          <option>大保養復機</option>
-          <option>安裝全戶</option>
-          <option>更換全戶濾芯</option>
-          <option>移機</option>
-          <option>抓漏</option>
-          <option>更換主機</option>
-          <option>更換龍頭</option>
-        </select>
+        <label>施工項目（可複選）</label>
+        <div class="multi-select-wrap" id="fWorkItemWrap">
+          <div class="multi-select-display placeholder" id="fWorkItemDisplay" onclick="toggleWorkItemDropdown(event)">請選擇（可複選）</div>
+          <div class="multi-select-panel" id="fWorkItemPanel" style="display:none;" onclick="event.stopPropagation();">
+            <label><input type="checkbox" value="安裝新機" onchange="syncWorkItemValue()">安裝新機</label>
+            <label><input type="checkbox" value="巡檢設備" onchange="syncWorkItemValue()">巡檢設備</label>
+            <label><input type="checkbox" value="更換GD濾芯" onchange="syncWorkItemValue()">更換GD濾芯</label>
+            <label><input type="checkbox" value="更換其他濾芯" onchange="syncWorkItemValue()">更換其他濾芯</label>
+            <label><input type="checkbox" value="更換氣瓶" onchange="syncWorkItemValue()">更換氣瓶</label>
+            <label><input type="checkbox" value="大保養拆機" onchange="syncWorkItemValue()">大保養拆機</label>
+            <label><input type="checkbox" value="大保養復機" onchange="syncWorkItemValue()">大保養復機</label>
+            <label><input type="checkbox" value="安裝全戶" onchange="syncWorkItemValue()">安裝全戶</label>
+            <label><input type="checkbox" value="更換全戶濾芯" onchange="syncWorkItemValue()">更換全戶濾芯</label>
+            <label><input type="checkbox" value="移機" onchange="syncWorkItemValue()">移機</label>
+            <label><input type="checkbox" value="抓漏" onchange="syncWorkItemValue()">抓漏</label>
+            <label><input type="checkbox" value="更換主機" onchange="syncWorkItemValue()">更換主機</label>
+            <label><input type="checkbox" value="更換龍頭" onchange="syncWorkItemValue()">更換龍頭</label>
+          </div>
+        </div>
+        <input type="hidden" id="fWorkItem">
       </div>
 
       <div class="field-wide field"><label>施工內容</label><input id="fWorkContent"></div>
@@ -2765,6 +2823,45 @@ function setCityFromCheck(city){
   document.getElementById("fCity").value=city;
   renderAvailableSlots();
 }
+
+/* ── 施工項目多選下拉 ── */
+function toggleWorkItemDropdown(e){
+  if(e) e.stopPropagation();
+  const panel=document.getElementById("fWorkItemPanel");
+  if(!panel) return;
+  panel.style.display = (panel.style.display==="none"||!panel.style.display) ? "block" : "none";
+}
+document.addEventListener("click", function(e){
+  const wrap=document.getElementById("fWorkItemWrap");
+  const panel=document.getElementById("fWorkItemPanel");
+  if(wrap && panel && !wrap.contains(e.target)){
+    panel.style.display="none";
+  }
+});
+function syncWorkItemValue(){
+  const panel=document.getElementById("fWorkItemPanel");
+  const disp=document.getElementById("fWorkItemDisplay");
+  const hidden=document.getElementById("fWorkItem");
+  if(!panel||!disp||!hidden) return;
+  const checked=Array.from(panel.querySelectorAll("input[type=checkbox]:checked")).map(cb=>cb.value);
+  hidden.value=checked.join("、");
+  if(checked.length){
+    disp.textContent=checked.join("、");
+    disp.classList.remove("placeholder");
+  }else{
+    disp.textContent="請選擇（可複選）";
+    disp.classList.add("placeholder");
+  }
+}
+function setWorkItemValue(val){
+  const panel=document.getElementById("fWorkItemPanel");
+  if(!panel) return;
+  const parts=String(val||"").split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+  panel.querySelectorAll("input[type=checkbox]").forEach(cb=>{
+    cb.checked = parts.indexOf(cb.value) >= 0;
+  });
+  syncWorkItemValue();
+}
 function syncCityChecks(){
   const city=document.getElementById("fCity").value;
   document.querySelectorAll('input[name="cityPick"]').forEach(x=>x.checked=(x.value===city));
@@ -3112,7 +3209,7 @@ function clearDispatchForm(){
   const dateEl = document.getElementById("fDate"); if(dateEl) dateEl.valueAsDate = new Date();
   const stEl = document.getElementById("fStartTime"); if(stEl) stEl.value = "09:30";
   const etEl = document.getElementById("fEndTime"); if(etEl) etEl.value = "10:30";
-  const wiEl = document.getElementById("fWorkItem"); if(wiEl) wiEl.value = "";
+  const wiEl = document.getElementById("fWorkItem"); if(wiEl) setWorkItemValue("");
   const pmEl = document.getElementById("fPayment"); if(pmEl) pmEl.value = "";
   const stNormalEl = document.getElementById("fStatusNormal"); if(stNormalEl) stNormalEl.checked = true;
   onDispatchStatusChange();
@@ -4074,7 +4171,7 @@ function editJobForm(id,event){
   document.getElementById("fCity").value=j.city||"";
   document.getElementById("fDistrict").value=j.district||"";
   document.getElementById("fAddress").value=j.address||"";
-  document.getElementById("fWorkItem").value=j.workItem||"";
+  setWorkItemValue(j.workItem||"");
   document.getElementById("fWorkContent").value=j.workContent||"";
   document.getElementById("fAmount").value=j.amount||"";
   document.getElementById("fPayment").value=j.payment||"";
