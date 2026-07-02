@@ -3837,7 +3837,9 @@ function renderSchedule(){
           return s>=0 && idx>=s && idx<=end;
         });
         const holdCls = activeJobs.some(j=>j.isHold) ? "hold-slot-active" : "";
-        const tripType = holdCls ? "" : getEngineerTripRegion(dateStr, engineer);
+        // 這個時段若已經有「實際派工」（排除出差/請假等佔位卡片本身），派工圖層優先顯示，不套用出差橘色底色
+        const hasRealJob = activeJobs.some(j=>!j.isLeaveJob);
+        const tripType = (holdCls || hasRealJob) ? "" : getEngineerTripRegion(dateStr, engineer);
         const tripCls = tripType ? "trip-slot-active" : "";
         const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))) ? "leave-slot-active" : "";
         html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
