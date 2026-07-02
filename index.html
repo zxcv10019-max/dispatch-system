@@ -7542,6 +7542,73 @@ function saveContactLogs(){
 }
 
 /* ── 表格渲染 ── */
+// ── 接觸狀態手動覆蓋：讓使用者可以不管系統自動判斷，直接手動指定這個客戶的狀態 ──
+function groupManualStatus(rows){
+  for(var i=0;i<rows.length;i++){
+    if(rows[i] && rows[i].r && rows[i].r._manualStatus) return rows[i].r._manualStatus;
+  }
+  return '';
+}
+function closeStatusOverrideMenu(){
+  var m = document.getElementById('statusOverrideMenu');
+  if(m) m.remove();
+}
+window.openStatusOverrideMenu = function(event, custKey){
+  event.stopPropagation();
+  closeStatusOverrideMenu();
+  var trigger = event.currentTarget;
+  var rect = trigger.getBoundingClientRect();
+  var menu = document.createElement('div');
+  menu.id = 'statusOverrideMenu';
+  menu.style.cssText = 'position:fixed;z-index:999;top:'+(rect.bottom+4)+'px;left:'+rect.left+'px;background:#fff;border:1px solid #ccc;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:6px;min-width:170px;';
+  var opts = [
+    {v:'', label:'🔄 自動判斷（依派工資料）'},
+    {v:'arranged', label:'✅ 已約'},
+    {v:'contacted', label:'📞 已接觸未約'},
+    {v:'uncontacted', label:'✉️ 尚未接觸'}
+  ];
+  opts.forEach(function(o){
+    var btn = document.createElement('div');
+    btn.textContent = o.label;
+    btn.style.cssText='padding:7px 10px;font-size:12px;cursor:pointer;border-radius:4px;white-space:nowrap;';
+    btn.onmouseenter=function(){ btn.style.background='#f2f6ff'; };
+    btn.onmouseleave=function(){ btn.style.background=''; };
+    btn.onclick=function(e){ e.stopPropagation(); setCartridgeStatusOverride(custKey, o.v); };
+    menu.appendChild(btn);
+  });
+  document.body.appendChild(menu);
+  setTimeout(function(){
+    document.addEventListener('click', closeStatusOverrideMenu, {once:true});
+  },0);
+};
+window.setCartridgeStatusOverride = async function(custKey, value){
+  closeStatusOverrideMenu();
+  var touched = false;
+  cartridgeData.forEach(function(r){
+    if(!r || r._excluded) return;
+    if(String(r.客戶編號||'') !== String(custKey||'')) return;
+    if(value){
+      r._manualStatus = value;
+    }else{
+      delete r._manualStatus;
+    }
+    touched = true;
+  });
+  if(!touched) return;
+  saveCD();
+  if(typeof localDirty !== 'undefined') localDirty = true;
+  renderCartridgeTable();
+  if(typeof showCartridgeToast==='function'){
+    var msg = value ? '✅ 已手動設定狀態' : '🔄 已改回自動判斷狀態';
+    showCartridgeToast(msg);
+  }
+  if(typeof saveCartridgeAndLogsNow === 'function'){
+    var syncOk = await saveCartridgeAndLogsNow('手動更改狀態');
+    if(syncOk === false && typeof showCartridgeToast==='function') showCartridgeToast('⚠️ 本機已同步，但雲端同步失敗，請稍後再試');
+  }
+};
+
+
 window.renderCartridgeTable = function(){
   if(typeof repairCartridgeNextDates==='function') repairCartridgeNextDates();
   var t = document.getElementById('cartridgeTable');
@@ -7597,19 +7664,31 @@ window.renderCartridgeTable = function(){
 
   var totalShown = groupOrder.length; // 當月不重複客編數
   // 已約：當月「所有」品項（同一客戶可能同時有 M / P / R 等多種濾芯）都已排定派工，才算已約，
-  // 避免只換了其中一種（例如只換 P、R）就把整戶誤判成全部已約。
+  // 避免只換了其中一種（例如只換 P、R）就把整戶誤判成全部已約。若使用者手動覆蓋過狀態，優先採用手動設定。
   var arrangedKeys = groupOrder.filter(function(k){
     var rows = grouped[k].rows;
+    var manual = groupManualStatus(rows);
+    if(manual) return manual==='arranged';
     return rows.length>0 && rows.every(function(item){ return !!item.r._jobId; });
   });
   var arranged = arrangedKeys.length;
   // 未約（尚未安排派工，含只完成部分品項的情況），再依是否有聯絡紀錄分為「已接觸未約」與「尚未接觸」
   var pendingKeys = groupOrder.filter(function(k){
     var rows = grouped[k].rows;
+    var manual = groupManualStatus(rows);
+    if(manual) return manual!=='arranged';
     return rows.some(function(item){ return !item.r._jobId; });
   });
-  var contactedKeys = pendingKeys.filter(function(k){ return (contactLogs[k]||[]).length>0; });
-  var uncontactedKeys = pendingKeys.filter(function(k){ return !(contactLogs[k]||[]).length; });
+  var contactedKeys = pendingKeys.filter(function(k){
+    var manual = groupManualStatus(grouped[k].rows);
+    if(manual) return manual==='contacted';
+    return (contactLogs[k]||[]).length>0;
+  });
+  var uncontactedKeys = pendingKeys.filter(function(k){
+    var manual = groupManualStatus(grouped[k].rows);
+    if(manual) return manual==='uncontacted';
+    return !(contactLogs[k]||[]).length;
+  });
   var contactedCount = contactedKeys.length;
   var uncontactedCount = uncontactedKeys.length;
 
@@ -7664,7 +7743,9 @@ window.renderCartridgeTable = function(){
     var firstIdx = rows[0].i;
     var anyArranged = rows.some(function(item){ return item.r._jobId; });
     var fullyArranged = rows.length>0 && rows.every(function(item){ return item.r._jobId; });
-    var bg = fullyArranged ? '#f0fff4' : (anyArranged ? '#fffdf0' : '#fff');
+    var manualStatus = groupManualStatus(rows);
+    var bg = manualStatus ? (manualStatus==='arranged' ? '#f0fff4' : '#fff')
+      : (fullyArranged ? '#f0fff4' : (anyArranged ? '#fffdf0' : '#fff'));
 
     // 下次換芯：若有多列，顯示所有不同日期
     var nextDates = [];
@@ -7723,15 +7804,19 @@ window.renderCartridgeTable = function(){
     var phoneRaw = String(group.電話||'').trim();
     var phoneCell = formatPhoneCellMultiline(phoneRaw, 'color:#1565c0;text-decoration:underline;font-weight:bold;');
 
-    // 接觸狀態：已約（全部品項都排定）/ 已接觸未約 / 尚未接觸
-    var statusCell;
-    if(fullyArranged){
-      statusCell = '<span style="background:#d4edda;color:#155724;border:1px solid #a3d6b0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✅ 已約</span>';
-    } else if(logs.length>0){
-      statusCell = '<span style="background:#fdebd0;color:#9c5b0e;border:1px solid #f5cf87;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">📞 已接觸未約</span>';
+    // 接觸狀態：已約（全部品項都排定）/ 已接觸未約 / 尚未接觸；可手動覆蓋
+    var effectiveStatus = manualStatus || (fullyArranged ? 'arranged' : (logs.length>0 ? 'contacted' : 'uncontacted'));
+    var pillHtml;
+    if(effectiveStatus==='arranged'){
+      pillHtml = '<span style="background:#d4edda;color:#155724;border:1px solid #a3d6b0;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✅ 已約</span>';
+    } else if(effectiveStatus==='contacted'){
+      pillHtml = '<span style="background:#fdebd0;color:#9c5b0e;border:1px solid #f5cf87;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">📞 已接觸未約</span>';
     } else {
-      statusCell = '<span style="background:#fbe4e4;color:#a33;border:1px solid #f5a3a3;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✉️ 尚未接觸</span>';
+      pillHtml = '<span style="background:#fbe4e4;color:#a33;border:1px solid #f5a3a3;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:bold;white-space:nowrap;">✉️ 尚未接觸</span>';
     }
+    var manualBadge = manualStatus ? ' <span title="手動設定，非系統自動判斷" style="color:#999;font-size:11px;">✎手動</span>' : '';
+    var statusCell = '<div onclick="openStatusOverrideMenu(event,\''+escapeHtml(custKey)+'\')" style="cursor:pointer;display:inline-block;" title="點一下可手動更改狀態">'
+      + pillHtml + manualBadge + '</div>';
 
     var rowChecked = cartridgeSelectedKeys[custKey] ? 'checked' : '';
 
