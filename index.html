@@ -1680,19 +1680,30 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
         <div class="multi-select-wrap" id="fWorkItemWrap">
           <div class="multi-select-display placeholder" id="fWorkItemDisplay" onclick="toggleWorkItemDropdown(event)">請選擇（可複選）</div>
           <div class="multi-select-panel" id="fWorkItemPanel" style="display:none;" onclick="event.stopPropagation();">
-            <label><input type="checkbox" value="安裝新機" onchange="syncWorkItemValue()">安裝新機</label>
-            <label><input type="checkbox" value="巡檢設備" onchange="syncWorkItemValue()">巡檢設備</label>
-            <label><input type="checkbox" value="更換GD濾芯" onchange="syncWorkItemValue()">更換GD濾芯</label>
-            <label><input type="checkbox" value="更換其他濾芯" onchange="syncWorkItemValue()">更換其他濾芯</label>
-            <label><input type="checkbox" value="更換氣瓶" onchange="syncWorkItemValue()">更換氣瓶</label>
+            <label><input type="checkbox" value="IZERO系統升級+更換濾芯" onchange="syncWorkItemValue()">IZERO系統升級+更換濾芯</label>
             <label><input type="checkbox" value="大保養拆機" onchange="syncWorkItemValue()">大保養拆機</label>
             <label><input type="checkbox" value="大保養復機" onchange="syncWorkItemValue()">大保養復機</label>
             <label><input type="checkbox" value="安裝全戶" onchange="syncWorkItemValue()">安裝全戶</label>
-            <label><input type="checkbox" value="更換全戶濾芯" onchange="syncWorkItemValue()">更換全戶濾芯</label>
-            <label><input type="checkbox" value="移機" onchange="syncWorkItemValue()">移機</label>
-            <label><input type="checkbox" value="抓漏" onchange="syncWorkItemValue()">抓漏</label>
+            <label><input type="checkbox" value="安裝備用機" onchange="syncWorkItemValue()">安裝備用機</label>
+            <label><input type="checkbox" value="安裝新機" onchange="syncWorkItemValue()">安裝新機</label>
+            <label><input type="checkbox" value="安裝新機、安裝GD濾芯" onchange="syncWorkItemValue()">安裝新機、安裝GD濾芯</label>
+            <label><input type="checkbox" value="安裝新機、安裝GD濾芯、安裝其他濾芯" onchange="syncWorkItemValue()">安裝新機、安裝GD濾芯、安裝其他濾芯</label>
+            <label><input type="checkbox" value="安裝新機、安裝其他濾芯" onchange="syncWorkItemValue()">安裝新機、安裝其他濾芯</label>
+            <label><input type="checkbox" value="告知機器使用方法" onchange="syncWorkItemValue()">告知機器使用方法</label>
+            <label><input type="checkbox" value="巡檢設備" onchange="syncWorkItemValue()">巡檢設備</label>
+            <label><input type="checkbox" value="巡檢設備、更換GD濾芯" onchange="syncWorkItemValue()">巡檢設備、更換GD濾芯</label>
+            <label><input type="checkbox" value="巡檢設備、更換其他濾芯" onchange="syncWorkItemValue()">巡檢設備、更換其他濾芯</label>
+            <label><input type="checkbox" value="更換GD濾芯" onchange="syncWorkItemValue()">更換GD濾芯</label>
             <label><input type="checkbox" value="更換主機" onchange="syncWorkItemValue()">更換主機</label>
-            <label><input type="checkbox" value="更換龍頭" onchange="syncWorkItemValue()">更換龍頭</label>
+            <label><input type="checkbox" value="更換全戶濾芯" onchange="syncWorkItemValue()">更換全戶濾芯</label>
+            <label><input type="checkbox" value="更換其他濾芯" onchange="syncWorkItemValue()">更換其他濾芯</label>
+            <label><input type="checkbox" value="更換氣瓶" onchange="syncWorkItemValue()">更換氣瓶</label>
+            <label><input type="checkbox" value="其他" onchange="syncWorkItemValue()">其他</label>
+            <label><input type="checkbox" value="拿機器" onchange="syncWorkItemValue()">拿機器</label>
+            <label><input type="checkbox" value="移機" onchange="syncWorkItemValue()">移機</label>
+            <label><input type="checkbox" value="移機+更換GD濾芯" onchange="syncWorkItemValue()">移機+更換GD濾芯</label>
+            <label><input type="checkbox" value="移機+換芯" onchange="syncWorkItemValue()">移機+換芯</label>
+            <label><input type="checkbox" value="換機" onchange="syncWorkItemValue()">換機</label>
           </div>
         </div>
         <input type="hidden" id="fWorkItem">
