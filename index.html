@@ -462,6 +462,40 @@ body{
   margin:0 !important;
 }
 
+/* ===== 依施工項目分色（一般模式 / 精簡模式 / 展開卡片皆適用） =====
+   巡檢設備＝淺紅色、安裝新機或移機＝淺藍色、拆機＝淺綠色、復機＝淺橘色、更換氣瓶＝灰色
+   換濾芯（含未特別分類的項目）維持原本黃色，不受影響 */
+.job.work-color-inspect,
+body.compact-schedule .job.work-color-inspect,
+body.compact-schedule .job.expanded.work-color-inspect{
+  background:#ffd9d9 !important;
+  border-color:#e57373 !important;
+}
+.job.work-color-install,
+body.compact-schedule .job.work-color-install,
+body.compact-schedule .job.expanded.work-color-install{
+  background:#d6e9ff !important;
+  border-color:#64b5f6 !important;
+}
+.job.work-color-remove,
+body.compact-schedule .job.work-color-remove,
+body.compact-schedule .job.expanded.work-color-remove{
+  background:#dcf5dc !important;
+  border-color:#81c784 !important;
+}
+.job.work-color-restore,
+body.compact-schedule .job.work-color-restore,
+body.compact-schedule .job.expanded.work-color-restore{
+  background:#ffe0b3 !important;
+  border-color:#ffb74d !important;
+}
+.job.work-color-gas,
+body.compact-schedule .job.work-color-gas,
+body.compact-schedule .job.expanded.work-color-gas{
+  background:#e0e0e0 !important;
+  border-color:#9e9e9e !important;
+}
+
 
 /* 只有表格區上下滑動，不讓整個頁面跟著下滑 */
 html, body{
@@ -3879,6 +3913,21 @@ function slotClickNew(event, dateStr, engineer, time){
   setTimeout(()=>{ const el=document.getElementById("fCustomerCode"); if(el) el.focus(); }, 100);
 }
 
+// 依施工項目（可複選，用「、」串接）決定派工卡片底色
+// 優先順序：拆機 > 復機 > 安裝新機/移機 > 巡檢設備 > 更換氣瓶 > （其餘含濾芯者維持原黃色）
+function jobWorkColorClass(j){
+  if(!j || j.isHold || j.isLeaveJob) return ""; // 暫押/請假/出差卡片維持原本樣式，不受此分色影響
+  const raw = String(j.workItem||'') + '、' + String(j.施工項目||'');
+  const items = raw.split(/、|,|，/).map(s=>s.trim()).filter(Boolean);
+  const has = re => items.some(s=>re.test(s));
+  if(has(/拆機/)) return "work-color-remove";
+  if(has(/復機/)) return "work-color-restore";
+  if(has(/安裝新機|移機/)) return "work-color-install";
+  if(has(/巡檢設備/)) return "work-color-inspect";
+  if(has(/更換氣瓶/)) return "work-color-gas";
+  return "";
+}
+
 function jobCard(j){
   const address = j.address
     ? `<div class="card-line card-address">地址：<a href="${mapUrl(j.address)}" target="_blank">${escapeHtml(j.address)}</a></div>`
@@ -3904,7 +3953,7 @@ function jobCard(j){
   const compactCity = escapeHtml(String(j.city||"").trim());
   const compactDistrict = escapeHtml(String(j.district||"").trim());
 
-  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))?"leave-job-card":""}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))?"leave-job-card":""} ${jobWorkColorClass(j)}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})"
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
