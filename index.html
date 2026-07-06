@@ -501,6 +501,28 @@ body.compact-schedule .job.expanded.work-color-gas{
   border:1px solid #9e9e9e !important;
 }
 
+/* 整個時段格子（td）跟著變色，不只是裡面的卡片 */
+td.slot.job-slot-active.work-color-inspect,
+.week-schedule-table td.slot.job-slot-active.work-color-inspect{
+  background:#ffd9d9 !important;
+}
+td.slot.job-slot-active.work-color-install,
+.week-schedule-table td.slot.job-slot-active.work-color-install{
+  background:#d6e9ff !important;
+}
+td.slot.job-slot-active.work-color-remove,
+.week-schedule-table td.slot.job-slot-active.work-color-remove{
+  background:#dcf5dc !important;
+}
+td.slot.job-slot-active.work-color-restore,
+.week-schedule-table td.slot.job-slot-active.work-color-restore{
+  background:#ffe0b3 !important;
+}
+td.slot.job-slot-active.work-color-gas,
+.week-schedule-table td.slot.job-slot-active.work-color-gas{
+  background:#e0e0e0 !important;
+}
+
 
 /* 只有表格區上下滑動，不讓整個頁面跟著下滑 */
 html, body{
@@ -3881,7 +3903,9 @@ function renderSchedule(){
         const tripType = (holdCls || hasRealJob) ? "" : getEngineerTripRegion(dateStr, engineer);
         const tripCls = tripType ? "trip-slot-active" : "";
         const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))) ? "leave-slot-active" : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
+        // 依派工的施工項目，讓整個時段格子（不只卡片本身）跟著變色
+        const slotColorCls = (!holdCls && !tripCls && !leaveCls) ? (activeJobs.map(j=>jobWorkColorClass(j)).find(c=>c) || "") : "";
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls} ${slotColorCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
