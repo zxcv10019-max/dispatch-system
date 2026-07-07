@@ -2944,6 +2944,22 @@ function syncEndTimeByStart(){
 function showPage(pageId){
   document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage");
   document.body.classList.toggle("cartridge-scroll-mode", pageId==="cartridgePage");
+  document.body.classList.toggle("schedule-scroll-mode", pageId==="schedulePage");
+  document.documentElement.classList.toggle("schedule-scroll-mode", pageId==="schedulePage");
+  if(pageId==="schedulePage"){
+    document.documentElement.style.height="auto";
+    document.documentElement.style.overflowY="scroll";
+    document.body.style.height="auto";
+    document.body.style.minHeight="100vh";
+    document.body.style.overflowY="scroll";
+    document.body.style.display="block";
+  }else{
+    document.documentElement.style.height="";
+    document.body.style.height="";
+    document.body.style.minHeight="";
+    document.body.style.overflowY="";
+    document.body.style.display="";
+  }
   document.documentElement.classList.toggle("force-cartridge-scroll", pageId==="cartridgePage");
   document.body.classList.toggle("force-cartridge-scroll", pageId==="cartridgePage");
   if(pageId==="cartridgePage"){
@@ -9086,7 +9102,7 @@ if(cartridgeData.length){
   height:11px !important;
 }
 
-/* 表格整個可用滑鼠拖曳（左右上下）捲動 */
+/* 表格整個可用滑鼠拖曳（左右）捲動，直向則交給整個瀏覽器頁面 */
 #scheduleWrap{
   cursor:grab;
   -webkit-user-select:none;
@@ -9095,6 +9111,60 @@ if(cartridgeData.length){
 #scheduleWrap.dragging{
   cursor:grabbing;
   scroll-behavior:auto !important;
+}
+
+/* ============================================================
+   派工表分頁：改成「整個瀏覽器頁面」一起往下捲動，
+   不再是表格自己一個獨立的小捲動框。
+   ============================================================ */
+html.schedule-scroll-mode,
+body.schedule-scroll-mode,
+body:has(#schedulePage.page.active){
+  height:auto !important;
+  min-height:100% !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  display:block !important;
+}
+
+body.schedule-scroll-mode #schedulePage.page.active,
+body:has(#schedulePage.page.active) #schedulePage.page.active{
+  display:block !important;
+  height:auto !important;
+  min-height:0 !important;
+  overflow:visible !important;
+  padding-bottom:80px !important;
+}
+
+body.schedule-scroll-mode .table-wrap,
+body.schedule-scroll-mode #scheduleWrap,
+body:has(#schedulePage.page.active) .table-wrap,
+body:has(#schedulePage.page.active) #scheduleWrap{
+  flex:none !important;
+  height:auto !important;
+  max-height:none !important;
+  overflow-y:visible !important;
+  overflow-x:auto !important;
+}
+
+/* 頁面整個捲動時，表格自帶的黏頂表頭改回一般排版，避免和頁面捲動衝突 */
+body.schedule-scroll-mode .week-schedule-table tr:nth-child(1) th,
+body.schedule-scroll-mode .week-schedule-table tr:nth-child(2) th,
+body.schedule-scroll-mode .week-schedule-table th.time-col,
+body.schedule-scroll-mode .week-schedule-table td.time-col,
+body:has(#schedulePage.page.active) .week-schedule-table tr:nth-child(1) th,
+body:has(#schedulePage.page.active) .week-schedule-table tr:nth-child(2) th,
+body:has(#schedulePage.page.active) .week-schedule-table th.time-col,
+body:has(#schedulePage.page.active) .week-schedule-table td.time-col{
+  position:static !important;
+}
+
+/* 工具列改成黏在瀏覽器視窗頂端，往下捲時仍看得到操作按鈕 */
+body.schedule-scroll-mode #schedulePage > .toolbar,
+body:has(#schedulePage.page.active) #schedulePage > .toolbar{
+  position:sticky !important;
+  top:0 !important;
+  z-index:30 !important;
 }
 </style>
 
