@@ -9038,5 +9038,125 @@ if(cartridgeData.length){
 })();
 </script>
 
+<style>
+/* ============================================================
+   派工表：上方區塊縮小 + 表格整個可拖曳滑動
+   ============================================================ */
+
+/* 上方標頭縮小 */
+.header{
+  padding:8px 14px !important;
+  font-size:17px !important;
+}
+.header .auth-panel{ font-size:12px; }
+
+/* 分頁籤縮小 */
+.tabs button{
+  padding:7px 12px !important;
+  font-size:13px !important;
+}
+
+/* 派工頁：工具列、統計列、代號說明、圖例都縮小一點，把空間讓給表格 */
+#schedulePage > .toolbar{
+  padding:6px 10px !important;
+  gap:6px !important;
+}
+#schedulePage > .toolbar input,
+#schedulePage > .toolbar button{
+  padding:5px 9px !important;
+  font-size:12.5px !important;
+}
+#schedulePage > .summary{
+  margin:6px 12px !important;
+  padding:6px 10px !important;
+  font-size:12.5px !important;
+}
+#schedulePage .engineer-code-note{
+  margin:0 12px 4px !important;
+  font-size:12px !important;
+  color:#666;
+}
+#schedulePage .work-color-legend{
+  margin:0 12px 6px !important;
+  font-size:11px !important;
+  gap:6px !important;
+}
+#schedulePage .work-color-legend span[style*="width:14px"]{
+  width:11px !important;
+  height:11px !important;
+}
+
+/* 表格整個可用滑鼠拖曳（左右上下）捲動 */
+#scheduleWrap{
+  cursor:grab;
+  -webkit-user-select:none;
+  user-select:none;
+}
+#scheduleWrap.dragging{
+  cursor:grabbing;
+  scroll-behavior:auto !important;
+}
+</style>
+
+<script>
+(function(){
+  'use strict';
+  // 讓「派工表」整個表格可以用滑鼠按住拖曳，任何方向滑動查看，
+  // 不必只靠邊緣的捲軸。點擊在派工卡片、按鈕、輸入框上時不觸發拖曳，
+  // 這樣才不會影響原本點擊卡片開啟詳情 / 拖放派工的功能。
+  function initScheduleDragScroll(){
+    var wrap = document.getElementById('scheduleWrap');
+    if(!wrap || wrap.__dragScrollInit) return;
+    wrap.__dragScrollInit = true;
+
+    var isDown = false, moved = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    function shouldIgnore(target){
+      return target.closest('.job, button, input, select, textarea, a, label, .job-resize-handle');
+    }
+
+    wrap.addEventListener('mousedown', function(e){
+      if(e.button !== 0) return;
+      if(shouldIgnore(e.target)) return;
+      isDown = true; moved = false;
+      startX = e.pageX; startY = e.pageY;
+      startLeft = wrap.scrollLeft; startTop = wrap.scrollTop;
+    });
+
+    window.addEventListener('mousemove', function(e){
+      if(!isDown) return;
+      var dx = e.pageX - startX, dy = e.pageY - startY;
+      if(Math.abs(dx) > 3 || Math.abs(dy) > 3){
+        moved = true;
+        wrap.classList.add('dragging');
+      }
+      if(moved){
+        wrap.scrollLeft = startLeft - dx;
+        wrap.scrollTop = startTop - dy;
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('mouseup', function(){
+      if(!isDown) return;
+      isDown = false;
+      wrap.classList.remove('dragging');
+      if(moved){
+        var blocker = function(ev){ ev.stopPropagation(); ev.preventDefault(); wrap.removeEventListener('click', blocker, true); };
+        wrap.addEventListener('click', blocker, true);
+      }
+    });
+
+    wrap.addEventListener('mouseleave', function(){
+      isDown = false;
+      wrap.classList.remove('dragging');
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', initScheduleDragScroll);
+  setInterval(initScheduleDragScroll, 1000);
+})();
+</script>
+
 </body>
 </html>
