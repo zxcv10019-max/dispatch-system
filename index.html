@@ -2581,8 +2581,8 @@ async function applyRemoteData(data){
   // cartridgeData 特別注意：_excluded、_arranged 等欄位變動不會改變筆數，
   // 所以只要 localDirty=true，就整批保護 cartridgeData，避免舊快照把 _excluded 狀態洗掉。
   if(localDirty){
-    if(remoteJobs && remoteJobsCount + 3 < localJobsCount) remoteJobs = null;
-    if(remoteCustomers && remoteCustomersCount + 3 < localCustomersCount) remoteCustomers = null;
+    if(remoteJobs && remoteJobsCount < localJobsCount) remoteJobs = null;
+    if(remoteCustomers && remoteCustomersCount < localCustomersCount) remoteCustomers = null;
     if(remoteLeaveRecords && remoteLeaveRecordsCount + 1 < localLeaveRecordsCount) remoteLeaveRecords = null;
     if(remoteCartridgeData) remoteCartridgeData = null; // 有待存變更時，整批保護換芯資料（含 _excluded 等 metadata）
     if(remoteContactLogs && remoteContactLogsCount < localContactLogsCount) remoteContactLogs = null;
