@@ -5104,16 +5104,13 @@ function renderJobList(){
       return (String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer));
     });
 
-  // 顯示篩選提示
+  // 顯示篩選提示（不管有沒有篩選條件，都固定顯示目前清單筆數，方便一眼看出本月/本次查詢有幾筆）
   const badge = document.getElementById("listFilterBadge");
   if(badge){
     const holdText = holdFilter==="hold" ? "目前暫押派工" : (holdFilter==="all" ? "全部派工" : "正式派工");
-    if(kw || holdFilter!=="normal" || startDate || endDate || engFilter){
-      badge.style.display="block";
-      badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">${escapeHtml(holdText)}${startDate||endDate?`　📅 ${escapeHtml(startDate||"不限")}～${escapeHtml(endDate||"不限")}`:""}${engFilter?`　👷 ${escapeHtml(displayEngineer(engFilter))} ${escapeHtml(engFilter)}`:""}${kw?`　🔍 篩選：「${escapeHtml(custFilter)}」`:""}　共 ${list.length} 筆　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a></span>`;
-    } else {
-      badge.style.display="none";
-    }
+    const hasFilter = !!(kw || holdFilter!=="normal" || startDate || endDate || engFilter);
+    badge.style.display="block";
+    badge.innerHTML=`<span style="background:#e8f4fd;border:1px solid #3498db;border-radius:12px;padding:3px 10px;color:#1a5276;">${escapeHtml(holdText)}${month?`　🗓️ ${escapeHtml(month)}`:""}${startDate||endDate?`　📅 ${escapeHtml(startDate||"不限")}～${escapeHtml(endDate||"不限")}`:""}${engFilter?`　👷 ${escapeHtml(displayEngineer(engFilter))} ${escapeHtml(engFilter)}`:""}${kw?`　🔍 篩選：「${escapeHtml(custFilter)}」`:""}　共 ${list.length} 筆${hasFilter?`　<a href="#" onclick="clearListFilter();return false;" style="color:#e74c3c;margin-left:6px;">✕ 清除</a>`:""}</span>`;
   }
 
   let html="<tr><th>操作</th><th>狀態</th><th>工程人員</th><th>排工日期</th><th>排工時間</th><th>結束時間</th><th>訂單單號</th><th>客編</th><th>客名</th><th>客編&客名</th><th>客人電話</th><th>縣市</th><th>區域</th><th>地址</th><th>施工項目</th><th>施工內容</th><th>銷售金額</th><th>付款方式</th></tr>";
