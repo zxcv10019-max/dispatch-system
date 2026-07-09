@@ -7250,9 +7250,14 @@ body.compact-schedule .job .actions,
 body.compact-schedule .job .card-time,
 body.compact-schedule .job .card-line,
 body.compact-schedule .job .status-checks,
-body.compact-schedule .job .job-resize-handle,
 body.compact-schedule .job>div[style*="margin-top"]{
   display:none !important;
+}
+body.compact-schedule .job .job-resize-handle{
+  display:flex !important;
+  height:8px !important;
+  margin-top:0 !important;
+  border-top:none !important;
 }
 
 /* Hold 卡片：灰底區別 */
@@ -7291,7 +7296,7 @@ body.compact-schedule .job.expanded .card-time{ display:block !important; font-s
 body.compact-schedule .job.expanded .card-line{ display:block !important; font-size:12px !important; }
 body.compact-schedule .job.expanded>div[style*="margin-top"]{ display:block !important; }
 body.compact-schedule .job.expanded .status-checks{ display:flex !important; font-size:12px !important; }
-body.compact-schedule .job.expanded .job-resize-handle{ display:none !important; }
+body.compact-schedule .job.expanded .job-resize-handle{ display:flex !important; height:14px !important; margin-top:4px !important; border-top:1px dashed #d4b53a !important; }
 
 /* 展開時背後遮罩（點外側關閉） */
 #compactExpandOverlay{
