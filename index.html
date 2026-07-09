@@ -128,6 +128,14 @@ textarea{min-height:70px;resize:vertical}
 }
 .weekend-head{background:#cfe2f3!important}
 .today-head{background:#ffd966!important}
+/* 日期表頭固定拆成「日期」「星期」兩行，不管欄位被 colspan 擠得多窄（例如假日只佔 1 欄），
+   都不會被迫塞在同一行而裁切、跟下面黏頂的工程師列重疊。 */
+.date-head, .weekend-head, .today-head{
+  line-height:1.25;
+  padding:4px 2px !important;
+}
+.head-date, .head-weekday{ display:block; }
+.head-weekday{ font-weight:normal; font-size:0.9em; }
 .engineer-head{
   background:#e9e9e9!important;
   font-weight:bold;
@@ -304,7 +312,7 @@ html, body{
 
 .week-schedule-table .engineer-head{
   position:sticky!important;
-  top:36px!important;
+  top:46px!important;
   z-index:19!important;
 }
 
@@ -577,7 +585,7 @@ body{
 
 .week-schedule-table tr:nth-child(2) th{
   position:sticky !important;
-  top:36px !important;
+  top:46px !important;
   z-index:49 !important;
 }
 
@@ -850,7 +858,7 @@ body{
 }
 .week-schedule-table tr:nth-child(2) th{
   position:sticky !important;
-  top:36px !important;
+  top:46px !important;
   z-index:49 !important;
 }
 .week-schedule-table th.time-col{
@@ -4033,7 +4041,7 @@ function buildScheduleBlockHtml(dates, today){
     const outside=isOutsideSelectedMonth(dateStr);
     const cls=dateStr===today ? "today-head" : (weekend ? "weekend-head" : "date-head");
     const colCount=getEngineersForDate(dateStr).length;
-    html+=`<th class="${cls}${outside?" outside-month-head":""}" colspan="${colCount}">${dateStr}　${getWeekdayName(dateStr)}</th>`;
+    html+=`<th class="${cls}${outside?" outside-month-head":""}" colspan="${colCount}"><span class="head-date">${dateStr}</span><span class="head-weekday">${getWeekdayName(dateStr)}</span></th>`;
   });
   html+="</tr><tr>";
   dates.forEach(dateStr=>{
@@ -7232,10 +7240,27 @@ body.schedule-month-view.compact-schedule .job{
   font-size:8px !important;
 }
 
+/* 精簡模式（非月檢視）：星期維持原本緊貼在日期後面同一行 */
+body.compact-schedule .head-weekday{
+  display:inline;
+  margin-left:3px;
+}
+/* 月檢視 + 精簡模式：星期換到下一行，配合下面加大的 sticky 偏移量 */
+body.schedule-month-view.compact-schedule .head-weekday{
+  display:block;
+  margin-left:0;
+}
+
 /* 精簡模式：調整 sticky 標頭列的 top 偏移，避免遮住 09:30 */
 body.compact-schedule #schedule tr:nth-child(2) th,
 body.compact-schedule table#schedule tr:nth-child(2) th{
   top:24px !important;
+}
+/* 月檢視 + 精簡模式：日期表頭換成兩行了，工程師列的 sticky 偏移要跟著加大，
+   不然還是會被兩行的日期表頭蓋到 */
+body.schedule-month-view.compact-schedule #schedule tr:nth-child(2) th,
+body.schedule-month-view.compact-schedule table#schedule tr:nth-child(2) th{
+  top:32px !important;
 }
 
 /* 精簡用 span：標準模式隱藏 */
@@ -9432,6 +9457,21 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
    ============================================================ */
 .week-schedule-table td.slot.break-slot:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
   background:#CCCCFF !important;
+}
+
+/* 上面那條規則的 :not() 沒有排除到「一般派工」本身的黃色（.job-slot-active），
+   導致平日一般派工只要落在午休/晚間時段，整格會被淡紫色蓋過去。
+   這裡改用明確、權重更高的規則，逐一保證每一種狀態色都蓋過淡紫色，不再讓淡紫色贏。 */
+.week-schedule-table td.slot.break-slot.hold-slot-active{ background:#e8eaf6 !important; }
+.week-schedule-table td.slot.break-slot.trip-slot-active{ background:#ffb74d !important; }
+.week-schedule-table td.slot.break-slot.leave-slot-active{ background:#e1bee7 !important; }
+.week-schedule-table td.slot.break-slot.work-color-inspect{ background:#ffd9d9 !important; }
+.week-schedule-table td.slot.break-slot.work-color-install{ background:#d6e9ff !important; }
+.week-schedule-table td.slot.break-slot.work-color-remove{ background:#dcf5dc !important; }
+.week-schedule-table td.slot.break-slot.work-color-restore{ background:#ffe0b3 !important; }
+.week-schedule-table td.slot.break-slot.work-color-gas{ background:#e0e0e0 !important; }
+.week-schedule-table td.slot.break-slot.job-slot-active:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
+  background:#FFF2CC !important;
 }
 
 /* 整月分週檢視：第一週/最後一週為了湊滿 7 天，可能會補到隔壁月份的日期，
