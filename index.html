@@ -4004,11 +4004,20 @@ function getMonthWeekBlocks(){
   const daysToSunday = lastDow===0 ? 0 : (7-lastDow);
   const gridEnd=addDays(lastOfMonth, daysToSunday);
 
+  // 只有「正在看本月」時，才把今天之前的日期隱藏起來，從今天開始顯示到月底；
+  // 切到別的月份（上個月／下個月）看，仍然完整顯示整個月，不受影響。
+  const now=new Date();
+  const isCurrentMonth = (year===now.getFullYear() && month===now.getMonth());
+  const todayStr = formatDateLocal(now);
+
   const blocks=[];
   let cursor=new Date(gridStart);
   while(cursor<=gridEnd){
-    const week=Array.from({length:7},(_,i)=>formatDateLocal(addDays(cursor,i)));
-    blocks.push(week);
+    let week=Array.from({length:7},(_,i)=>formatDateLocal(addDays(cursor,i)));
+    if(isCurrentMonth){
+      week = week.filter(d => d >= todayStr);
+    }
+    if(week.length) blocks.push(week);
     cursor=addDays(cursor,7);
   }
   return blocks;
@@ -4085,6 +4094,7 @@ function renderSchedule(){
 
   const table=document.getElementById("schedule");
   table.className="week-schedule-table";
+  document.body.classList.toggle("schedule-month-view", window.scheduleRangeMode === "month");
   const today=formatDateLocal(new Date());
 
   let html="";
@@ -7182,6 +7192,44 @@ body.compact-schedule table#schedule td.slot{
   vertical-align:top !important;
   position:relative;
   height:auto !important;
+}
+
+/* 月檢視 + 精簡模式：假日（六、日）標頭字數比較多，允許換成兩行，不再強制擠成一行、裁切文字 */
+body.schedule-month-view.compact-schedule #schedule .weekend-head,
+body.schedule-month-view.compact-schedule table#schedule .weekend-head{
+  white-space:normal !important;
+  overflow:visible !important;
+  line-height:1.15 !important;
+  word-break:break-word;
+}
+
+/* 月檢視 + 精簡模式：整體再縮小一號，月曆才不會太佔版面 */
+body.schedule-month-view.compact-schedule #schedule .date-head,
+body.schedule-month-view.compact-schedule #schedule .weekend-head,
+body.schedule-month-view.compact-schedule #schedule .today-head,
+body.schedule-month-view.compact-schedule table#schedule .date-head,
+body.schedule-month-view.compact-schedule table#schedule .weekend-head,
+body.schedule-month-view.compact-schedule table#schedule .today-head{
+  font-size:10px !important;
+  padding:1px 2px !important;
+}
+body.schedule-month-view.compact-schedule #schedule .engineer-head,
+body.schedule-month-view.compact-schedule #schedule td.slot,
+body.schedule-month-view.compact-schedule table#schedule .engineer-head,
+body.schedule-month-view.compact-schedule table#schedule td.slot{
+  width:48px !important;
+  max-width:48px !important;
+  font-size:9px !important;
+}
+body.schedule-month-view.compact-schedule #schedule .time-col,
+body.schedule-month-view.compact-schedule table#schedule .time-col{
+  min-width:30px !important;
+  width:30px !important;
+  max-width:30px !important;
+  font-size:8px !important;
+}
+body.schedule-month-view.compact-schedule .job{
+  font-size:8px !important;
 }
 
 /* 精簡模式：調整 sticky 標頭列的 top 偏移，避免遮住 09:30 */
