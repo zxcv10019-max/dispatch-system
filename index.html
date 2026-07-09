@@ -1673,8 +1673,9 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 <div id="schedulePage" class="page active">
   <div class="toolbar">
     <input type="date" id="viewDate">
-    <button onclick="moveSchedule(-1)">← 前7天</button>
-    <button onclick="moveSchedule(1)">後7天 →</button>
+    <button id="schedulePrevBtn" onclick="moveSchedule(-1)">← 前7天</button>
+    <button id="scheduleNextBtn" onclick="moveSchedule(1)">後7天 →</button>
+    <button id="scheduleRangeModeBtn" style="background:#40739e" onclick="toggleScheduleRangeMode()">🗓️ 切換為整月檢視</button>
     <button onclick="scrollSchedule(-900)">← 左移</button>
     <button onclick="scrollSchedule(900)">右移 →</button>
     <button id="viewModeToggleBtn" style="background:#8e7cc3" onclick="toggleScheduleViewMode()">📐 精簡檢視</button>
@@ -2017,6 +2018,21 @@ let savingCloud=false;
 let lastLocalJobsCount=0;
 let lastLocalCustomersCount=0;
 
+// ── 效能優化：記錄「上次成功同步時」四種資料的內容特徵值 ──
+// 目的：saveCloudNow() 原本每次都無條件整批刪除、重寫 jobs/customers/cartridge/contactlogs 四種分塊，
+// 資料量一大，任何一個小動作都要付出「整個資料庫」等級的讀寫成本，這正是「同步有時候卡很久」的主因。
+// 加上這組內容比對後，只有「這次真的有變」的類型才會整批刪除重寫，其他類型的雲端文件維持原狀不動。
+let __lastSavedSnapshot = { jobs:null, customers:null, cartridge:null, contactlogs:null };
+// 下載端對應：記錄上次從雲端讀到的四種資料雜湊值，之後只有雜湊變了的類型才需要重新整批下載。
+let __lastRemoteHashes = null;
+function __quickHash(str){
+  // 簡單、快速的字串雜湊（非加密用途），只用來判斷內容是否改變，避免每次都整批下載/上傳。
+  let h = 0;
+  str = str || "";
+  for(let i=0;i<str.length;i++){ h = (Math.imul(31,h) + str.charCodeAt(i))|0; }
+  return h + "_" + str.length; // 加上長度，進一步降低碰撞機率
+}
+
 try{
   firebaseApp = firebase.apps && firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
   firebaseAuth = firebase.auth();
@@ -2357,6 +2373,29 @@ async function saveCloudNow(){
       }
     }
 
+    const jobChunks = chunkArray(jobs || [], 120);
+    const customerChunks = chunkArray(customers || [], 250);
+    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
+    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
+    // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
+    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
+    const contactLogChunks = chunkArray(contactLogEntries, 150);
+
+    // 效能優化核心：算出這四種資料「目前的內容」跟「上次成功同步時」是否一樣，
+    // 完全沒變的類型就不整批刪除重寫，省下大量 Firestore 讀寫，也是同步變快的關鍵。
+    const __sig = {
+      jobs: JSON.stringify(jobs || []),
+      customers: JSON.stringify(customers || []),
+      cartridge: JSON.stringify(cleanCartridgeData),
+      contactlogs: JSON.stringify(contactLogEntries)
+    };
+    const __changed = {
+      jobs: __sig.jobs !== __lastSavedSnapshot.jobs,
+      customers: __sig.customers !== __lastSavedSnapshot.customers,
+      cartridge: __sig.cartridge !== __lastSavedSnapshot.cartridge,
+      contactlogs: __sig.contactlogs !== __lastSavedSnapshot.contactlogs
+    };
+
     let batch = firebaseDb.batch();
     let writes = 0;
     async function commitIfNeeded(force=false){
@@ -2366,22 +2405,19 @@ async function saveCloudNow(){
         writes = 0;
       }
     }
+    // 只刪除「這次內容真的有變」的類型的舊分塊；沒變的類型，雲端文件原封不動保留
     for(const d of oldSnap.docs){
-      batch.delete(d.ref); writes++;
-      await commitIfNeeded();
+      const dtype = (d.data()||{}).type;
+      if(__changed[dtype]){
+        batch.delete(d.ref); writes++;
+        await commitIfNeeded();
+      }
     }
-    const jobChunks = chunkArray(jobs || [], 120);
-    const customerChunks = chunkArray(customers || [], 250);
-    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
-    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
-    // contactLogs 是物件（key=客編），轉成 entries 陣列再分塊
-    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
-    const contactLogChunks = chunkArray(contactLogEntries, 150);
 
-    jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
-    customerChunks.forEach((items,i)=>{ batch.set(chunks.doc(`customers_${String(i).padStart(4,"0")}`), {type:"customers", index:i, items}); writes++; });
-    cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
-    contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
+    if(__changed.jobs) jobChunks.forEach((items,i)=>{ batch.set(chunks.doc(`jobs_${String(i).padStart(4,"0")}`), {type:"jobs", index:i, items}); writes++; });
+    if(__changed.customers) customerChunks.forEach((items,i)=>{ batch.set(chunks.doc(`customers_${String(i).padStart(4,"0")}`), {type:"customers", index:i, items}); writes++; });
+    if(__changed.cartridge) cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
+    if(__changed.contactlogs) contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
 
 
     batch.set(root, {
@@ -2396,12 +2432,19 @@ async function saveCloudNow(){
       cartridgeDataCount:(cartridgeData||[]).length,
       contactLogsChunkCount:contactLogChunks.length,
       contactLogsCount:contactLogEntries.length,
+      // 內容雜湊：讓其他裝置可以判斷這四種資料哪些真的變了，只下載有變的部分（見 loadCloudChunks / applyRemoteData）
+      jobsHash:__quickHash(__sig.jobs),
+      customersHash:__quickHash(__sig.customers),
+      cartridgeHash:__quickHash(__sig.cartridge),
+      contactLogsHash:__quickHash(__sig.contactlogs),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
       clientImportToken: token
     }, {merge:true}); writes++;
     await commitIfNeeded(true);
+    // 這次同步成功後，本機內容跟雲端完全一致，更新基準值供下次比對
+    __lastSavedSnapshot = __sig;
     localDirty = false;
     savingCloud = false;
     hideSyncLock();
@@ -2448,8 +2491,17 @@ async function saveCartridgeAndLogsNow(label){
   announceSyncActivity(true, label || "換芯名單／聯絡紀錄");
   const token = importProtectToken || ("save_" + Date.now());
   try{
-    // 只查「cartridge」「contactlogs」這兩種分塊，不用讀 jobs/customers，省下一大段資料傳輸時間
-    const oldSnap = await chunks.where('type','in',['cartridge','contactlogs']).get();
+    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
+    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
+    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
+    const contactLogChunks = chunkArray(contactLogEntries, 150);
+
+    // 同樣套用內容比對：換芯名單、聯絡紀錄哪個真的沒變，就不用整批刪除重寫
+    const __sigCartridge = JSON.stringify(cleanCartridgeData);
+    const __sigContactLogs = JSON.stringify(contactLogEntries);
+    const __changedCartridge = __sigCartridge !== __lastSavedSnapshot.cartridge;
+    const __changedContactLogs = __sigContactLogs !== __lastSavedSnapshot.contactlogs;
+    const __typesToDelete = [].concat(__changedCartridge?['cartridge']:[], __changedContactLogs?['contactlogs']:[]);
 
     let batch = firebaseDb.batch();
     let writes = 0;
@@ -2460,16 +2512,15 @@ async function saveCartridgeAndLogsNow(label){
         writes = 0;
       }
     }
-    oldSnap.docs.forEach(d=>{ batch.delete(d.ref); writes++; });
-    await commitIfNeeded();
+    if(__typesToDelete.length){
+      // 只查真的有變的那幾種分塊，不用讀 jobs/customers，省下一大段資料傳輸時間
+      const oldSnap = await chunks.where('type','in',__typesToDelete).get();
+      oldSnap.docs.forEach(d=>{ batch.delete(d.ref); writes++; });
+      await commitIfNeeded();
+    }
 
-    const cleanCartridgeData = stripUndefinedDeep(cartridgeData || []);
-    const cartridgeChunks = chunkArray(cleanCartridgeData, 300);
-    const contactLogEntries = stripUndefinedDeep(buildContactLogEntriesForCloud());
-    const contactLogChunks = chunkArray(contactLogEntries, 150);
-
-    cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
-    contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
+    if(__changedCartridge) cartridgeChunks.forEach((items,i)=>{ batch.set(chunks.doc(`cartridge_${String(i).padStart(4,"0")}`), {type:"cartridge", index:i, items}); writes++; });
+    if(__changedContactLogs) contactLogChunks.forEach((items,i)=>{ batch.set(chunks.doc(`contactlogs_${String(i).padStart(4,"0")}`), {type:"contactlogs", index:i, items}); writes++; });
 
     // 只 merge 更新換芯/聯絡紀錄相關欄位，不動 jobsCount/customersCount 等其他欄位
     batch.set(root, {
@@ -2478,12 +2529,16 @@ async function saveCartridgeAndLogsNow(label){
       cartridgeDataCount:(cartridgeData||[]).length,
       contactLogsChunkCount:contactLogChunks.length,
       contactLogsCount:contactLogEntries.length,
+      cartridgeHash:__quickHash(__sigCartridge),
+      contactLogsHash:__quickHash(__sigContactLogs),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAtLocal: new Date().toISOString(),
       updatedBy: currentUser ? {uid: currentUser.uid, email: currentUser.email || "", name: currentUser.displayName || ""} : null,
       clientImportToken: token
     }, {merge:true}); writes++;
     await commitIfNeeded(true);
+    // 這兩種資料現在跟雲端一致了，更新基準值（jobs/customers 基準值維持不動，交給完整同步負責）
+    __lastSavedSnapshot = Object.assign({}, __lastSavedSnapshot, { cartridge: __sigCartridge, contactlogs: __sigContactLogs });
     localDirty = false;
     savingCloud = false;
     hideSyncLock();
@@ -2506,10 +2561,13 @@ function queueCloudSave(){
   cloudSaveTimer=setTimeout(saveCloudNow, 650);
 }
 
-async function loadCloudChunks(meta){
+async function loadCloudChunks(meta, onlyTypes){
   const chunks=chunksColRef();
   if(!chunks) return {jobs:[], customers:[], cartridgeData:[], contactLogs:{}};
-  const snap = await chunks.get();
+  // onlyTypes：只下載指定的資料類型分塊（例如只有 jobs 變了，就不用連 customers/cartridge 一起整批下載）。
+  // 不指定時（例如除錯工具直接呼叫）維持原本行為，抓全部四種。
+  const wanted = Array.isArray(onlyTypes) && onlyTypes.length>0 && onlyTypes.length<4 ? onlyTypes : null;
+  const snap = wanted ? await chunks.where('type','in',wanted).get() : await chunks.get();
   const jobParts=[], customerParts=[], cartridgeParts=[], contactLogParts=[];
   snap.forEach(doc=>{
     const d=doc.data()||{};
@@ -2552,12 +2610,24 @@ async function applyRemoteData(data){
   let remoteCartridgeData = Array.isArray(data.cartridgeData) ? data.cartridgeData : null;
   let remoteContactLogs = (data.contactLogs && typeof data.contactLogs==='object') ? data.contactLogs : null;
   if(data.chunked){
-    const loaded = await loadCloudChunks(data);
-    remoteJobs = loaded.jobs;
-    remoteCustomers = loaded.customers;
-    // 換芯/聯絡紀錄改用分塊儲存；若文件有分塊計數欄位，以分塊結果為準（即使是空陣列也要套用，才能正確反映清空狀態）
-    if(data.cartridgeChunkCount !== undefined) remoteCartridgeData = loaded.cartridgeData;
-    if(data.contactLogsChunkCount !== undefined) remoteContactLogs = loaded.contactLogs;
+    // 效能優化：跟上次讀到的雜湊值比對，只有真的變過的類型才整批下載，
+    // 其餘類型維持本機現有資料（本機資料本來就跟雲端一致），大幅減少每次同步要下載的資料量。
+    let typesToLoad = ['jobs','customers','cartridge','contactlogs'];
+    if(__lastRemoteHashes){
+      typesToLoad = typesToLoad.filter(function(t){
+        const key = t + 'Hash';
+        return data[key] !== __lastRemoteHashes[key];
+      });
+    }
+    if(typesToLoad.length){
+      const loaded = await loadCloudChunks(data, typesToLoad);
+      if(typesToLoad.includes('jobs')) remoteJobs = loaded.jobs;
+      if(typesToLoad.includes('customers')) remoteCustomers = loaded.customers;
+      // 換芯/聯絡紀錄改用分塊儲存；若文件有分塊計數欄位，以分塊結果為準（即使是空陣列也要套用，才能正確反映清空狀態）
+      if(typesToLoad.includes('cartridge') && data.cartridgeChunkCount !== undefined) remoteCartridgeData = loaded.cartridgeData;
+      if(typesToLoad.includes('contactlogs') && data.contactLogsChunkCount !== undefined) remoteContactLogs = loaded.contactLogs;
+    }
+    __lastRemoteHashes = { jobsHash:data.jobsHash, customersHash:data.customersHash, cartridgeHash:data.cartridgeHash, contactLogsHash:data.contactLogsHash };
   }
 
   const localJobsCount = (jobs||[]).length;
@@ -2642,6 +2712,16 @@ async function applyRemoteData(data){
   renderLeaveListLP();
   if(typeof renderCartridgeTable==='function') renderCartridgeTable();
   applyRoleUI();
+  // 套用完雲端資料後，本機內容此刻跟雲端一致，更新「上傳比對基準值」，
+  // 這樣使用者下一個小編輯只會被判定成「改到那一種」，不會誤判成四種全部都要重寫。
+  try{
+    __lastSavedSnapshot = {
+      jobs: JSON.stringify(jobs || []),
+      customers: JSON.stringify(customers || []),
+      cartridge: JSON.stringify(stripUndefinedDeep(cartridgeData || [])),
+      contactlogs: JSON.stringify(buildContactLogEntriesForCloud())
+    };
+  }catch(e){ /* 基準值更新失敗不影響主流程，頂多下次多重寫一種類型 */ }
   isApplyingRemote = false;
   applyRoleUI();
 }
@@ -3726,12 +3806,35 @@ function getMonday(date){
 
 function getScheduleDates(){
   const base=parseDateLocal(document.getElementById("viewDate").value);
+  if(window.scheduleRangeMode === "month"){
+    // 整月模式：顯示 base 所在月份的第 1 天到最後一天（例如 2026-07 就是 07-01～07-31）
+    const year=base.getFullYear(), month=base.getMonth();
+    const daysInMonth=new Date(year, month+1, 0).getDate();
+    return Array.from({length:daysInMonth},(_,i)=>formatDateLocal(new Date(year, month, i+1)));
+  }
   return Array.from({length:7},(_,i)=>formatDateLocal(addDays(base,i)));
+}
+
+function toggleScheduleRangeMode(){
+  window.scheduleRangeMode = (window.scheduleRangeMode === "month") ? "week" : "month";
+  const isMonth = window.scheduleRangeMode === "month";
+  const modeBtn=document.getElementById("scheduleRangeModeBtn");
+  if(modeBtn) modeBtn.textContent = isMonth ? "📅 切換為每週檢視" : "🗓️ 切換為整月檢視";
+  const prevBtn=document.getElementById("schedulePrevBtn");
+  const nextBtn=document.getElementById("scheduleNextBtn");
+  if(prevBtn) prevBtn.textContent = isMonth ? "← 上個月" : "← 前7天";
+  if(nextBtn) nextBtn.textContent = isMonth ? "下個月 →" : "後7天 →";
+  renderSchedule();
 }
 
 function moveSchedule(step){
   const d=parseDateLocal(document.getElementById("viewDate").value);
-  d.setDate(d.getDate()+step*7);
+  if(window.scheduleRangeMode === "month"){
+    d.setDate(1); // 先歸零到當月 1 號，避免大月切到小月時日期溢位（例如 1/31 + 1 個月跳成 3/3）
+    d.setMonth(d.getMonth()+step);
+  }else{
+    d.setDate(d.getDate()+step*7);
+  }
   document.getElementById("viewDate").value=formatDateLocal(d);
   renderSchedule();
 }
@@ -3900,6 +4003,9 @@ function renderSchedule(){
   html+="</tr>";
 
   times.forEach((time,idx)=>{
+    // 午休(12:00~13:00)、晚上18:00以後：整個時段的格子底色統一改成 #9999FF，蓋掉原本的施工項目/請假/出差分色
+    const isBreakOrEveningRow = (time>="12:00" && time<="13:00") || time>="18:00";
+    const breakRowCls = isBreakOrEveningRow ? " break-slot" : "";
     const rowHasJob = dates.some(dateStr=>
       engineers.some(engineer=>
         jobs.some(j=>j.date===dateStr&&j.engineer===engineer&&(
@@ -3929,7 +4035,7 @@ function renderSchedule(){
         const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))) ? "leave-slot-active" : "";
         // 依派工的施工項目，讓整個時段格子（不只卡片本身）跟著變色
         const slotColorCls = (!holdCls && !tripCls && !leaveCls) ? (activeJobs.map(j=>jobWorkColorClass(j)).find(c=>c) || "") : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls} ${slotColorCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls} ${slotColorCls}${breakRowCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -3938,7 +4044,9 @@ function renderSchedule(){
   });
 
   table.innerHTML=html;
-  table.style.minWidth = (window.scheduleViewMode === 'compact') ? '' : '6800px';
+  // 表格最小寬度依「顯示天數」等比例縮放（原本固定 6800px 是給 7 天用的），
+  // 整月模式天數變多時，寬度跟著等比放大，欄位才不會被硬壓成一直線。
+  table.style.minWidth = (window.scheduleViewMode === 'compact') ? '' : (Math.round(6800 * dates.length / 7) + 'px');
   renderSummary();
   renderMyTodayPanel();
   // setTimeout(updateTravelTags, 80); // 已停用
@@ -9165,6 +9273,30 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
   position:sticky !important;
   top:0 !important;
   z-index:30 !important;
+}
+
+/* ============================================================
+   午休(12:00~13:00)、晚上18:00以後：整個時段格子底色統一改成 #9999FF，
+   不管原本是施工項目分色／請假／出差／暫押哪一種，都蓋成同一個顏色。
+   下面同一個顏色重複列出多種 class 組合，是為了「選擇器精細度」要贏過原本那些帶 !important 的分色規則，
+   否則會被原本的分色規則蓋掉、顯示不出來。
+   ============================================================ */
+.week-schedule-table td.slot.break-slot,
+.week-schedule-table td.slot.break-slot.job-slot-active,
+.week-schedule-table td.slot.break-slot.hold-slot-active,
+.week-schedule-table td.slot.break-slot.trip-slot-active,
+.week-schedule-table td.slot.break-slot.leave-slot-active,
+.week-schedule-table td.slot.break-slot.work-color-inspect,
+.week-schedule-table td.slot.break-slot.work-color-install,
+.week-schedule-table td.slot.break-slot.work-color-remove,
+.week-schedule-table td.slot.break-slot.work-color-restore,
+.week-schedule-table td.slot.break-slot.work-color-gas,
+.week-schedule-table td.slot.break-slot.job-slot-active.work-color-inspect,
+.week-schedule-table td.slot.break-slot.job-slot-active.work-color-install,
+.week-schedule-table td.slot.break-slot.job-slot-active.work-color-remove,
+.week-schedule-table td.slot.break-slot.job-slot-active.work-color-restore,
+.week-schedule-table td.slot.break-slot.job-slot-active.work-color-gas{
+  background:#9999FF !important;
 }
 </style>
 
