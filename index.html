@@ -3977,25 +3977,58 @@ function getEngineerTripRegion(dateStr, engineer){
   return rec ? String(rec.type||'') : '';
 }
 
-function renderSchedule(){
-  // normalize old imported engineer names/codes
-  jobs.forEach(j=>{ j.engineer=normalizeEngineerName(j.engineer); });
+// 假日（星期六、日）只顯示 M（工程代號第一位＝林川閔）這個工程的派工欄位，其他工程師欄位不顯示，省版面。
+// 平日則維持顯示全部工程師。
+function getEngineersForDate(dateStr){
+  const d=parseDateLocal(dateStr);
+  const isWeekend = d.getDay()===0 || d.getDay()===6;
+  return isWeekend ? [engineers[0]] : engineers;
+}
 
-  const dates=getScheduleDates();
-  const table=document.getElementById("schedule");
-  table.className="week-schedule-table";
-  const today=formatDateLocal(new Date());
+// 判斷某天是否落在「目前選擇的月份」之外（整月分週檢視時，第一週/最後一週可能會補到隔壁月份的日期湊滿一整週）
+function isOutsideSelectedMonth(dateStr){
+  const base=parseDateLocal(document.getElementById("viewDate").value);
+  const d=parseDateLocal(dateStr);
+  return d.getFullYear()!==base.getFullYear() || d.getMonth()!==base.getMonth();
+}
 
+// 把整個月，依「星期一～星期日」切成好幾個星期區塊；第一週、最後一週如果不足 7 天，
+// 會往前後補鄰近月份的日期湊滿整週，讓每個星期區塊的欄位數量一致、上下對得整整齊齊。
+function getMonthWeekBlocks(){
+  const base=parseDateLocal(document.getElementById("viewDate").value);
+  const year=base.getFullYear(), month=base.getMonth();
+  const firstOfMonth=new Date(year,month,1);
+  const lastOfMonth=new Date(year,month+1,0);
+  const gridStart=getMonday(firstOfMonth);
+  const lastDow=lastOfMonth.getDay();
+  const daysToSunday = lastDow===0 ? 0 : (7-lastDow);
+  const gridEnd=addDays(lastOfMonth, daysToSunday);
+
+  const blocks=[];
+  let cursor=new Date(gridStart);
+  while(cursor<=gridEnd){
+    const week=Array.from({length:7},(_,i)=>formatDateLocal(addDays(cursor,i)));
+    blocks.push(week);
+    cursor=addDays(cursor,7);
+  }
+  return blocks;
+}
+
+// 產生「一個星期」的表頭（日期列＋工程師列）＋所有時段列的表格 HTML（tr 字串），
+// 週檢視、整月分週檢視都共用這個函式，只差在傳進來的 dates 是 7 天還是不足 7 天。
+function buildScheduleBlockHtml(dates, today){
   let html="<tr><th class='time-col' rowspan='2'>時間</th>";
   dates.forEach(dateStr=>{
     const d=parseDateLocal(dateStr);
     const weekend=d.getDay()===0 || d.getDay()===6;
+    const outside=isOutsideSelectedMonth(dateStr);
     const cls=dateStr===today ? "today-head" : (weekend ? "weekend-head" : "date-head");
-    html+=`<th class="${cls}" colspan="${engineers.length}">${dateStr}　${getWeekdayName(dateStr)}</th>`;
+    const colCount=getEngineersForDate(dateStr).length;
+    html+=`<th class="${cls}${outside?" outside-month-head":""}" colspan="${colCount}">${dateStr}　${getWeekdayName(dateStr)}</th>`;
   });
   html+="</tr><tr>";
   dates.forEach(dateStr=>{
-    engineers.forEach(e=>{
+    getEngineersForDate(dateStr).forEach(e=>{
       const placeLabel=getEngineerDayPlaceLabel(dateStr,e);
       html+=`<th class="engineer-head">${displayEngineer(e)}${placeLabel?`<span class="eng-place">${escapeHtml(placeLabel)}</span>`:""}</th>`;
     });
@@ -4003,11 +4036,11 @@ function renderSchedule(){
   html+="</tr>";
 
   times.forEach((time,idx)=>{
-    // 午休(12:00~13:00)、晚上18:00以後：整個時段的格子底色統一改成 #9999FF，蓋掉原本的施工項目/請假/出差分色
+    // 午休(12:00~13:00)、晚上18:00以後：時段格子預設底色改成較淺的紫色（見對應 CSS，只當最下層的底色用）
     const isBreakOrEveningRow = (time>="12:00" && time<="13:00") || time>="18:00";
     const breakRowCls = isBreakOrEveningRow ? " break-slot" : "";
     const rowHasJob = dates.some(dateStr=>
-      engineers.some(engineer=>
+      getEngineersForDate(dateStr).some(engineer=>
         jobs.some(j=>j.date===dateStr&&j.engineer===engineer&&(
           (j.time===time||j.startTime===time) ||
           (timeIndex(j.startTime||j.time)<idx && idx<timeIndex(j.endTime||j.startTime||j.time)+1)
@@ -4019,7 +4052,7 @@ function renderSchedule(){
     html+=`<tr${trH}><td class="time-col"${tdStyle}>${time}</td>`;
 
     dates.forEach(dateStr=>{
-      engineers.forEach(engineer=>{
+      getEngineersForDate(dateStr).forEach(engineer=>{
         const startJobs=jobs.filter(j=>j.date===dateStr&&j.engineer===engineer&&(j.time===time||j.startTime===time)).sort(sortJobsByTime);
         const activeJobs=jobs.filter(j=>{
           if(j.date!==dateStr || j.engineer!==engineer) return false;
@@ -4043,10 +4076,41 @@ function renderSchedule(){
     html+="</tr>";
   });
 
+  return html;
+}
+
+function renderSchedule(){
+  // normalize old imported engineer names/codes
+  jobs.forEach(j=>{ j.engineer=normalizeEngineerName(j.engineer); });
+
+  const table=document.getElementById("schedule");
+  table.className="week-schedule-table";
+  const today=formatDateLocal(new Date());
+
+  let html="";
+  let colsForWidth=7; // 用來估算表格最小寬度，跟原本「7天×工程師數」的比例對齊
+
+  if(window.scheduleRangeMode === "month"){
+    // 整月分週檢視：一週一個表格區塊，往下堆疊；假日只顯示 M 欄位（見 getEngineersForDate）
+    const weekBlocks=getMonthWeekBlocks();
+    colsForWidth = 5 + 2/engineers.length; // 5個平日(各engineers.length欄) + 2個假日(各1欄)，換算成「等效平日欄數」
+    weekBlocks.forEach((weekDates, wi)=>{
+      if(wi>0){
+        const totalColsThisRow = weekDates.reduce((sum,d)=>sum+getEngineersForDate(d).length, 0);
+        html += `<tr class="month-week-spacer"><td colspan="${1+totalColsThisRow}" style="height:10px;background:#d9d9d9;border:0;padding:0;"></td></tr>`;
+      }
+      html += buildScheduleBlockHtml(weekDates, today);
+    });
+  }else{
+    const dates=getScheduleDates();
+    colsForWidth = dates.length;
+    html = buildScheduleBlockHtml(dates, today);
+  }
+
   table.innerHTML=html;
   // 表格最小寬度依「顯示天數」等比例縮放（原本固定 6800px 是給 7 天用的），
   // 整月模式天數變多時，寬度跟著等比放大，欄位才不會被硬壓成一直線。
-  table.style.minWidth = (window.scheduleViewMode === 'compact') ? '' : (Math.round(6800 * dates.length / 7) + 'px');
+  table.style.minWidth = (window.scheduleViewMode === 'compact') ? '' : (Math.round(6800 * colsForWidth / 7) + 'px');
   renderSummary();
   renderMyTodayPanel();
   // setTimeout(updateTravelTags, 80); // 已停用
@@ -4727,14 +4791,45 @@ function findJobSheet(workbook){
   return best;
 }
 
+// 依「客戶編號」優先、找不到再依「客戶名稱」比對客戶資料庫，用來在匯入派工時自動補地址/電話/客名
+function findCustomerForImport(customerCode, customerName){
+  if(customerCode){
+    const byCode = customers.find(c=>String(c.customerNo||"").trim()===customerCode);
+    if(byCode) return byCode;
+  }
+  if(customerName){
+    const byName = customers.find(c=>c.fullName===customerName || c.shortName===customerName || c.personName===customerName);
+    if(byName) return byName;
+  }
+  return null;
+}
+
 function normalizeJobFromArray(row, idx){
   const get=(key)=>idx[key]>=0 ? row[idx[key]] : "";
-  const address=String(get("address")||"").trim();
-  const p=parseTaiwanAddress(address);
+  let address=String(get("address")||"").trim();
   const startTime=normalizeExcelTime(get("startTime"));
   const endTime=normalizeExcelTime(get("endTime"));
   const customerCode=String(get("customerCode")||"").trim();
-  const customerName=String(get("customerName")||"").trim();
+  let customerName=String(get("customerName")||"").trim();
+  let phone=String(get("phone")||"").trim();
+  let city=String(get("city")||"").trim();
+  let district=String(get("district")||"").trim();
+
+  // 地址／客名／電話沒填時，依客編（找不到客編再依客名）自動去客戶資料庫帶入，
+  // 這樣匯入時只要客編填對，就不用每一筆都手動打地址。
+  if(!address || !customerName || !phone){
+    const cust = findCustomerForImport(customerCode, customerName);
+    if(cust){
+      if(!address) address = cust.deliveryAddress || "";
+      if(!customerName) customerName = cust.fullName || cust.shortName || cust.personName || "";
+      if(!phone) phone = cust.mobile || "";
+    }
+  }
+
+  const p=parseTaiwanAddress(address);
+  if(!city) city = p.city;
+  if(!district) district = p.district;
+
   const codeName=String(get("codeName")||"").trim() || `${customerCode} ${customerName}`.trim();
   return {
     id:Date.now()+Math.floor(Math.random()*999999),
@@ -4747,9 +4842,9 @@ function normalizeJobFromArray(row, idx){
     customerCode:customerCode,
     customerName:customerName,
     codeName:codeName,
-    phone:String(get("phone")||"").trim(),
-    city:String(get("city")||"").trim() || p.city,
-    district:String(get("district")||"").trim() || p.district,
+    phone:phone,
+    city:city,
+    district:district,
     address:address,
     workItem:String(get("workItem")||"").trim(),
     workContent:String(get("workContent")||"").trim(),
@@ -9276,27 +9371,21 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
 }
 
 /* ============================================================
-   午休(12:00~13:00)、晚上18:00以後：整個時段格子底色統一改成 #9999FF，
-   不管原本是施工項目分色／請假／出差／暫押哪一種，都蓋成同一個顏色。
-   下面同一個顏色重複列出多種 class 組合，是為了「選擇器精細度」要贏過原本那些帶 !important 的分色規則，
-   否則會被原本的分色規則蓋掉、顯示不出來。
+   午休(12:00~13:00)、晚上18:00以後：時段格子預設底色改成較淺的紫色，
+   但只當「最下層的底色」用——如果這個格子本身已經有暫押/出差/請假/
+   施工項目分色（更強的狀態色），那些顏色維持不變、優先顯示，
+   紫色只出現在「沒有其他特別顏色」的一般/空白格子上。
+   用 :not() 排除掉那幾種特殊 class，藉此讓紫色的優先權比它們低。
    ============================================================ */
-.week-schedule-table td.slot.break-slot,
-.week-schedule-table td.slot.break-slot.job-slot-active,
-.week-schedule-table td.slot.break-slot.hold-slot-active,
-.week-schedule-table td.slot.break-slot.trip-slot-active,
-.week-schedule-table td.slot.break-slot.leave-slot-active,
-.week-schedule-table td.slot.break-slot.work-color-inspect,
-.week-schedule-table td.slot.break-slot.work-color-install,
-.week-schedule-table td.slot.break-slot.work-color-remove,
-.week-schedule-table td.slot.break-slot.work-color-restore,
-.week-schedule-table td.slot.break-slot.work-color-gas,
-.week-schedule-table td.slot.break-slot.job-slot-active.work-color-inspect,
-.week-schedule-table td.slot.break-slot.job-slot-active.work-color-install,
-.week-schedule-table td.slot.break-slot.job-slot-active.work-color-remove,
-.week-schedule-table td.slot.break-slot.job-slot-active.work-color-restore,
-.week-schedule-table td.slot.break-slot.job-slot-active.work-color-gas{
-  background:#9999FF !important;
+.week-schedule-table td.slot.break-slot:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
+  background:#CCCCFF !important;
+}
+
+/* 整月分週檢視：第一週/最後一週為了湊滿 7 天，可能會補到隔壁月份的日期，
+   這些補進來的日期表頭用淡化樣式標示，跟本月份的日期做出區別 */
+.week-schedule-table th.outside-month-head{
+  opacity:.55;
+  filter:grayscale(40%);
 }
 </style>
 
