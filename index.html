@@ -1643,6 +1643,17 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   .repair-list{padding:10px}
 }
 
+
+.repair-media{grid-column:1/-1;margin-top:6px}
+.repair-media-title{font-weight:bold;margin:6px 0}
+.repair-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.repair-photo-grid img{width:100%;height:130px;object-fit:cover;border-radius:7px;border:1px solid #ccc;cursor:zoom-in;background:#eee}
+.repair-video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.repair-video-grid video{width:100%;max-height:260px;border-radius:7px;background:#000}
+.repair-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out}
+.repair-lightbox.hidden{display:none!important}
+.repair-lightbox img{max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px}
+
 </style>
 </head>
 
@@ -9634,6 +9645,54 @@ function updateRepairPendingBadge(){
   el.style.display = count ? "inline-block" : "none";
 }
 
+
+function normalizeRepairFiles(items, urls){
+  if(Array.isArray(items) && items.length){
+    return items.map(x => typeof x === "string" ? {url:x} : x).filter(x => x && x.url);
+  }
+  return (Array.isArray(urls) ? urls : []).map(url => ({url}));
+}
+
+function renderRepairMedia(r){
+  const photos = normalizeRepairFiles(r.photoFiles, r.photoUrls);
+  const videos = normalizeRepairFiles(r.videoFiles, r.videoUrls);
+  if(!photos.length && !videos.length) return "";
+
+  const photoHtml = photos.length ? `
+    <div class="repair-media">
+      <div class="repair-media-title">📷 報修照片（點擊放大）</div>
+      <div class="repair-photo-grid">
+        ${photos.map(f => `<img src="${repairEsc(f.url)}" alt="${repairEsc(f.name || "報修照片")}" loading="lazy" onclick="openRepairImage('${repairEsc(f.url)}')">`).join("")}
+      </div>
+    </div>` : "";
+
+  const videoHtml = videos.length ? `
+    <div class="repair-media">
+      <div class="repair-media-title">🎥 報修影片</div>
+      <div class="repair-video-grid">
+        ${videos.map(f => `<video controls preload="metadata" src="${repairEsc(f.url)}"></video>`).join("")}
+      </div>
+    </div>` : "";
+
+  return photoHtml + videoHtml;
+}
+
+function openRepairImage(url){
+  const box = document.getElementById("repairImageLightbox");
+  const img = document.getElementById("repairImageLightboxImg");
+  if(!box || !img) return;
+  img.src = url;
+  box.classList.remove("hidden");
+}
+
+function closeRepairImage(){
+  const box = document.getElementById("repairImageLightbox");
+  const img = document.getElementById("repairImageLightboxImg");
+  if(box) box.classList.add("hidden");
+  if(img) img.src = "";
+}
+
+
 function renderRepairRequests(){
   const status = document.getElementById("repairStatusFilter")?.value || "待聯絡";
   const q = (document.getElementById("repairSearch")?.value || "").trim().toLowerCase();
@@ -9686,7 +9745,8 @@ function renderRepairRequests(){
           <div><b>序號：</b>${repairEsc(r.serial || "-")}</div>
           <div><b>位置：</b>${repairEsc(r.location || "-")}</div>
           <div><b>錯誤碼：</b>${repairEsc(r.errorCode || "-")}</div>
-          <div><b>附件：</b>照片 ${Number(r.photoCount || 0)}／影片 ${Number(r.videoCount || 0)}</div>
+          <div><b>附件：</b>照片 ${Number(r.photoCount || 0)}／影片 ${Number(r.videoCount || 0)} ${r.uploadStatus ? `｜${repairEsc(r.uploadStatus)}` : ""}</div>
+          ${renderRepairMedia(r)}
           <div class="repair-desc"><b>故障描述：</b>
 ${repairEsc(r.description || "未填寫")}</div>
         </div>
@@ -9751,5 +9811,8 @@ setTimeout(() => {
 }, 2500);
 </script>
 
+<div id="repairImageLightbox" class="repair-lightbox hidden" onclick="closeRepairImage()">
+  <img id="repairImageLightboxImg" src="" alt="報修照片">
+</div>
 </body>
 </html>
