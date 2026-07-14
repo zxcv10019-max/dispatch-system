@@ -1624,6 +1624,25 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 @media(max-width:900px){
   #adminMapList > div{grid-template-columns:1fr!important;}
 }
+
+/* ===== 維修自助中心報修案件 ===== */
+#repairPage.page.active{display:block!important;overflow-y:auto!important;padding-bottom:90px!important}
+.repair-list{padding:12px;display:grid;gap:12px}
+.repair-card{background:#fff;border:1px solid #ddd;border-left:5px solid #f39c12;border-radius:8px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.repair-card.status-done{border-left-color:#218c74}
+.repair-card.status-cancel{border-left-color:#999}
+.repair-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.repair-title{font-size:17px;font-weight:bold;color:#2f3542}
+.repair-meta{font-size:12px;color:#777;margin-top:3px}
+.repair-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:8px;margin-top:12px;font-size:13px;line-height:1.55}
+.repair-desc{grid-column:1/-1;background:#f8f9fa;border-radius:6px;padding:9px;white-space:pre-wrap}
+.repair-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.repair-actions button{font-size:12px}
+@media(max-width:900px){
+  .repair-grid{grid-template-columns:1fr}
+  .repair-list{padding:10px}
+}
+
 </style>
 </head>
 
@@ -1673,6 +1692,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   <button id="tabDispatch" onclick="showPage('dispatchPage')">新增派工資料</button>
   <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
   <button id="tabList" onclick="showPage('listPage')">派工明細</button>
+  <button id="tabRepair" onclick="showPage('repairPage')">🛠️ 報修案件 <span id="repairPendingCount" style="background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;display:none">0</span></button>
   <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
   <button id="tabCartridge" onclick="showPage('cartridgePage')">🔄 換芯名單</button>
   <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
@@ -1707,6 +1727,22 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;border-radius:3px;display:inline-block;background:#FFF2CC;border:1px solid #D6B656;"></span>換濾芯／其他</span>
   </div>
   <div class="table-wrap" id="scheduleWrap"><table id="schedule"></table></div>
+</div>
+
+<div id="repairPage" class="page">
+  <div class="toolbar">
+    <select id="repairStatusFilter" onchange="renderRepairRequests()">
+      <option value="待聯絡">待聯絡</option>
+      <option value="全部">全部</option>
+      <option value="已聯絡">已聯絡</option>
+      <option value="已排工">已排工</option>
+      <option value="取消">取消</option>
+    </select>
+    <input id="repairSearch" placeholder="搜尋姓名、電話、型號、序號" oninput="renderRepairRequests()">
+    <button onclick="loadRepairRequests()">重新整理</button>
+  </div>
+  <div class="summary" id="repairSummary">報修案件載入中…</div>
+  <div class="repair-list" id="repairList"></div>
 </div>
 
 <div id="dispatchPage" class="page">
@@ -3067,6 +3103,11 @@ function showPage(pageId){
   if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
+  if(pageId==="repairPage"){
+    const tb=document.getElementById("tabRepair");
+    if(tb)tb.classList.add("active");
+    loadRepairRequests();
+  }
   if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgeTable();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");if(typeof lpTypeChange==='function')lpTypeChange();renderLeaveListLP();}
   if(pageId==="adminPage"){
@@ -9538,6 +9579,176 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
   document.addEventListener('DOMContentLoaded', initScheduleDragScroll);
   setInterval(initScheduleDragScroll, 1000);
 })();
+</script>
+
+
+<script>
+// ===== 報修案件：由維修自助中心寫入 repairRequests =====
+let repairRequests = [];
+let repairUnsubscribe = null;
+
+function repairEsc(v){
+  return String(v || "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+  }[c]));
+}
+
+function repairDate(v){
+  try{
+    if(v && v.toDate) return v.toDate().toLocaleString("zh-TW", {hour12:false});
+  }catch(e){}
+  return v ? String(v) : "-";
+}
+
+function loadRepairRequests(){
+  const summaryBox = document.getElementById("repairSummary");
+  if(summaryBox) summaryBox.textContent = "報修案件載入中…";
+
+  if(!firebaseDb){
+    if(summaryBox) summaryBox.textContent = "Firebase 尚未連線";
+    return;
+  }
+
+  if(repairUnsubscribe){
+    repairUnsubscribe();
+    repairUnsubscribe = null;
+  }
+
+  repairUnsubscribe = firebaseDb.collection("repairRequests")
+    .orderBy("createdAt", "desc")
+    .onSnapshot(snapshot => {
+      repairRequests = snapshot.docs.map(doc => ({id:doc.id, ...doc.data()}));
+      renderRepairRequests();
+      updateRepairPendingBadge();
+    }, err => {
+      console.error(err);
+      if(summaryBox) summaryBox.textContent = "讀取失敗：" + err.message;
+    });
+}
+
+function updateRepairPendingBadge(){
+  const count = repairRequests.filter(r => (r.status || "待聯絡") === "待聯絡").length;
+  const el = document.getElementById("repairPendingCount");
+  if(!el) return;
+  el.textContent = count;
+  el.style.display = count ? "inline-block" : "none";
+}
+
+function renderRepairRequests(){
+  const status = document.getElementById("repairStatusFilter")?.value || "待聯絡";
+  const q = (document.getElementById("repairSearch")?.value || "").trim().toLowerCase();
+
+  let list = repairRequests.filter(r =>
+    status === "全部" || (r.status || "待聯絡") === status
+  );
+
+  if(q){
+    list = list.filter(r =>
+      [r.customerName,r.phone,r.model,r.serial,r.issueType,r.location,r.description]
+        .join(" ").toLowerCase().includes(q)
+    );
+  }
+
+  const pending = repairRequests.filter(r => (r.status || "待聯絡") === "待聯絡").length;
+  const summary = document.getElementById("repairSummary");
+  if(summary){
+    summary.textContent = `目前顯示 ${list.length} 件｜待聯絡 ${pending} 件｜全部 ${repairRequests.length} 件`;
+  }
+
+  const box = document.getElementById("repairList");
+  if(!box) return;
+
+  if(!list.length){
+    box.innerHTML = '<div class="help">目前沒有符合條件的報修案件。</div>';
+    return;
+  }
+
+  box.innerHTML = list.map(r => {
+    const st = r.status || "待聯絡";
+    const cls = st === "已排工" ? "status-done" : st === "取消" ? "status-cancel" : "";
+    const badgeColor = st === "待聯絡" ? "#d63031"
+      : st === "已聯絡" ? "#40739e"
+      : st === "已排工" ? "#218c74" : "#777";
+
+    return `
+      <div class="repair-card ${cls}">
+        <div class="repair-top">
+          <div>
+            <div class="repair-title">${repairEsc(r.issueIcon || "🔧")} ${repairEsc(r.issueType || "未分類")}｜${repairEsc(r.customerName || "未填姓名")}</div>
+            <div class="repair-meta">案件 ${repairEsc(r.id)}｜${repairEsc(repairDate(r.createdAt) || r.createdAtText)}</div>
+          </div>
+          <span class="hold-badge" style="background:${badgeColor}">${repairEsc(st)}</span>
+        </div>
+
+        <div class="repair-grid">
+          <div><b>電話：</b><a href="tel:${repairEsc(r.phone)}">${repairEsc(r.phone || "-")}</a></div>
+          <div><b>型號：</b>${repairEsc(r.model || "-")}</div>
+          <div><b>序號：</b>${repairEsc(r.serial || "-")}</div>
+          <div><b>位置：</b>${repairEsc(r.location || "-")}</div>
+          <div><b>錯誤碼：</b>${repairEsc(r.errorCode || "-")}</div>
+          <div><b>附件：</b>照片 ${Number(r.photoCount || 0)}／影片 ${Number(r.videoCount || 0)}</div>
+          <div class="repair-desc"><b>故障描述：</b>
+${repairEsc(r.description || "未填寫")}</div>
+        </div>
+
+        <div class="repair-actions">
+          <button style="background:#40739e" onclick="setRepairStatus('${r.id}','已聯絡')">標記已聯絡</button>
+          <button style="background:#218c74" onclick="repairToDispatch('${r.id}')">轉成派工</button>
+          <button style="background:#777" onclick="setRepairStatus('${r.id}','取消')">取消案件</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function setRepairStatus(id, status){
+  try{
+    await firebaseDb.collection("repairRequests").doc(id).update({
+      status,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }catch(e){
+    alert("更新失敗：" + e.message);
+  }
+}
+
+async function repairToDispatch(id){
+  const r = repairRequests.find(x => x.id === id);
+  if(!r) return;
+
+  showPage("dispatchPage");
+
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if(el) el.value = value || "";
+  };
+
+  setValue("fCustomerName", r.customerName);
+  setValue("fPhone", r.phone);
+  setValue("fAddress", r.location);
+  setValue(
+    "fWorkContent",
+    `【自助報修】${r.issueType || ""}
+型號：${r.model || ""}
+序號：${r.serial || ""}
+錯誤碼：${r.errorCode || ""}
+${r.description || ""}`
+  );
+
+  try{
+    await firebaseDb.collection("repairRequests").doc(id).update({
+      status:"已排工",
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }catch(e){}
+
+  alert("已帶入新增派工頁面，請補上工程人員、日期與施工項目後儲存。");
+}
+
+setTimeout(() => {
+  try{
+    if(firebaseDb) loadRepairRequests();
+  }catch(e){}
+}, 2500);
 </script>
 
 </body>
