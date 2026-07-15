@@ -999,6 +999,8 @@ body{
 /* ===== 隱藏後台樣式 ===== */
 #adminTab{display:none}
 #adminPage{display:none}
+.admin-only{display:none!important}
+body.is-admin .admin-only{display:inline-flex!important}
 #adminPage.active{display:block}
 .admin-header{
   background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
@@ -1806,6 +1808,8 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     </select>
     <input id="repairSearch" placeholder="搜尋姓名、電話、型號、序號" oninput="renderRepairRequests()">
     <button onclick="loadRepairRequests()">重新整理</button>
+    <button class="admin-only" style="background:#e17055" onclick="clearCancelledRepairRequests()">🧹 清空已取消案件</button>
+    <button class="admin-only" style="background:#c0392b" onclick="clearAllRepairRequests()">🗑️ 清空全部報修案件</button>
   </div>
   <div class="summary" id="repairSummary">報修案件載入中…</div>
   <div class="repair-list" id="repairList"></div>
@@ -2939,6 +2943,8 @@ function applyRoleUI(){
   }
   // 手機版「兩日派工」鎖定畫面只給工程帳號（viewer）用，admin / editor 後台要跟電腦版一樣完整
   document.body.classList.toggle("engineer-lock-mode", currentRole === "viewer");
+  // 報修案件的「刪除／清空」按鈕只給管理員看得到、用得到
+  document.body.classList.toggle("is-admin", loggedIn && isAdmin());
   if(currentUser){
     setSyncStatus(`已登入：${currentUser.email}（${roleLabel()}）`, access ? (canEdit()?"ok":"wait") : "err");
   }
@@ -9840,6 +9846,7 @@ ${repairEsc(r.description || "未填寫")}</div>
           <button style="background:#40739e" onclick="setRepairStatus('${r.id}','已聯絡')">標記已聯絡</button>
           <button style="background:#218c74" onclick="repairToDispatch('${r.id}')">轉成派工</button>
           <button style="background:#777" onclick="setRepairStatus('${r.id}','取消')">取消案件</button>
+          <button class="admin-only" style="background:#c0392b" onclick="deleteRepairRequest('${r.id}')">🗑️ 永久刪除</button>
         </div>
       </div>`;
   }).join("");
@@ -9853,6 +9860,50 @@ async function setRepairStatus(id, status){
     });
   }catch(e){
     alert("更新失敗：" + e.message);
+  }
+}
+
+async function deleteRepairRequest(id){
+  if(!isAdmin()){ alert("只有管理員可以刪除報修案件。"); return; }
+  const r = repairRequests.find(x => x.id === id);
+  const label = r ? `${r.issueType || "未分類"}｜${r.customerName || "未填姓名"}` : id;
+  if(!confirm(`確定要永久刪除這筆報修案件嗎？\n「${label}」\n此動作無法復原。`)) return;
+  try{
+    await firebaseDb.collection("repairRequests").doc(id).delete();
+  }catch(e){
+    alert("刪除失敗：" + e.message);
+  }
+}
+
+async function clearCancelledRepairRequests(){
+  if(!isAdmin()){ alert("只有管理員可以清空報修案件。"); return; }
+  const targets = repairRequests.filter(r => (r.status || "待聯絡") === "取消");
+  if(!targets.length){ alert("目前沒有「取消」狀態的報修案件。"); return; }
+  if(!confirm(`確定要永久刪除 ${targets.length} 筆「已取消」的報修案件嗎？此動作無法復原。`)) return;
+  try{
+    const batch = firebaseDb.batch();
+    targets.forEach(r => batch.delete(firebaseDb.collection("repairRequests").doc(r.id)));
+    await batch.commit();
+  }catch(e){
+    alert("清空失敗：" + e.message);
+  }
+}
+
+async function clearAllRepairRequests(){
+  if(!isAdmin()){ alert("只有管理員可以清空報修案件。"); return; }
+  if(!repairRequests.length){ alert("目前沒有任何報修案件。"); return; }
+  if(!confirm(`⚠️ 確定要永久刪除全部 ${repairRequests.length} 筆報修案件嗎？\n包含待聯絡、已聯絡、已排工、已取消，全部都會被刪除，此動作無法復原！`)) return;
+  if(!confirm("再次確認：真的要清空全部報修案件嗎？")) return;
+  try{
+    const batchSize = 400; // Firestore 單一 batch 上限 500，留一點餘裕
+    for(let i = 0; i < repairRequests.length; i += batchSize){
+      const chunk = repairRequests.slice(i, i + batchSize);
+      const batch = firebaseDb.batch();
+      chunk.forEach(r => batch.delete(firebaseDb.collection("repairRequests").doc(r.id)));
+      await batch.commit();
+    }
+  }catch(e){
+    alert("清空失敗：" + e.message);
   }
 }
 
