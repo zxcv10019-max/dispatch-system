@@ -1648,6 +1648,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 
 
 .repair-media{grid-column:1/-1;margin-top:6px}
+.upload-stuck-badge{display:inline-block;background:#fdecea;color:#c0392b;border:1px solid #f5b7b1;border-radius:8px;padding:2px 8px;font-weight:bold;margin-top:4px}
 .repair-media-title{font-weight:bold;margin:6px 0}
 .repair-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .repair-photo-grid img{width:100%;height:130px;object-fit:cover;border-radius:7px;border:1px solid #ccc;cursor:zoom-in;background:#eee}
@@ -9672,6 +9673,31 @@ function repairDate(v){
   return v ? String(v) : "-";
 }
 
+// ===== 上傳逾時偵測：uploadStatus 停在「上傳中」太久，代表客戶可能中途關閉頁面導致附件遺失 =====
+const REPAIR_UPLOAD_STUCK_MINUTES = 10;
+
+function repairTimestampMs(v){
+  try{
+    if(v && typeof v.toDate === "function") return v.toDate().getTime();
+    if(v && typeof v.seconds === "number") return v.seconds * 1000;
+  }catch(e){}
+  const t = new Date(v).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function renderUploadStatusInfo(r){
+  const status = r.uploadStatus || "";
+  if(!status) return "";
+  if(status === "上傳中"){
+    const ts = repairTimestampMs(r.updatedAt) || repairTimestampMs(r.createdAt);
+    const elapsedMin = ts ? (Date.now() - ts) / 60000 : null;
+    if(elapsedMin !== null && elapsedMin > REPAIR_UPLOAD_STUCK_MINUTES){
+      return `｜<span class="upload-stuck-badge">⚠️ 上傳可能已中斷（約 ${Math.floor(elapsedMin)} 分鐘未完成），照片/影片可能沒送達，請聯絡客戶確認或請客戶重新提供</span>`;
+    }
+  }
+  return `｜${repairEsc(status)}`;
+}
+
 function loadRepairRequests(){
   const summaryBox = document.getElementById("repairSummary");
   if(summaryBox) summaryBox.textContent = "報修案件載入中…";
@@ -9705,6 +9731,9 @@ function updateRepairPendingBadge(){
   el.textContent = count;
   el.style.display = count ? "inline-block" : "none";
 }
+
+// 每分鐘重新渲染一次，讓「上傳中」逾時警示能即時反映經過的時間，不必等 Firestore 有新資料才更新
+setInterval(() => { if(repairRequests.length) renderRepairRequests(); }, 60000);
 
 
 function normalizeRepairFiles(items, urls){
@@ -9836,7 +9865,7 @@ function renderRepairRequests(){
           <div><b>序號：</b>${repairEsc(r.serial || "-")}</div>
           <div><b>位置：</b>${repairEsc(r.location || "-")}</div>
           <div><b>錯誤碼：</b>${repairEsc(r.errorCode || "-")}</div>
-          <div><b>附件：</b>照片 ${Number(r.photoCount || 0)}／影片 ${Number(r.videoCount || 0)} ${r.uploadStatus ? `｜${repairEsc(r.uploadStatus)}` : ""}</div>
+          <div><b>附件：</b>照片 ${Number(r.photoCount || 0)}／影片 ${Number(r.videoCount || 0)} ${renderUploadStatusInfo(r)}</div>
           ${renderRepairMedia(r)}
           <div class="repair-desc"><b>故障描述：</b>
 ${repairEsc(r.description || "未填寫")}</div>
