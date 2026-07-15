@@ -9688,7 +9688,8 @@ function repairTimestampMs(v){
 function renderUploadStatusInfo(r){
   const status = r.uploadStatus || "";
   if(!status) return "";
-  if(status === "上傳中"){
+  const stillGoing = status === "上傳中" || status === "照片已上傳，影片上傳中";
+  if(stillGoing){
     const ts = repairTimestampMs(r.updatedAt) || repairTimestampMs(r.createdAt);
     const elapsedMin = ts ? (Date.now() - ts) / 60000 : null;
     if(elapsedMin !== null && elapsedMin > REPAIR_UPLOAD_STUCK_MINUTES){
