@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>派工表系統</title>
+<!-- 報修案件卡片＋Google Drive 附件預覽版 2026-07-15 -->
 <!-- fixed: sharedDispatch path + roles + nojump sync protection -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js"></script>
@@ -1653,6 +1654,60 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
 .repair-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out}
 .repair-lightbox.hidden{display:none!important}
 .repair-lightbox img{max-width:95vw;max-height:92vh;object-fit:contain;border-radius:8px}
+
+
+/* ===== 報修案件卡片式附件 ===== */
+.repair-list{
+  display:grid!important;
+  grid-template-columns:repeat(auto-fill,minmax(360px,1fr))!important;
+  gap:14px!important;
+  align-items:start!important;
+}
+.repair-card{
+  border:1px solid #dbe4ee!important;
+  border-left:5px solid #f39c12!important;
+  border-radius:14px!important;
+  padding:16px!important;
+  background:#fff!important;
+  box-shadow:0 4px 14px rgba(31,50,81,.08)!important;
+}
+.repair-title{font-size:17px!important;line-height:1.45}
+.repair-grid{
+  grid-template-columns:1fr 1fr!important;
+  background:#f8fbff;
+  border-radius:10px;
+  padding:10px;
+}
+.repair-media{grid-column:1/-1!important}
+.repair-photo-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+.repair-photo-grid img{
+  height:115px!important;
+  border-radius:10px!important;
+  transition:transform .15s, box-shadow .15s;
+}
+.repair-photo-grid img:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 16px rgba(0,0,0,.16);
+}
+.repair-video-card{
+  display:flex;align-items:center;gap:10px;
+  border:1px solid #cfe2f3;background:#eef7ff;
+  border-radius:10px;padding:10px;text-decoration:none;color:#155a8a;
+}
+.repair-video-card:hover{background:#dceeff}
+.repair-video-icon{
+  width:44px;height:44px;border-radius:50%;background:#40739e;color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:20px;flex:none;
+}
+.repair-video-info{min-width:0}
+.repair-video-name{font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.repair-video-hint{font-size:12px;color:#557}
+@media(max-width:900px){
+  .repair-list{grid-template-columns:1fr!important}
+  .repair-grid{grid-template-columns:1fr!important}
+}
 
 </style>
 </head>
@@ -9648,9 +9703,18 @@ function updateRepairPendingBadge(){
 
 function normalizeRepairFiles(items, urls){
   if(Array.isArray(items) && items.length){
-    return items.map(x => typeof x === "string" ? {url:x} : x).filter(x => x && x.url);
+    return items.map(x => typeof x === "string" ? {url:x} : x)
+      .map(x => ({
+        ...x,
+        url: x.url || x.thumbnailUrl || x.viewUrl,
+        thumbnailUrl: x.thumbnailUrl || x.url,
+        viewUrl: x.viewUrl || x.url
+      }))
+      .filter(x => x.url || x.viewUrl);
   }
-  return (Array.isArray(urls) ? urls : []).map(url => ({url}));
+  return (Array.isArray(urls) ? urls : []).map(url => ({
+    url, thumbnailUrl:url, viewUrl:url
+  }));
 }
 
 function renderRepairMedia(r){
@@ -9662,7 +9726,14 @@ function renderRepairMedia(r){
     <div class="repair-media">
       <div class="repair-media-title">📷 報修照片（點擊放大）</div>
       <div class="repair-photo-grid">
-        ${photos.map(f => `<img src="${repairEsc(f.url)}" alt="${repairEsc(f.name || "報修照片")}" loading="lazy" onclick="openRepairImage('${repairEsc(f.url)}')">`).join("")}
+        ${photos.map(f => `
+          <img
+            src="${repairEsc(f.thumbnailUrl || f.url)}"
+            alt="${repairEsc(f.name || "報修照片")}"
+            loading="lazy"
+            onclick="openRepairImage('${repairEsc(f.thumbnailUrl || f.url)}','${repairEsc(f.viewUrl || f.url)}')"
+            onerror="this.style.display='none'"
+          >`).join("")}
       </div>
     </div>` : "";
 
@@ -9670,18 +9741,32 @@ function renderRepairMedia(r){
     <div class="repair-media">
       <div class="repair-media-title">🎥 報修影片</div>
       <div class="repair-video-grid">
-        ${videos.map(f => `<video controls preload="metadata" src="${repairEsc(f.url)}"></video>`).join("")}
+        ${videos.map((f,i) => `
+          <a class="repair-video-card" href="${repairEsc(f.viewUrl || f.url)}" target="_blank" rel="noopener">
+            <span class="repair-video-icon">▶</span>
+            <span class="repair-video-info">
+              <span class="repair-video-name">${repairEsc(f.name || `報修影片 ${i+1}`)}</span>
+              <span class="repair-video-hint">點擊後開啟 Google Drive 觀看</span>
+            </span>
+          </a>`).join("")}
       </div>
     </div>` : "";
 
   return photoHtml + videoHtml;
 }
 
-function openRepairImage(url){
+function openRepairImage(url, originalUrl=""){
   const box = document.getElementById("repairImageLightbox");
   const img = document.getElementById("repairImageLightboxImg");
   if(!box || !img) return;
   img.src = url;
+  img.dataset.originalUrl = originalUrl || url;
+  img.title = "點圖片可開啟原始檔";
+  img.onclick = function(e){
+    e.stopPropagation();
+    const target = img.dataset.originalUrl;
+    if(target) window.open(target, "_blank", "noopener");
+  };
   box.classList.remove("hidden");
 }
 
