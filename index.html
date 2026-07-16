@@ -1752,7 +1752,11 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     </div>
 
     <div class="role-panel" style="margin-top:16px;">
-      <h3>💰 金額統計</h3>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h3 style="margin:0;">💰 金額統計</h3>
+        <label style="font-size:13px;color:#555;">月份：</label>
+        <input type="month" id="statsAmountMonth" style="font-size:13px;padding:5px 8px;" onchange="renderCompletionStats('statsAmountMonth','statsCompletionContent')">
+      </div>
       <div id="statsCompletionContent"></div>
     </div>
     <div class="role-panel" style="margin-top:16px;">
@@ -5577,7 +5581,9 @@ function renderStatsPage(){
   renderStatsHistory();
   const sm2=document.getElementById("statsMonth2");
   if(sm2 && !sm2.value){ const d=new Date(); sm2.value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
-  renderCompletionStats("statsMonth2","statsCompletionContent");
+  const smAmt=document.getElementById("statsAmountMonth");
+  if(smAmt && !smAmt.value){ const d=new Date(); smAmt.value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  renderCompletionStats("statsAmountMonth","statsCompletionContent");
   renderWorkItemStats("statsMonth2","statsWorkItemStatsBody");
   renderStatsInstallSummary();
 }
