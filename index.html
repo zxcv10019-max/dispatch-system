@@ -1707,6 +1707,9 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;border-radius:3px;display:inline-block;background:#FFF2CC;border:1px solid #D6B656;"></span>換濾芯／其他</span>
   </div>
   <div class="table-wrap" id="scheduleWrap"><table id="schedule"></table></div>
+  <div id="scheduleBottomScrollbar" class="schedule-bottom-scrollbar">
+    <div id="scheduleBottomScrollbarThumb" class="schedule-bottom-scrollbar-thumb"></div>
+  </div>
 </div>
 
 <div id="repairPage" class="page">
@@ -9485,6 +9488,44 @@ body:has(#schedulePage.page.active) #scheduleWrap{
   overflow-x:auto !important;
 }
 
+/* ============================================================
+   派工表：固定底部橫向滑桿（常駐版，不會自動消失）
+   與舊有的 overflow-x 規則完全獨立，避免被其他樣式蓋掉。
+   ============================================================ */
+.schedule-bottom-scrollbar{
+  position:fixed !important;
+  left:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  height:14px !important;
+  background:#e9edf3 !important;
+  border-top:1px solid #d3dae4 !important;
+  z-index:9500 !important;
+  display:none !important;
+  cursor:pointer !important;
+}
+.schedule-bottom-scrollbar.is-visible{
+  display:block !important;
+}
+.schedule-bottom-scrollbar-thumb{
+  position:absolute !important;
+  top:1px !important;
+  height:12px !important;
+  background:#8fa3bf !important;
+  border-radius:6px !important;
+  cursor:grab !important;
+  min-width:40px !important;
+}
+.schedule-bottom-scrollbar-thumb:hover,
+.schedule-bottom-scrollbar-thumb.dragging{
+  background:#5c7aa3 !important;
+  cursor:grabbing !important;
+}
+@media (max-width:768px){
+  .schedule-bottom-scrollbar{ height:18px !important; }
+  .schedule-bottom-scrollbar-thumb{ height:16px !important; }
+}
+
 /* 頁面整個捲動時，表格自帶的黏頂表頭改回一般排版，避免和頁面捲動衝突 */
 body.schedule-scroll-mode .week-schedule-table tr:nth-child(1) th,
 body.schedule-scroll-mode .week-schedule-table tr:nth-child(2) th,
@@ -9927,5 +9968,158 @@ setTimeout(() => {
 <div id="repairImageLightbox" class="repair-lightbox hidden" onclick="closeRepairImage()">
   <img id="repairImageLightboxImg" src="" alt="報修照片">
 </div>
+
+<script>
+/* ============================================================
+   派工表：固定底部橫向滑桿（常駐版）
+   獨立實作，不依賴表格原生捲軸，避免受舊有 overflow-x 規則
+   互相覆蓋而「閃現一秒就消失」。用 setInterval 做保險校正。
+   ============================================================ */
+(function(){
+  var wrap, bar, thumb;
+  var dragging = false, dragStartX = 0, dragStartScroll = 0;
+
+  function ready(){
+    wrap = wrap || document.getElementById('scheduleWrap');
+    bar = bar || document.getElementById('scheduleBottomScrollbar');
+    thumb = thumb || document.getElementById('scheduleBottomScrollbarThumb');
+    return !!(wrap && bar && thumb);
+  }
+
+  function isSchedulePageActive(){
+    var page = document.getElementById('schedulePage');
+    return !!(page && page.classList.contains('active'));
+  }
+
+  function updateBar(){
+    if(!ready()) return;
+    if(!isSchedulePageActive()){
+      bar.classList.remove('is-visible');
+      return;
+    }
+    var scrollWidth = wrap.scrollWidth;
+    var clientWidth = wrap.clientWidth;
+    if(scrollWidth <= clientWidth + 2){
+      bar.classList.remove('is-visible');
+      return;
+    }
+    bar.classList.add('is-visible');
+    var barWidth = bar.clientWidth;
+    var thumbWidth = Math.max(40, barWidth * (clientWidth / scrollWidth));
+    var maxThumbLeft = barWidth - thumbWidth;
+    var maxScrollLeft = scrollWidth - clientWidth;
+    var ratio = maxScrollLeft > 0 ? (wrap.scrollLeft / maxScrollLeft) : 0;
+    thumb.style.width = thumbWidth + 'px';
+    thumb.style.left = (maxThumbLeft * ratio) + 'px';
+  }
+
+  function onWrapScroll(){
+    if(!dragging) requestAnimationFrame(updateBar);
+  }
+
+  function onThumbMouseDown(e){
+    if(!ready()) return;
+    dragging = true;
+    thumb.classList.add('dragging');
+    dragStartX = e.clientX;
+    dragStartScroll = wrap.scrollLeft;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function onThumbTouchStart(e){
+    if(!ready() || !e.touches || !e.touches[0]) return;
+    dragging = true;
+    thumb.classList.add('dragging');
+    dragStartX = e.touches[0].clientX;
+    dragStartScroll = wrap.scrollLeft;
+    e.stopPropagation();
+  }
+
+  function moveTo(clientX){
+    if(!dragging || !ready()) return;
+    var barWidth = bar.clientWidth;
+    var thumbWidth = thumb.offsetWidth;
+    var maxThumbLeft = barWidth - thumbWidth;
+    var scrollWidth = wrap.scrollWidth;
+    var clientWidth = wrap.clientWidth;
+    var maxScrollLeft = scrollWidth - clientWidth;
+    if(maxThumbLeft <= 0 || maxScrollLeft <= 0) return;
+    var dx = clientX - dragStartX;
+    var scrollDx = dx * (maxScrollLeft / maxThumbLeft);
+    wrap.scrollLeft = Math.min(maxScrollLeft, Math.max(0, dragStartScroll + scrollDx));
+    updateBar();
+  }
+
+  function onDocMouseMove(e){ moveTo(e.clientX); }
+  function onDocTouchMove(e){
+    if(!dragging || !e.touches || !e.touches[0]) return;
+    moveTo(e.touches[0].clientX);
+    e.preventDefault();
+  }
+  function onDocMouseUp(){
+    if(!dragging) return;
+    dragging = false;
+    if(thumb) thumb.classList.remove('dragging');
+  }
+
+  function onBarClick(e){
+    if(!ready() || e.target === thumb) return;
+    var rect = bar.getBoundingClientRect();
+    var clickX = e.clientX - rect.left;
+    var thumbWidth = thumb.offsetWidth;
+    var barWidth = bar.clientWidth;
+    var maxThumbLeft = barWidth - thumbWidth;
+    var targetLeft = Math.min(maxThumbLeft, Math.max(0, clickX - thumbWidth / 2));
+    var scrollWidth = wrap.scrollWidth;
+    var clientWidth = wrap.clientWidth;
+    var maxScrollLeft = scrollWidth - clientWidth;
+    wrap.scrollLeft = maxThumbLeft > 0 ? (targetLeft / maxThumbLeft) * maxScrollLeft : 0;
+    updateBar();
+  }
+
+  function init(){
+    if(!ready()) { setTimeout(init, 200); return; }
+
+    wrap.addEventListener('scroll', onWrapScroll, {passive:true});
+    thumb.addEventListener('mousedown', onThumbMouseDown);
+    thumb.addEventListener('touchstart', onThumbTouchStart, {passive:true});
+    document.addEventListener('mousemove', onDocMouseMove);
+    document.addEventListener('touchmove', onDocTouchMove, {passive:false});
+    document.addEventListener('mouseup', onDocMouseUp);
+    document.addEventListener('touchend', onDocMouseUp);
+    bar.addEventListener('mousedown', onBarClick);
+    window.addEventListener('resize', updateBar);
+
+    // 表格內容變動（切換週次、載入資料、Firebase 同步等）時同步更新滑桿
+    var scheduleTable = document.getElementById('schedule');
+    if(scheduleTable && window.MutationObserver){
+      var moTable = new MutationObserver(function(){ requestAnimationFrame(updateBar); });
+      moTable.observe(scheduleTable, {childList:true, subtree:true});
+    }
+    if(window.ResizeObserver){
+      var ro = new ResizeObserver(function(){ requestAnimationFrame(updateBar); });
+      ro.observe(wrap);
+    }
+
+    // 分頁切換（class 變化）時同步更新
+    var schedulePageEl = document.getElementById('schedulePage');
+    if(schedulePageEl && window.MutationObserver){
+      var moPage = new MutationObserver(function(){ requestAnimationFrame(updateBar); });
+      moPage.observe(schedulePageEl, {attributes:true, attributeFilter:['class']});
+    }
+
+    updateBar();
+    // 保險：定期校正，避免任何遺漏事件造成滑桿「閃一下就消失」
+    setInterval(updateBar, 800);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
 </body>
 </html>
