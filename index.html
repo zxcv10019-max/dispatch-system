@@ -2837,6 +2837,15 @@ async function applyRemoteData(data){
   renderLeaveList();
   renderLeaveListLP();
   if(typeof renderCartridgeTable==='function') renderCartridgeTable();
+  // 派工統計／後台管理儀表板不會因為切分頁以外的事件自動重繪，
+  // 若使用者目前正停留在這兩頁，雲端資料一到就要立刻同步更新，
+  // 否則會停留在資料還沒同步完成時的舊數字（甚至是 0）。
+  try{
+    const statsEl = document.getElementById('statsPage');
+    if(statsEl && statsEl.classList.contains('active') && typeof renderStatsPage==='function') renderStatsPage();
+    const adminEl = document.getElementById('adminPage');
+    if(adminEl && adminEl.classList.contains('active') && typeof renderAdminDashboard==='function') renderAdminDashboard();
+  }catch(e){ /* 統計頁重繪失敗不影響主同步流程 */ }
   applyRoleUI();
   // 套用完雲端資料後，本機內容此刻跟雲端一致，更新「上傳比對基準值」，
   // 這樣使用者下一個小編輯只會被判定成「改到那一種」，不會誤判成四種全部都要重寫。
