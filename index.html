@@ -3085,6 +3085,23 @@ function showPage(pageId){
   };
   document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage" || pageId==="statsPage");
   document.body.classList.toggle("force-admin-scroll", pageId==="adminPage" || pageId==="statsPage");
+  if(pageId==="adminPage" || pageId==="statsPage"){
+    // 直接用 inline style 強制整頁可捲動，優先權最高，
+    // 不再只靠容易互相打架的 CSS class 疊加規則。
+    document.documentElement.style.setProperty("height","auto","important");
+    document.documentElement.style.setProperty("overflow-y","auto","important");
+    document.body.style.setProperty("height","auto","important");
+    document.body.style.setProperty("min-height","100vh","important");
+    document.body.style.setProperty("overflow-y","auto","important");
+    document.body.style.setProperty("display","block","important");
+  }else if(pageId!=="schedulePage" && pageId!=="cartridgePage"){
+    document.documentElement.style.removeProperty("height");
+    document.documentElement.style.removeProperty("overflow-y");
+    document.body.style.removeProperty("height");
+    document.body.style.removeProperty("min-height");
+    document.body.style.removeProperty("overflow-y");
+    document.body.style.removeProperty("display");
+  }
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById(pageId).classList.add("active");
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
