@@ -9854,13 +9854,14 @@ function renderRepairRequests(){
       <div class="repair-card ${cls}">
         <div class="repair-top">
           <div>
-            <div class="repair-title">${repairEsc(r.issueIcon || "🔧")} ${repairEsc(r.issueType || "未分類")}｜${repairEsc(r.customerName || "未填姓名")}</div>
+            <div class="repair-title">${repairEsc(r.issueIcon || "🔧")} ${repairEsc(r.issueType || "未分類")}｜${repairEsc(r.customerName || "未填姓名")}${r.customerCode ? ` <span style="color:#0984e3">（${repairEsc(r.customerCode)}）</span>` : ""}</div>
             <div class="repair-meta">案件 ${repairEsc(r.id)}｜${repairEsc(repairDate(r.createdAt) || r.createdAtText)}</div>
           </div>
           <span class="hold-badge" style="background:${badgeColor}">${repairEsc(st)}</span>
         </div>
 
         <div class="repair-grid">
+          <div><b>客戶代號：</b>${repairEsc(r.customerCode || "-")}</div>
           <div><b>電話：</b><a href="tel:${repairEsc(r.phone)}">${repairEsc(r.phone || "-")}</a></div>
           <div><b>型號：</b>${repairEsc(r.model || "-")}</div>
           <div><b>序號：</b>${repairEsc(r.serial || "-")}</div>
@@ -9949,6 +9950,7 @@ async function repairToDispatch(id){
   };
 
   setValue("fCustomerName", r.customerName);
+  setValue("fCustomerCode", r.customerCode);
   setValue("fPhone", r.phone);
   setValue("fAddress", r.location);
   setValue(
