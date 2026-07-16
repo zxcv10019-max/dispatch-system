@@ -1278,6 +1278,7 @@ html, body{
 }
 
 body:has(#adminPage.page.active),
+body:has(#statsPage.page.active),
 body.admin-scroll-mode{
   height:auto !important;
   overflow-y:auto !important;
@@ -1285,7 +1286,8 @@ body.admin-scroll-mode{
   display:block !important;
 }
 
-#adminPage.page.active{
+#adminPage.page.active,
+#statsPage.page.active{
   display:block !important;
   height:auto !important;
   min-height:calc(100vh - 96px) !important;
@@ -1293,27 +1295,33 @@ body.admin-scroll-mode{
   padding-bottom:120px !important;
 }
 
-#adminPage .admin-body{
+#adminPage .admin-body,
+#statsPage .admin-body{
   height:auto !important;
   min-height:0 !important;
   overflow:visible !important;
   padding-bottom:120px !important;
 }
 
-#adminPage .log-table-wrap{
+#adminPage .log-table-wrap,
+#statsPage .log-table-wrap{
   max-height:none !important;
   overflow:visible !important;
 }
 
 #adminPage .role-panel,
+#statsPage .role-panel,
 #adminPage .admin-filter,
-#adminPage .admin-stats{
+#statsPage .admin-filter,
+#adminPage .admin-stats,
+#statsPage .admin-stats{
   max-width:1200px !important;
 }
 
 /* 手機 / 平板後台也能上下滑 */
 @media(max-width:900px){
   body:has(#adminPage.page.active),
+  body:has(#statsPage.page.active),
   body.admin-scroll-mode{
     height:auto !important;
     overflow-y:auto !important;
@@ -1321,18 +1329,21 @@ body.admin-scroll-mode{
     display:block !important;
   }
 
-  #adminPage.page.active{
+  #adminPage.page.active,
+  #statsPage.page.active{
     height:auto !important;
     overflow:visible !important;
     padding-bottom:140px !important;
   }
 
-  #adminPage .admin-body{
+  #adminPage .admin-body,
+  #statsPage .admin-body{
     padding:12px !important;
     overflow:visible !important;
   }
 
-  #adminPage .log-table-wrap{
+  #adminPage .log-table-wrap,
+  #statsPage .log-table-wrap{
     overflow-x:auto !important;
     overflow-y:visible !important;
     max-height:none !important;
@@ -1343,7 +1354,8 @@ body.admin-scroll-mode{
 /* ===== 2026-06 admin whole-page scroll fix ===== */
 /* 後台不要固定畫面，讓整個頁面可以下滑，右側顯示瀏覽器捲軸 */
 body.admin-scroll-mode,
-body:has(#adminPage.page.active){
+body:has(#adminPage.page.active),
+body:has(#statsPage.page.active){
   display:block !important;
   height:auto !important;
   min-height:100vh !important;
@@ -1353,7 +1365,8 @@ body:has(#adminPage.page.active){
 }
 
 /* 後台頁內容跟著整頁下滑，上方標題/帳號設定區不固定 */
-#adminPage.page.active{
+#adminPage.page.active,
+#statsPage.page.active{
   display:block !important;
   height:auto !important;
   min-height:100vh !important;
@@ -1362,27 +1375,35 @@ body:has(#adminPage.page.active){
 }
 
 #adminPage .admin-header,
+#statsPage .admin-header,
 #adminPage .admin-body,
+#statsPage .admin-body,
 #adminPage .role-panel,
+#statsPage .role-panel,
 #adminPage .admin-filter,
-#adminPage .admin-stats{
+#statsPage .admin-filter,
+#adminPage .admin-stats,
+#statsPage .admin-stats{
   position:static !important;
   top:auto !important;
 }
 
 /* 表格不要只在小框框內滑，讓它撐開頁面，跟整頁一起滑 */
-#adminPage .log-table-wrap{
+#adminPage .log-table-wrap,
+#statsPage .log-table-wrap{
   max-height:none !important;
   height:auto !important;
   overflow:visible !important;
 }
 
-#adminPage .log-table-wrap table{
+#adminPage .log-table-wrap table,
+#statsPage .log-table-wrap table{
   width:100% !important;
 }
 
 /* 表頭不要 sticky，避免整頁滑動時卡住 */
-#adminPage .log-table-wrap th{
+#adminPage .log-table-wrap th,
+#statsPage .log-table-wrap th{
   position:static !important;
   top:auto !important;
 }
@@ -1406,198 +1427,38 @@ body.force-admin-scroll{
 body.force-admin-scroll .header,
 body.force-admin-scroll .tabs,
 body.force-admin-scroll #adminPage .admin-header,
-body.force-admin-scroll #adminPage .admin-body{
+body.force-admin-scroll #statsPage .admin-header,
+body.force-admin-scroll #adminPage .admin-body,
+body.force-admin-scroll #statsPage .admin-body{
   position:static !important;
   top:auto !important;
 }
-body.force-admin-scroll #adminPage.page.active{
+body.force-admin-scroll #adminPage.page.active,
+body.force-admin-scroll #statsPage.page.active{
   display:block !important;
   height:auto !important;
   min-height:160vh !important;
   overflow:visible !important;
   padding-bottom:200px !important;
 }
-body.force-admin-scroll #adminPage .admin-body{
+body.force-admin-scroll #adminPage .admin-body,
+body.force-admin-scroll #statsPage .admin-body{
   height:auto !important;
   max-height:none !important;
   overflow:visible !important;
 }
-body.force-admin-scroll #adminPage .log-table-wrap{
+body.force-admin-scroll #adminPage .log-table-wrap,
+body.force-admin-scroll #statsPage .log-table-wrap{
   height:auto !important;
   max-height:none !important;
   overflow:visible !important;
 }
-body.force-admin-scroll #adminPage .log-table-wrap th{
+body.force-admin-scroll #adminPage .log-table-wrap th,
+body.force-admin-scroll #statsPage .log-table-wrap th{
   position:static !important;
   top:auto !important;
 }
 
-
-/* ===== 2026-06 mobile engineer-only two-day dispatch view ===== */
-@media(max-width:900px){
-  body.engineer-lock-mode{
-    height:auto !important;
-    min-height:100% !important;
-    overflow-y:auto !important;
-    overflow-x:hidden !important;
-    display:block !important;
-    background:#f3f3f3 !important;
-  }
-
-  /* 手機版工程帳號（viewer）只顯示兩日派工，不顯示其他資料/頁籤；admin / editor 不受影響，跟電腦版一樣 */
-  body.engineer-lock-mode .tabs{
-    display:none !important;
-  }
-
-  body.engineer-lock-mode .page{
-    display:none !important;
-  }
-
-  body.engineer-lock-mode #schedulePage{
-    display:block !important;
-    height:auto !important;
-    min-height:0 !important;
-    overflow:visible !important;
-  }
-
-  body.engineer-lock-mode #schedulePage > .toolbar,
-  body.engineer-lock-mode #schedulePage > .summary,
-  body.engineer-lock-mode #schedulePage > .engineer-code-note,
-  body.engineer-lock-mode #scheduleWrap{
-    display:none !important;
-  }
-
-  body.engineer-lock-mode #myTodayPanel{
-    display:block !important;
-    margin:12px !important;
-    padding:14px !important;
-    border-radius:14px !important;
-    background:#fff !important;
-  }
-
-  .my-day-section{
-    margin-top:14px !important;
-  }
-
-  .my-day-section h4{
-    font-size:17px !important;
-    margin:12px 0 8px !important;
-    padding:8px 10px !important;
-    border-radius:10px !important;
-    background:#eef4ff !important;
-    color:#1f3a5f !important;
-  }
-
-  .my-engineer-section{
-    margin:12px 0 16px !important;
-    padding:10px !important;
-    border-radius:12px !important;
-    background:#f8f9fa !important;
-    border:1px solid #e2e6ea !important;
-  }
-
-  .my-engineer-title{
-    font-size:16px !important;
-    font-weight:bold !important;
-    color:#2f3542 !important;
-    margin:0 0 8px !important;
-  }
-
-  .my-today-job{
-    background:#fff !important;
-    border:1px solid #cfe2f3 !important;
-    border-radius:12px !important;
-    padding:12px !important;
-    margin:10px 0 !important;
-    font-size:15px !important;
-    line-height:1.65 !important;
-  }
-
-  .my-today-job .time{
-    font-size:16px !important;
-    font-weight:bold !important;
-    color:#1f4e79 !important;
-  }
-
-  .my-today-job .name{
-    font-size:17px !important;
-    font-weight:bold !important;
-    color:#0066cc !important;
-  }
-
-  .my-phone-link,
-  .my-map-link,
-  .my-nav-link{
-    color:#0066cc !important;
-    font-weight:bold !important;
-    text-decoration:underline !important;
-  }
-
-  .my-today-job .route-info{
-    font-size:14px !important;
-    margin-top:8px !important;
-    padding:8px !important;
-  }
-}
-
-
-
-
-.admin-import-panel .admin-dashboard-actions button{font-size:13px}
-@media(max-width:900px){
-  #adminPage .admin-import-panel{display:block!important;visibility:visible!important}
-  #adminPage .admin-import-panel .admin-dashboard-actions button{width:auto!important;min-width:140px!important}
-}
-
-/* ===== Admin dashboard enhancements + mobile/admin consistency ===== */
-.admin-dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:12px;margin-bottom:16px}
-.admin-widget{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
-.admin-widget h3{margin:0 0 10px;font-size:16px;color:#2f3542}
-.admin-widget .mini-table{width:100%;border-collapse:collapse;min-width:0!important}
-.admin-widget .mini-table th,.admin-widget .mini-table td{padding:7px 6px;border-bottom:1px solid #f0f0f0;font-size:13px;text-align:left}
-.admin-widget .mini-table th{position:static!important;background:#f8f9fa!important;color:#333!important}
-.admin-widget .empty{color:#888;font-size:13px;padding:8px 0}
-.admin-widget input,.admin-widget select{font-size:13px;padding:7px 9px}
-.admin-dashboard-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.admin-alert{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:8px;margin:6px 0;font-size:13px;line-height:1.5}
-.admin-alert.danger{background:#fde2e2;border-color:#f5a3a3;color:#922b21}
-.admin-kpi-row{display:flex;gap:8px;flex-wrap:wrap}
-.admin-kpi{flex:1;min-width:120px;background:#f8f9fa;border:1px solid #ececec;border-radius:8px;padding:10px;text-align:center}
-.admin-kpi b{display:block;font-size:22px;color:#2f3542}
-.admin-kpi span{font-size:12px;color:#666}
-@media(max-width:900px){
-  /* 後台手機版強制與電腦版使用同一套內容，不進工程師手機簡化版 */
-  body.admin-scroll-mode .tabs{display:flex!important;visibility:visible!important;height:auto!important;max-height:none!important;pointer-events:auto!important}
-  body.admin-scroll-mode .page{visibility:visible!important;max-height:none!important;pointer-events:auto!important}
-  body.admin-scroll-mode #adminPage.page.active{display:block!important;overflow:visible!important;height:auto!important;min-height:100vh!important}
-  body.admin-scroll-mode #adminContent{display:block}
-  body.admin-scroll-mode #myTodayPanel{display:none!important}
-  body.admin-scroll-mode #scheduleWrap{display:block}
-  #adminPage .admin-body{max-width:none!important;width:100%!important;padding:12px!important}
-  .admin-dashboard-grid{grid-template-columns:1fr!important}
-  .admin-filter,.role-row,.admin-dashboard-actions{display:flex!important;flex-direction:column!important;align-items:stretch!important}
-  .admin-filter input,.admin-filter select,.admin-filter button,.role-row input,.role-row select,.role-row button,.admin-widget input,.admin-widget select,.admin-widget button{width:100%!important;min-width:0!important}
-  #adminPage .log-table-wrap{overflow-x:auto!important;overflow-y:visible!important}
-  #adminPage .log-table-wrap table{min-width:860px!important}
-}
-
-
-/* ===== 後台子導覽列 ===== */
-.admin-subnav{
-  display:flex;flex-wrap:wrap;gap:4px;padding:10px 16px;
-  background:#f8f9fa;border-bottom:1px solid #e2e8f0;
-  position:sticky;top:0;z-index:100;
-}
-.admin-subnav-btn{
-  background:#fff;color:#2f3542;border:1px solid #d1d9e0;
-  border-radius:20px;padding:6px 14px;font-size:13px;font-weight:bold;cursor:pointer;
-}
-.admin-subnav-btn:hover{background:#e9ecef}
-.admin-subnav-btn.active{background:#2f3542;color:#fff;border-color:#2f3542}
-
-/* ===== 隱藏 / 顯示後台各分區 ===== */
-.admin-section{display:none}
-.admin-section.active{display:block}
 
 /* ===== 完成率統計 ===== */
 .completion-bar-wrap{display:flex;align-items:center;gap:8px;margin:6px 0}
@@ -1773,7 +1634,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <span style="font-size:28px">📊</span>
     <div>
       <div style="font-size:20px;font-weight:bold">派工統計</div>
-      <div style="font-size:13px;color:#666">今日派工總覽、本月工作量、完成率與客戶履歷查詢（管理員與可編輯帳號皆可查看）</div>
+      <div style="font-size:13px;color:#666">今日派工總覽、本月工作量、金額統計與客戶履歷查詢（管理員與可編輯帳號皆可查看）</div>
     </div>
   </div>
 
@@ -1798,7 +1659,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     </div>
 
     <div class="role-panel" style="margin-top:16px;">
-      <h3>✅ 完成率統計</h3>
+      <h3>💰 金額統計</h3>
       <div id="statsCompletionContent"></div>
     </div>
     <div class="role-panel" style="margin-top:16px;">
@@ -1808,6 +1669,11 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
         <input type="month" id="statsMonth2" style="font-size:13px;padding:5px 8px;" onchange="renderStatsPage()">
       </div>
       <div id="statsWorkItemStatsBody" style="overflow-x:auto;"></div>
+    </div>
+
+    <div class="role-panel" style="margin-top:16px;">
+      <h3>🔧 安裝新機統計</h3>
+      <div id="statsInstallSummary"></div>
     </div>
   </div>
 </div>
@@ -2100,7 +1966,6 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
   </div>
   <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
-  <div id="listInstallSummary" style="display:none;margin:0 12px 10px;"></div>
 
   <div class="customer-table"><table id="jobListTable"></table></div>
 </div>
@@ -3187,7 +3052,7 @@ function syncEndTimeByStart(){
 
 
 function showPage(pageId){
-  document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage");
+  document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage" || pageId==="statsPage");
   document.body.classList.toggle("cartridge-scroll-mode", pageId==="cartridgePage");
   document.body.classList.toggle("schedule-scroll-mode", pageId==="schedulePage");
   document.documentElement.classList.toggle("schedule-scroll-mode", pageId==="schedulePage");
@@ -3215,8 +3080,8 @@ function showPage(pageId){
     document.body.style.overflowY="scroll";
     document.body.style.display="block";
   };
-  document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage");
-  document.body.classList.toggle("force-admin-scroll", pageId==="adminPage");
+  document.documentElement.classList.toggle("force-admin-scroll", pageId==="adminPage" || pageId==="statsPage");
+  document.body.classList.toggle("force-admin-scroll", pageId==="adminPage" || pageId==="statsPage");
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   document.getElementById(pageId).classList.add("active");
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
@@ -5275,26 +5140,6 @@ function renderJobList(){
       return (String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer));
     });
 
-  // 若篩選結果中包含「安裝」相關施工項目，自動統計施工內容分佈（例如安裝了哪些機型）
-  const installSummaryBox = document.getElementById("listInstallSummary");
-  if(installSummaryBox){
-    const installJobs = list.filter(j => String(j.workItem||"").includes("安裝"));
-    if(installJobs.length){
-      const tally = {};
-      installJobs.forEach(j=>{
-        const k = String(j.workContent||"").trim() || "未填施工內容";
-        tally[k] = (tally[k]||0) + 1;
-      });
-      const rows = Object.entries(tally).sort((a,b)=>b[1]-a[1])
-        .map(([k,v])=>`<span style="display:inline-block;background:#eef6ff;border:1px solid #bcd9f0;border-radius:8px;padding:3px 10px;margin:2px 4px 2px 0;font-size:12.5px;color:#1a5276;">${escapeHtml(k)}：${v} 件</span>`).join("");
-      installSummaryBox.style.display = "block";
-      installSummaryBox.innerHTML = `<div style="font-size:12.5px;color:#555;margin-bottom:4px;">🔧 安裝新機統計（共 ${installJobs.length} 件，依施工內容分類）：</div>${rows}`;
-    }else{
-      installSummaryBox.style.display = "none";
-      installSummaryBox.innerHTML = "";
-    }
-  }
-
   // 顯示篩選提示（不管有沒有篩選條件，都固定顯示目前清單筆數，方便一眼看出本月/本次查詢有幾筆）
   const badge = document.getElementById("listFilterBadge");
   if(badge){
@@ -5608,6 +5453,25 @@ function renderStatsPage(){
   if(sm2 && !sm2.value){ const d=new Date(); sm2.value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
   renderCompletionStats("statsMonth2","statsCompletionContent");
   renderWorkItemStats("statsMonth2","statsWorkItemStatsBody");
+  renderStatsInstallSummary();
+}
+function renderStatsInstallSummary(){
+  const box=document.getElementById("statsInstallSummary"); if(!box) return;
+  const month=(document.getElementById("statsMonth2")||{}).value||"";
+  const scoped=(jobs||[]).filter(j=>!isHoldJob(j) && (!month || String(j.date||"").startsWith(month)));
+  const installJobs=scoped.filter(j=>String(j.workItem||"").includes("安裝"));
+  if(!installJobs.length){
+    box.innerHTML=`<div style="color:#888;font-size:13px;padding:8px 0;">${month?"該月份":"目前"}無安裝新機相關派工資料。</div>`;
+    return;
+  }
+  const tally={};
+  installJobs.forEach(j=>{
+    const k=String(j.workContent||"").trim()||"未填施工內容";
+    tally[k]=(tally[k]||0)+1;
+  });
+  const rows=Object.entries(tally).sort((a,b)=>b[1]-a[1])
+    .map(([k,v])=>`<span style="display:inline-block;background:#eef6ff;border:1px solid #bcd9f0;border-radius:8px;padding:3px 10px;margin:2px 4px 2px 0;font-size:12.5px;color:#1a5276;">${escapeHtml(k)}：${v} 件</span>`).join("");
+  box.innerHTML=`<div style="font-size:12.5px;color:#555;margin-bottom:6px;">共 ${installJobs.length} 件，依施工內容分類：</div>${rows}`;
 }
 function renderAdminDashboard(){
   renderAdminTodaySummary();
@@ -5882,7 +5746,7 @@ applyRoleUI();
     <div class="admin-subnav" id="adminSubnav">
       <button class="admin-subnav-btn active" onclick="showAdminSection('dashboard')">📊 總覽</button>
       <button class="admin-subnav-btn" onclick="showAdminSection('map')">🗺️ 地圖</button>
-      <button class="admin-subnav-btn" onclick="showAdminSection('completion')">✅ 完成率</button>
+      <button class="admin-subnav-btn" onclick="showAdminSection('completion')">💰 金額統計</button>
       <button class="admin-subnav-btn" onclick="showAdminSection('leave')">🏖️ 休假</button>
       <button class="admin-subnav-btn" onclick="showAdminSection('customerHistory')">📋 客戶紀錄</button>
       <button class="admin-subnav-btn" onclick="showAdminSection('logs')">📝 操作紀錄</button>
@@ -5938,7 +5802,7 @@ applyRoleUI();
       <!-- ===== SECTION: completion ===== -->
       <div id="adminCompletionSection" style="display:none">
         <div class="role-panel">
-          <h3>✅ 完成率統計</h3>
+          <h3>💰 金額統計</h3>
           <div id="adminCompletionContent"></div>
         </div>
         <div class="role-panel" style="margin-top:16px;">
@@ -6105,7 +5969,7 @@ document.addEventListener("click", function(e){
   const btn = e.target.closest && e.target.closest("button");
   if(!btn) return;
   const on = btn.getAttribute("onclick") || "";
-  if(on.includes("showPage('adminPage')") || on.includes('showPage("adminPage")')){
+  if(on.includes("showPage('adminPage')") || on.includes('showPage("adminPage")') || on.includes("showPage('statsPage')") || on.includes('showPage("statsPage")')){
     document.body.classList.add("admin-scroll-mode");
   }else if(on.includes("showPage(")){
     document.body.classList.remove("admin-scroll-mode");
@@ -6118,7 +5982,8 @@ document.addEventListener("click", function(e){
 (function(){
   function syncAdminScrollMode(){
     var admin = document.getElementById("adminPage");
-    document.body.classList.toggle("admin-scroll-mode", !!(admin && admin.classList.contains("active")));
+    var stats = document.getElementById("statsPage");
+    document.body.classList.toggle("admin-scroll-mode", !!((admin && admin.classList.contains("active")) || (stats && stats.classList.contains("active"))));
   }
   document.addEventListener("DOMContentLoaded", syncAdminScrollMode);
   setInterval(syncAdminScrollMode, 500);
@@ -6394,30 +6259,8 @@ function renderCompletionStats(monthInputId, targetBoxId){
   const sm = document.getElementById(monthInputId);
   const month = (sm && sm.value) ? sm.value : adminMonthNow();
   const monthJobs = (jobs||[]).filter(j=>String(j.date||'').startsWith(month) && !isHoldJob(j));
-  let html = '<div style="margin-bottom:12px;font-size:13px;color:#555">本月（' + month + '）共 ' + monthJobs.length + ' 件派工。工程師件數分佈：</div>';
-  const totalAll = monthJobs.length || 1;
-  engineers.forEach(e=>{
-    const cnt = monthJobs.filter(j=>normalizeEngineerName(j.engineer)===e).length;
-    const pct = Math.round(cnt/totalAll*100);
-    html += '<div class="completion-bar-wrap">'
-      + '<div class="completion-bar-label">' + escapeHtml(displayEngineer(e)) + ' ' + escapeHtml(e) + '</div>'
-      + '<div class="completion-bar-bg"><div class="completion-bar-fill" style="width:' + pct + '%"></div></div>'
-      + '<div class="completion-bar-val">' + cnt + ' 件</div>'
-      + '</div>';
-  });
 
-  // 施工項目分佈
-  const byItem = {};
-  monthJobs.forEach(j=>{ const k=j.workItem||'未填'; byItem[k]=(byItem[k]||0)+1; });
-  const itemRows = Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,v])=>{
-    const pct = Math.round(v/monthJobs.length*100);
-    return '<div class="completion-bar-wrap">'
-      + '<div class="completion-bar-label" style="width:120px;font-size:12px">' + escapeHtml(k) + '</div>'
-      + '<div class="completion-bar-bg"><div class="completion-bar-fill" style="width:' + pct + '%;background:#40739e"></div></div>'
-      + '<div class="completion-bar-val">' + v + '</div>'
-      + '</div>';
-  }).join('');
-  html += '<div style="margin-top:16px;font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:8px">施工項目分佈</div>' + itemRows;
+  let html = '<div style="margin-bottom:12px;font-size:13px;color:#555">本月（' + month + '）共 ' + monthJobs.length + ' 件派工。</div>';
 
   // ===== 金額統計 =====
   function parseAmount(v){ const s=String(v||'').replace(/,/g,'').trim(); if(!s) return NaN; const n=Number(s); return isNaN(n)?NaN:n; }
@@ -6425,7 +6268,7 @@ function renderCompletionStats(monthInputId, targetBoxId){
   const jobsWithAmt = monthJobs.filter(j=>!isNaN(parseAmount(j.amount)));
   const totalAmt = jobsWithAmt.reduce((s,j)=>s+parseAmount(j.amount),0);
 
-  html += '<div style="margin-top:20px;font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:10px">💰 金額統計</div>'
+  html += '<div style="font-size:13px;font-weight:bold;color:#2f3542;margin-bottom:10px">💰 金額統計</div>'
     + '<div style="background:#f0f8f0;border:1px solid #a5d6a7;border-radius:6px;padding:12px 20px;display:inline-block;min-width:160px">'
     + '<div style="font-size:12px;color:#555;margin-bottom:4px">本月總金額</div>'
     + '<div style="font-size:22px;font-weight:bold;color:#218c74">' + (totalAmt>0?fmtMoney(totalAmt):'—') + '</div>'
