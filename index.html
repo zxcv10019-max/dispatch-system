@@ -1764,7 +1764,52 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
   <button id="tabRepair" onclick="showPage('repairPage')">🛠️ 報修案件 <span id="repairPendingCount" style="background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;display:none">0</span></button>
   <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
   <button id="tabCartridge" onclick="showPage('cartridgePage')">🔄 換芯名單</button>
+  <button id="tabStats" onclick="showPage('statsPage')" style="display:none">📊 派工統計</button>
   <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
+</div>
+
+<div id="statsPage" class="page">
+  <div class="admin-header">
+    <span style="font-size:28px">📊</span>
+    <div>
+      <div style="font-size:20px;font-weight:bold">派工統計</div>
+      <div style="font-size:13px;color:#666">今日派工總覽、本月工作量、完成率與客戶履歷查詢（管理員與可編輯帳號皆可查看）</div>
+    </div>
+  </div>
+
+  <div class="admin-body">
+    <div class="admin-dashboard-grid">
+      <div class="admin-widget">
+        <h3>今日派工總覽</h3>
+        <div id="statsTodaySummary"></div>
+      </div>
+      <div class="admin-widget">
+        <h3>本月工作量統計</h3>
+        <div id="statsWorkloadSummary"></div>
+      </div>
+      <div class="admin-widget">
+        <h3>維修 / 客戶履歷查詢</h3>
+        <div class="admin-dashboard-actions">
+          <input id="statsHistoryKeyword" placeholder="輸入客編、客名、訂單、地址、施工內容" onkeydown="if(event.key==='Enter')renderStatsHistory()">
+          <button onclick="renderStatsHistory()" style="background:#40739e">查詢履歷</button>
+        </div>
+        <div id="statsHistoryResult" class="empty">輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。</div>
+      </div>
+    </div>
+
+    <div class="role-panel" style="margin-top:16px;">
+      <h3>✅ 完成率統計</h3>
+      <div id="statsCompletionContent"></div>
+    </div>
+    <div class="role-panel" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h3 style="margin:0;">📊 工程師施工項目統計</h3>
+        <label style="font-size:13px;color:#555;">月份：</label>
+        <input type="month" id="statsMonth2" style="font-size:13px;padding:5px 8px;" onchange="renderStatsPage()">
+      </div>
+      <div id="statsWorkItemStatsBody" style="overflow-x:auto;"></div>
+    </div>
+  </div>
 </div>
 
 <div id="schedulePage" class="page active">
@@ -2047,7 +2092,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <select id="listEngineerFilter" onchange="renderJobList()" title="工程人員篩選">
       <option value="">全部工程人員</option>
     </select>
-    <input type="text" id="listCustomerFilter" placeholder="🔍 搜尋客編 / 客名" style="min-width:180px;" oninput="renderJobList()">
+    <input type="text" id="listCustomerFilter" placeholder="🔍 搜尋客編 / 客名 / 施工項目" style="min-width:200px;" oninput="renderJobList()">
     <button onclick="renderJobList()">查詢</button>
     <button onclick="clearListFilter()" style="background:#888;">清除篩選</button>
     <button class="import-btn" onclick="document.getElementById('jobExcelFile').click()">匯入派工 Excel</button>
@@ -2055,6 +2100,7 @@ body.force-admin-scroll #adminPage .log-table-wrap th{
     <button class="export-btn" onclick="exportJobs()">匯出派工 Excel</button>
   </div>
   <div id="listFilterBadge" style="padding:6px 12px;font-size:13px;color:#555;display:none;"></div>
+  <div id="listInstallSummary" style="display:none;margin:0 12px 10px;"></div>
 
   <div class="customer-table"><table id="jobListTable"></table></div>
 </div>
@@ -2951,6 +2997,8 @@ function applyRoleUI(){
   }
   const adminTab=document.getElementById("adminTab");
   if(adminTab) adminTab.style.display = isAdmin() ? "inline-block" : "none";
+  const statsTab=document.getElementById("tabStats");
+  if(statsTab) statsTab.style.display = canEdit() ? "inline-block" : "none";
   const leaveTab=document.getElementById("tabLeave");
   if(leaveTab) leaveTab.style.display = canEdit() ? "inline-block" : "none";
   if(!canEdit() && document.getElementById("leavePage")?.classList.contains("active")){
@@ -3183,6 +3231,15 @@ function showPage(pageId){
   }
   if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgeTable();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");if(typeof lpTypeChange==='function')lpTypeChange();renderLeaveListLP();}
+  if(pageId==="statsPage"){
+    const tb=document.getElementById("tabStats");
+    if(tb) tb.classList.add("active");
+    if(!canEdit()){
+      alert("你的帳號沒有查看派工統計的權限。");
+    }else{
+      renderStatsPage();
+    }
+  }
   if(pageId==="adminPage"){
     const tab=document.getElementById("adminTab");
     if(tab) tab.classList.add("active");
@@ -5206,7 +5263,7 @@ function renderJobList(){
       const holdOk = holdFilter==="all" || (holdFilter==="hold" ? isHold : !isHold);
       const monthOk = holdFilter==="hold" || !month || String(j.date || "").slice(0,7) === month;
       const dateOk = holdFilter==="hold" || (!startDate || String(j.date||"")>=startDate) && (!endDate || String(j.date||"")<=endDate);
-      const custOk = !kw || [j.customerCode, j.customerName, j.codeName, j.orderNo]
+      const custOk = !kw || [j.customerCode, j.customerName, j.codeName, j.orderNo, j.workItem, j.workContent]
         .some(v => String(v||"").toLowerCase().includes(kw));
       const engOk = !engFilter || normalizeEngineerName(j.engineer)===normalizeEngineerName(engFilter) || j.engineer===engFilter;
       return holdOk && monthOk && dateOk && custOk && engOk;
@@ -5217,6 +5274,26 @@ function renderJobList(){
       if(ah!==bh) return ah-bh;
       return (String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer));
     });
+
+  // 若篩選結果中包含「安裝」相關施工項目，自動統計施工內容分佈（例如安裝了哪些機型）
+  const installSummaryBox = document.getElementById("listInstallSummary");
+  if(installSummaryBox){
+    const installJobs = list.filter(j => String(j.workItem||"").includes("安裝"));
+    if(installJobs.length){
+      const tally = {};
+      installJobs.forEach(j=>{
+        const k = String(j.workContent||"").trim() || "未填施工內容";
+        tally[k] = (tally[k]||0) + 1;
+      });
+      const rows = Object.entries(tally).sort((a,b)=>b[1]-a[1])
+        .map(([k,v])=>`<span style="display:inline-block;background:#eef6ff;border:1px solid #bcd9f0;border-radius:8px;padding:3px 10px;margin:2px 4px 2px 0;font-size:12.5px;color:#1a5276;">${escapeHtml(k)}：${v} 件</span>`).join("");
+      installSummaryBox.style.display = "block";
+      installSummaryBox.innerHTML = `<div style="font-size:12.5px;color:#555;margin-bottom:4px;">🔧 安裝新機統計（共 ${installJobs.length} 件，依施工內容分類）：</div>${rows}`;
+    }else{
+      installSummaryBox.style.display = "none";
+      installSummaryBox.innerHTML = "";
+    }
+  }
 
   // 顯示篩選提示（不管有沒有篩選條件，都固定顯示目前清單筆數，方便一眼看出本月/本次查詢有幾筆）
   const badge = document.getElementById("listFilterBadge");
@@ -5258,8 +5335,10 @@ function renderJobList(){
   // setTimeout(updateTravelTags, 80); // 已停用
 }
 
-function renderWorkItemStats(){
-  const statsMonth = (document.getElementById("statsMonth")||{}).value || "";
+function renderWorkItemStats(monthInputId, targetBoxId){
+  monthInputId = monthInputId || "statsMonth";
+  targetBoxId = targetBoxId || "workItemStatsBody";
+  const statsMonth = (document.getElementById(monthInputId)||{}).value || "";
   // Filter: valid jobs only, selected month, non-hold
   const filtered = jobs.filter(j => {
     if(j.isHold || !j.date) return false;
@@ -5291,7 +5370,8 @@ function renderWorkItemStats(){
   const grandTotal = filtered.length;
 
   if(!grandTotal){
-    document.getElementById("workItemStatsBody").innerHTML =
+    const emptyBox=document.getElementById(targetBoxId);
+    if(emptyBox) emptyBox.innerHTML =
       `<div style="color:#888;font-size:13px;padding:8px 0;">${statsMonth?"該月份":"目前"}無有效派工資料。</div>`;
     return;
   }
@@ -5332,7 +5412,8 @@ function renderWorkItemStats(){
   html += `</tr>`;
   html += `</table>`;
 
-  document.getElementById("workItemStatsBody").innerHTML = html;
+  const box=document.getElementById(targetBoxId);
+  if(box) box.innerHTML = html;
 }
 
 function exportCustomers(){
@@ -5518,6 +5599,16 @@ async function loadAdminLogs(){
 function adminDateToday(){ return formatDateLocal(new Date()); }
 function adminMonthNow(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
 function getJobText(j){ return [j.customerCode,j.customerName,j.codeName,j.orderNo,j.phone,j.city,j.district,j.address,j.workItem,j.workContent,j.engineer,j.payment].map(x=>String(x||"")).join(" ").toLowerCase(); }
+function renderStatsPage(){
+  if(!canEdit()){ return; }
+  renderAdminTodaySummary();
+  renderAdminWorkloadSummary();
+  renderStatsHistory();
+  const sm2=document.getElementById("statsMonth2");
+  if(sm2 && !sm2.value){ const d=new Date(); sm2.value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  renderCompletionStats("statsMonth2","statsCompletionContent");
+  renderWorkItemStats("statsMonth2","statsWorkItemStatsBody");
+}
 function renderAdminDashboard(){
   renderAdminTodaySummary();
   renderAdminWorkloadSummary();
@@ -5526,25 +5617,25 @@ function renderAdminDashboard(){
   renderAdminHistory();
 }
 function renderAdminTodaySummary(){
-  const box=document.getElementById("adminTodaySummary"); if(!box) return;
   const today=adminDateToday();
   const todayJobs=(jobs||[]).filter(j=>j.date===today && !isHoldJob(j));
   const holdJobs=(jobs||[]).filter(j=>isHoldJob(j));
   const byEng={}; engineers.forEach(e=>byEng[e]=0); todayJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; });
   const workItems={}; todayJobs.forEach(j=>{ const k=j.workItem||"未填施工項目"; workItems[k]=(workItems[k]||0)+1; });
-  box.innerHTML=`<div class="admin-kpi-row"><div class="admin-kpi"><b>${todayJobs.length}</b><span>今日正式派工</span></div><div class="admin-kpi"><b>${holdJobs.length}</b><span>目前暫押</span></div><div class="admin-kpi"><b>${Object.keys(workItems).length}</b><span>施工類型</span></div></div>`+
+  const html=`<div class="admin-kpi-row"><div class="admin-kpi"><b>${todayJobs.length}</b><span>今日正式派工</span></div><div class="admin-kpi"><b>${holdJobs.length}</b><span>目前暫押</span></div><div class="admin-kpi"><b>${Object.keys(workItems).length}</b><span>施工類型</span></div></div>`+
     `<table class="mini-table"><thead><tr><th>工程師</th><th>今日件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`;
+  ["adminTodaySummary","statsTodaySummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
 }
 function renderAdminWorkloadSummary(){
-  const box=document.getElementById("adminWorkloadSummary"); if(!box) return;
   const month=adminMonthNow();
   const monthJobs=(jobs||[]).filter(j=>String(j.date||"").startsWith(month) && !isHoldJob(j));
   const byEng={}; engineers.forEach(e=>byEng[e]=0);
   const byItem={};
   monthJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; const k=j.workItem||"未填施工項目"; byItem[k]=(byItem[k]||0)+1; });
   const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td>${v}</td></tr>`).join("");
-  box.innerHTML=`<table class="mini-table"><thead><tr><th>工程師</th><th>${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
+  const html=`<table class="mini-table"><thead><tr><th>工程師</th><th>${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
     `<div style="height:8px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th>件數</th></tr></thead><tbody>${itemRows || '<tr><td colspan="2">本月尚無資料</td></tr>'}</tbody></table>`;
+  ["adminWorkloadSummary","statsWorkloadSummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
 }
 function renderAdminConflicts(){
   const box=document.getElementById("adminConflictSummary"); if(!box) return;
@@ -5570,6 +5661,15 @@ function renderAdminConflicts(){
 function renderAdminHistory(){
   const box=document.getElementById("adminHistoryResult"); if(!box) return;
   const kw=(document.getElementById("adminHistoryKeyword")?.value||"").trim().toLowerCase();
+  if(!kw){ box.innerHTML='輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。'; box.className='empty'; return; }
+  box.className='';
+  const rows=(jobs||[]).filter(j=>getJobText(j).includes(kw)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,30);
+  if(!rows.length){ box.innerHTML='<div class="empty">找不到符合的派工履歷。</div>'; return; }
+  box.innerHTML=`<table class="mini-table"><thead><tr><th>日期</th><th>時間</th><th>工程師</th><th>客戶 / 內容</th></tr></thead><tbody>${rows.map(j=>`<tr><td>${escapeHtml(j.date||"")}${isHoldJob(j)?' <span class="hold-badge">暫押</span>':''}</td><td>${escapeHtml(j.startTime||"")}~${escapeHtml(j.endTime||"")}</td><td>${escapeHtml(j.engineer||"")}</td><td><b>${escapeHtml(j.codeName||j.customerName||"")}</b><br>${escapeHtml(j.workItem||"")} ${escapeHtml(j.workContent||"")}<br><span style="color:#666">${escapeHtml(j.address||"")}</span></td></tr>`).join("")}</tbody></table>`;
+}
+function renderStatsHistory(){
+  const box=document.getElementById("statsHistoryResult"); if(!box) return;
+  const kw=(document.getElementById("statsHistoryKeyword")?.value||"").trim().toLowerCase();
   if(!kw){ box.innerHTML='輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。'; box.className='empty'; return; }
   box.className='';
   const rows=(jobs||[]).filter(j=>getJobText(j).includes(kw)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,30);
@@ -6287,9 +6387,11 @@ function renderAdminMap(){
 }
 
 // ===== 完成率統計 =====
-function renderCompletionStats(){
-  const box = document.getElementById('adminCompletionContent'); if(!box) return;
-  const sm = document.getElementById('statsMonth');
+function renderCompletionStats(monthInputId, targetBoxId){
+  monthInputId = monthInputId || "statsMonth";
+  targetBoxId = targetBoxId || "adminCompletionContent";
+  const box = document.getElementById(targetBoxId); if(!box) return;
+  const sm = document.getElementById(monthInputId);
   const month = (sm && sm.value) ? sm.value : adminMonthNow();
   const monthJobs = (jobs||[]).filter(j=>String(j.date||'').startsWith(month) && !isHoldJob(j));
   let html = '<div style="margin-bottom:12px;font-size:13px;color:#555">本月（' + month + '）共 ' + monthJobs.length + ' 件派工。工程師件數分佈：</div>';
