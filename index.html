@@ -1067,6 +1067,96 @@ body.is-admin .admin-only{display:inline-flex!important}
 .log-user-cell .user-email{color:#0066cc;font-weight:bold}
 .log-user-cell .user-name{color:#666}
 
+.admin-dashboard-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.admin-dashboard-actions input{flex:1;min-width:180px;}
+#statsHistoryResult.empty,
+#adminHistoryResult.empty{
+  color:#999;
+  font-size:12.5px;
+  padding:6px 0;
+}
+
+/* ===== 派工統計 / 後台儀表板：卡片化設計 ===== */
+.admin-dashboard-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:16px;
+  margin-bottom:16px;
+}
+.admin-widget{
+  background:#fff;
+  border:1px solid #e5e9f0;
+  border-radius:12px;
+  padding:16px 18px;
+  box-shadow:0 2px 10px rgba(0,0,0,.06);
+}
+.admin-widget h3{
+  margin:0 0 12px;
+  font-size:15px;
+  color:#2f3542;
+  border-bottom:2px solid #eef1f5;
+  padding-bottom:8px;
+}
+.admin-kpi-row{
+  display:flex;
+  gap:10px;
+  margin-bottom:14px;
+  flex-wrap:wrap;
+}
+.admin-kpi{
+  flex:1;
+  min-width:78px;
+  background:linear-gradient(135deg,#f4f8fc,#eaf1fa);
+  border:1px solid #dde6f0;
+  border-radius:10px;
+  padding:10px 6px;
+  text-align:center;
+}
+.admin-kpi b{
+  display:block;
+  font-size:24px;
+  line-height:1.15;
+  color:#1a5276;
+}
+.admin-kpi span{
+  display:block;
+  font-size:11px;
+  color:#888;
+  margin-top:3px;
+  white-space:nowrap;
+}
+.mini-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  font-size:13px;
+  border-radius:8px;
+  overflow:hidden;
+  border:1px solid #eef1f5;
+}
+.mini-table th{
+  background:#2f3542;
+  color:#fff;
+  padding:9px 12px;
+  text-align:left;
+  font-weight:bold;
+  border:none;
+  white-space:nowrap;
+}
+.mini-table td{
+  padding:8px 12px;
+  border:none;
+  border-top:1px solid #eef1f5;
+  color:#333;
+}
+.mini-table tbody tr:nth-child(even){background:#f8f9fb;}
+.mini-table tbody tr:hover{background:#eef6ff;}
+
 /* ===== 權限角色管理 ===== */
 .viewer-mode .edit, .viewer-mode .delete, .viewer-mode .job-resize-handle{display:none!important}
 .role-panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:16px}
@@ -1672,7 +1762,11 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     </div>
 
     <div class="role-panel" style="margin-top:16px;">
-      <h3>🔧 安裝新機統計</h3>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h3 style="margin:0;">🔧 安裝新機統計</h3>
+        <label style="font-size:13px;color:#555;">月份：</label>
+        <input type="month" id="statsInstallMonth" style="font-size:13px;padding:5px 8px;" onchange="renderStatsInstallSummary()">
+      </div>
       <div id="statsInstallSummary"></div>
     </div>
   </div>
@@ -5477,21 +5571,51 @@ function renderStatsPage(){
 }
 function renderStatsInstallSummary(){
   const box=document.getElementById("statsInstallSummary"); if(!box) return;
-  const month=(document.getElementById("statsMonth2")||{}).value||"";
+  const monthInput=document.getElementById("statsInstallMonth");
+  if(monthInput && !monthInput.value){ const d=new Date(); monthInput.value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  const month=(monthInput||{}).value||"";
   const scoped=(jobs||[]).filter(j=>!isHoldJob(j) && (!month || String(j.date||"").startsWith(month)));
   const installJobs=scoped.filter(j=>String(j.workItem||"").includes("安裝"));
   if(!installJobs.length){
     box.innerHTML=`<div style="color:#888;font-size:13px;padding:8px 0;">${month?"該月份":"目前"}無安裝新機相關派工資料。</div>`;
     return;
   }
-  const tally={};
+  // content -> { engineer -> count }
+  const table={};
+  const contentTotals={};
   installJobs.forEach(j=>{
-    const k=String(j.workContent||"").trim()||"未填施工內容";
-    tally[k]=(tally[k]||0)+1;
+    const content=String(j.workContent||"").trim()||"未填施工內容";
+    const eng=normalizeEngineerName(j.engineer)||j.engineer||"未知";
+    if(!table[content]) table[content]={};
+    table[content][eng]=(table[content][eng]||0)+1;
+    contentTotals[content]=(contentTotals[content]||0)+1;
   });
-  const rows=Object.entries(tally).sort((a,b)=>b[1]-a[1])
-    .map(([k,v])=>`<span style="display:inline-block;background:#eef6ff;border:1px solid #bcd9f0;border-radius:8px;padding:3px 10px;margin:2px 4px 2px 0;font-size:12.5px;color:#1a5276;">${escapeHtml(k)}：${v} 件</span>`).join("");
-  box.innerHTML=`<div style="font-size:12.5px;color:#555;margin-bottom:6px;">共 ${installJobs.length} 件，依施工內容分類：</div>${rows}`;
+  const contents=Object.keys(table).sort((a,b)=>contentTotals[b]-contentTotals[a]);
+  // 出現過的工程師欄位：固定工程師名單優先，另外把名單外的（如「未知」）補在後面
+  const extraEngs=[...new Set(installJobs.map(j=>normalizeEngineerName(j.engineer)||j.engineer||"未知"))]
+    .filter(e=>!engineers.includes(e));
+  const engCols=[...engineers, ...extraEngs];
+
+  let html=`<div style="font-size:12.5px;color:#555;margin-bottom:8px;">共 ${installJobs.length} 件，依施工內容與工程師分類：</div>`;
+  html+=`<div style="overflow-x:auto;"><table style="border-collapse:collapse;min-width:600px;font-size:13px;width:100%">`;
+  html+=`<tr><th style="background:#2f3542;color:#fff;padding:8px 12px;text-align:left;white-space:nowrap;">施工內容</th>`;
+  engCols.forEach(e=>{
+    html+=`<th style="background:#2f3542;color:#fff;padding:8px 10px;text-align:center;white-space:nowrap;">${escapeHtml(displayEngineer(e))}&nbsp;${escapeHtml(e)}</th>`;
+  });
+  html+=`<th style="background:#1a252f;color:#fff;padding:8px 10px;text-align:center;">合計</th></tr>`;
+  contents.forEach((content,ri)=>{
+    const rowBg=ri%2===0?"#fff":"#f8f9fa";
+    html+=`<tr style="background:${rowBg}">`;
+    html+=`<td style="padding:7px 12px;border-bottom:1px solid #eee;font-weight:bold;">${escapeHtml(content)}</td>`;
+    engCols.forEach(e=>{
+      const cnt=table[content][e]||0;
+      html+=`<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;${cnt?"font-weight:bold;color:#1a5276;":"color:#ccc;"}">${cnt||"-"}</td>`;
+    });
+    html+=`<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;background:#eef6ff;">${contentTotals[content]}</td>`;
+    html+=`</tr>`;
+  });
+  html+=`</table></div>`;
+  box.innerHTML=html;
 }
 function renderAdminDashboard(){
   renderAdminTodaySummary();
@@ -5507,7 +5631,7 @@ function renderAdminTodaySummary(){
   const byEng={}; engineers.forEach(e=>byEng[e]=0); todayJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; });
   const workItems={}; todayJobs.forEach(j=>{ const k=j.workItem||"未填施工項目"; workItems[k]=(workItems[k]||0)+1; });
   const html=`<div class="admin-kpi-row"><div class="admin-kpi"><b>${todayJobs.length}</b><span>今日正式派工</span></div><div class="admin-kpi"><b>${holdJobs.length}</b><span>目前暫押</span></div><div class="admin-kpi"><b>${Object.keys(workItems).length}</b><span>施工類型</span></div></div>`+
-    `<table class="mini-table"><thead><tr><th>工程師</th><th>今日件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`;
+    `<table class="mini-table"><thead><tr><th>工程師</th><th style="text-align:right;">今日件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`;
   ["adminTodaySummary","statsTodaySummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
 }
 function renderAdminWorkloadSummary(){
@@ -5516,9 +5640,9 @@ function renderAdminWorkloadSummary(){
   const byEng={}; engineers.forEach(e=>byEng[e]=0);
   const byItem={};
   monthJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; const k=j.workItem||"未填施工項目"; byItem[k]=(byItem[k]||0)+1; });
-  const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td>${v}</td></tr>`).join("");
-  const html=`<table class="mini-table"><thead><tr><th>工程師</th><th>${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td>${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
-    `<div style="height:8px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th>件數</th></tr></thead><tbody>${itemRows || '<tr><td colspan="2">本月尚無資料</td></tr>'}</tbody></table>`;
+  const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${v}</td></tr>`).join("");
+  const html=`<table class="mini-table"><thead><tr><th>工程師</th><th style="text-align:right;">${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
+    `<div style="height:10px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th style="text-align:right;">件數</th></tr></thead><tbody>${itemRows || '<tr><td colspan="2" style="text-align:center;color:#aaa;">本月尚無資料</td></tr>'}</tbody></table>`;
   ["adminWorkloadSummary","statsWorkloadSummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
 }
 function renderAdminConflicts(){
