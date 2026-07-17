@@ -4364,7 +4364,7 @@ function jobCard(j){
 
   return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))?"leave-job-card":""} ${jobWorkColorClass(j)}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
-      <div class="card-main" style="cursor:pointer;" onclick="editJobForm(${j.id},event)" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
+      <div class="card-main" style="cursor:pointer;" onclick="handleCardMainClick(event,${j.id})" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
         <button class="edit" onclick="editJobForm(${j.id},event)">改</button>
         <button class="delete" onclick="event.stopPropagation();deleteJob(${j.id})">X</button>
@@ -4607,6 +4607,16 @@ function deleteJob(id){
   const j=jobs.find(x=>x.id===id);
   if(j) writeLog("delete",{codeName:j.codeName||j.customerName||"",date:j.date,engineer:j.engineer,deletedJob:{...j}});
   jobs=jobs.filter(j=>j.id!==id);saveJobs();renderSchedule();renderJobList();if(typeof syncCartridgeWithJobs==='function')syncCartridgeWithJobs();
+}
+function handleCardMainClick(ev,id){
+  const compact = document.body.classList.contains('compact-schedule');
+  const el = document.querySelector('.job[data-job-id="'+id+'"]');
+  const isExpanded = !!(el && el.classList.contains('expanded'));
+  if(compact && !isExpanded){
+    if(typeof window.toggleJobExpand==='function') window.toggleJobExpand(ev,id);
+    return;
+  }
+  editJobForm(id,ev);
 }
 function editJobForm(id,event){
   if(!requireEdit("修改派工")) return;
