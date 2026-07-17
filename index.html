@@ -7060,7 +7060,7 @@ if(typeof showAdminPage === 'function'){
       + '📅 ' + dateLine.trim() + '\n'
       + '🔧 服務內容：' + (j.workItem||'') + '\n'
       + '💰 應收款項：' + money(j.amount) + '\n'
-      + '💳 付款方式：' + (j.payment||'') + '\n'
+      + (j.payment ? '💳 ' + j.payment + '\n' : '')
       + '📍 服務地址：' + (j.address||'') + '\n'
       + '—\n'
       + '因工程前一日已排定整日行程，當日件無法變更時段，以上確認後無法臨時變更喔！\n'
