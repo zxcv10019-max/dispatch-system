@@ -2799,6 +2799,14 @@ async function applyRemoteData(data){
     remoteCartridgeData = null;
   }
 
+  // 聯絡紀錄額外保護：剛新增/批次新增聯絡紀錄送出雲端成功後，localDirty 會立刻被重設為 false，
+  // 這之後若收到一份還沒跟上最新內容的雲端快照（onSnapshot 回聲、20秒保險輪詢等），
+  // 舊機制只在 localDirty=true 時才會擋下「筆數變少」的雲端資料，這個空窗期會讓剛新增的紀錄被蓋掉、
+  // 畫面上看起來像是「新增後馬上閃回尚未接觸」。改成不論 localDirty 為何，只要遠端筆數比本機少就先擋下。
+  if(remoteContactLogs && localContactLogsCount > 0 && remoteContactLogsCount < localContactLogsCount){
+    remoteContactLogs = null;
+  }
+
   if(importProtectActive && remoteToken === importProtectToken){
     importProtectActive = false;
     ignoreRemoteUntil = 0;
