@@ -8896,6 +8896,14 @@ window.saveContactLogEntry = async function(){
   saveContactLogs();
   if(typeof localDirty!=='undefined') localDirty = true;
 
+  // 新增聯絡紀錄後，這位客戶的「接觸狀態」會從尚未接觸→已接觸未約。
+  // 若目前正篩選在「尚未接觸」或「已約」，這筆資料會立刻從畫面上消失，
+  // 讓人誤以為「新增後不見了／資料遺失」。改成自動切回「全部」，
+  // 讓使用者能立刻看到剛剛新增的紀錄有生效。
+  if(typeof cartridgeStatusFilter!=='undefined' && cartridgeStatusFilter){
+    cartridgeStatusFilter = '';
+  }
+
   renderCartridgeTable();
 
   // 強制立即同步雲端（不用等 650ms 防抖），並鎖住畫面避免使用者太快關閉/重新整理造成變更遺失
@@ -9106,6 +9114,14 @@ window.saveBatchContactEntry = async function(){
 
   var addedCount = keys.length;
   cartridgeSelectedKeys = {}; // 清空選取
+
+  // 同單筆新增：批次加完聯絡紀錄後，這些客戶會從「尚未接觸」變成「已接觸未約」，
+  // 若畫面還停在「尚未接觸」或「已約」篩選，剛加的這一批會整批從畫面上消失，
+  // 造成「新增33個，現在只顯示一個」的錯覺。批次新增後自動切回「全部」。
+  if(typeof cartridgeStatusFilter!=='undefined' && cartridgeStatusFilter){
+    cartridgeStatusFilter = '';
+  }
+
   renderCartridgeTable();
 
   var btn = document.getElementById('bcSaveBtn');
