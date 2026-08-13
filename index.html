@@ -1969,7 +1969,6 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         <select id="lpTripRegion" style="padding:7px 10px;font-size:13px">
           <option value="北部">北部</option>
           <option value="南部">南部</option>
-          <option value="其他">其他</option>
         </select>
       </div>
       <div id="lpLeaveTimeWrap" style="display:none">
@@ -1989,12 +1988,12 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
       <span id="lpEditingHint" style="display:none;font-size:12px;color:#e67e22;font-weight:bold;">✏️ 編輯中，改好後按「更新」即可同步派工表</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
-      <label style="font-size:13px;font-weight:bold;color:#333;">🔍 出差地區篩選：</label>
+      <label style="font-size:13px;font-weight:bold;color:#333;">🔍 類型篩選：</label>
       <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
         <option value="">全部（不篩選）</option>
         <option value="北部">🚗 只看北部出差</option>
         <option value="南部">🚗 只看南部出差</option>
-        <option value="其他">🚗 只看其他出差</option>
+        <option value="__OTHER__">🗂️ 只看其他（請假／休假等非出差）</option>
       </select>
       <label style="font-size:13px;font-weight:bold;color:#333;margin-left:8px;">📅 月份篩選：</label>
       <select id="lpMonthFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
@@ -6760,15 +6759,21 @@ function renderLeaveListLP(){
   }
   const monthFilter = monthSel ? monthSel.value : '';
 
-  let filtered = regionFilter
-    ? leaveRecords.filter(r => r.type && String(r.type).indexOf('出差（'+regionFilter+'）') > -1)
-    : leaveRecords;
+  let filtered;
+  if(regionFilter === '__OTHER__'){
+    filtered = leaveRecords.filter(r => r.type && !String(r.type).startsWith('出差'));
+  } else if(regionFilter){
+    filtered = leaveRecords.filter(r => r.type && String(r.type).indexOf('出差（'+regionFilter+'）') > -1);
+  } else {
+    filtered = leaveRecords;
+  }
   if(monthFilter){
     filtered = filtered.filter(r => String(r.date||'').slice(0,7) === monthFilter);
   }
   if(!filtered.length){
     const parts = [];
-    if(regionFilter) parts.push(regionFilter+'出差');
+    if(regionFilter === '__OTHER__') parts.push('其他（非出差）');
+    else if(regionFilter) parts.push(regionFilter+'出差');
     if(monthFilter) parts.push(monthFilter.replace('-',' 年 ')+' 月');
     box.innerHTML = '<div style="color:#888;font-size:13px;padding:8px 0">'
       + (parts.length ? ('尚無「'+parts.join('、')+'」紀錄。') : '尚無休假紀錄。')
@@ -6802,7 +6807,7 @@ function renderTripStatsTable(){
   // 蒐集所有出差紀錄的月份（YYYY-MM），動態填入月份篩選選單
   const allTrips = (leaveRecords||[]).filter(function(r){
     const t = String(r.type||'');
-    return t.indexOf('出差（北部）') > -1 || t.indexOf('出差（南部）') > -1 || t.indexOf('出差（其他）') > -1;
+    return t.indexOf('出差（北部）') > -1 || t.indexOf('出差（南部）') > -1;
   });
   if(monthSel){
     const months = Array.from(new Set(allTrips.map(function(r){
@@ -6820,22 +6825,19 @@ function renderTripStatsTable(){
   const engList = (typeof engineers!=='undefined' && Array.isArray(engineers) && engineers.length)
     ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
 
-  const counts = {}; // eng -> {north, south, other}
-  engList.forEach(function(eng){ counts[eng] = {north:0, south:0, other:0}; });
+  const counts = {}; // eng -> {north, south}
+  engList.forEach(function(eng){ counts[eng] = {north:0, south:0}; });
   allTrips.forEach(function(r){
     if(selMonth && String(r.date||'').slice(0,7) !== selMonth) return;
     const t = String(r.type||'');
     const isNorth = t.indexOf('出差（北部）') > -1;
-    const isSouth = t.indexOf('出差（南部）') > -1;
     const eng = r.engineer || '未知';
-    if(!counts[eng]) counts[eng] = {north:0, south:0, other:0};
-    if(isNorth) counts[eng].north++;
-    else if(isSouth) counts[eng].south++;
-    else counts[eng].other++;
+    if(!counts[eng]) counts[eng] = {north:0, south:0};
+    if(isNorth) counts[eng].north++; else counts[eng].south++;
   });
   const rows = Object.keys(counts).map(function(eng){
     const c = counts[eng];
-    return {eng:eng, north:c.north, south:c.south, other:c.other, total:c.north+c.south+c.other};
+    return {eng:eng, north:c.north, south:c.south, total:c.north+c.south};
   });
   // 依總計數由多到少排序；總計相同則依工程師清單原始順序排列
   rows.sort(function(a,b){
@@ -6852,7 +6854,6 @@ function renderTripStatsTable(){
   const avatarColors = ['#8e5fd6','#2f8fd6','#2f8f5f','#d68f2f','#d65f5f','#5f7fd6'];
   const grandNorth = rows.reduce(function(s,r){return s+r.north;},0);
   const grandSouth = rows.reduce(function(s,r){return s+r.south;},0);
-  const grandOther = rows.reduce(function(s,r){return s+r.other;},0);
   const grandTotal = rows.reduce(function(s,r){return s+r.total;},0);
   const maxTotal = Math.max.apply(null, rows.map(function(r){return r.total;})) || 1;
 
@@ -6860,7 +6861,6 @@ function renderTripStatsTable(){
     + '<th style="padding:12px 16px;background:linear-gradient(135deg,#3a4a63,#2c3547);color:#fff;text-align:left;font-size:13px;letter-spacing:.5px;">工程師</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3a6fc4,#2f5fa3);color:#fff;font-size:13px;">🔵 北部</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3aa876,#2f8f5f);color:#fff;font-size:13px;">🟢 南部</th>'
-    + '<th style="padding:12px 14px;background:linear-gradient(135deg,#8f6b3a,#6f4f26);color:#fff;font-size:13px;">🟡 其他</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#a83a4c,#8b1a2b);color:#fff;font-size:13px;">📌 總計</th>'
     + '<th style="padding:12px 14px;background:#eef1f6;color:#555;font-size:12px;min-width:110px;">比重</th>'
     + '</tr></thead><tbody>';
@@ -6879,7 +6879,6 @@ function renderTripStatsTable(){
       + '</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f5fa3;font-weight:bold;font-size:15px;">'+r.north+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f8f5f;font-weight:bold;font-size:15px;">'+r.south+'</td>'
-      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#6f4f26;font-weight:bold;font-size:15px;">'+r.other+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#8b1a2b;font-weight:bold;font-size:15px;">'+r.total+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;">'
         + '<div style="background:#e3e8f0;border-radius:6px;height:8px;overflow:hidden;">'
@@ -6893,13 +6892,11 @@ function renderTripStatsTable(){
     + '<td style="padding:11px 16px;background:#2c3547;color:#fff;font-weight:bold;">總計</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#a8c8ff;text-align:center;font-weight:bold;">'+grandNorth+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#a8f0cc;text-align:center;font-weight:bold;">'+grandSouth+'</td>'
-    + '<td style="padding:11px 14px;background:#2c3547;color:#f0d8a8;text-align:center;font-weight:bold;">'+grandOther+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#ffc2c2;text-align:center;font-weight:bold;">'+grandTotal+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;"></td>'
     + '</tr></tfoot>';
   box.innerHTML = html;
 }
-
 function deleteLeaveRecordLP(id){
   deleteLeaveRecord(id);
 }
