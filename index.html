@@ -1568,6 +1568,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 .leave-badge.pub{background:#d5f5e3;color:#1e8449}
 .leave-badge.comp{background:#e8daef;color:#6c3483}
 .leave-badge.trip{background:#d1f2eb;color:#0e6655}
+.leave-badge.noOT{background:#fde2e2;color:#c0392b}
 
 /* ===== 客戶歷史紀錄 ===== */
 #customerHistoryResult .hist-card{
@@ -1960,6 +1961,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
           <option value="公假">公假</option>
           <option value="補休">補休</option>
           <option value="出差">出差</option>
+          <option value="不加班">不加班</option>
         </select>
       </div>
       <div id="lpTripArea" style="display:none">
@@ -1967,6 +1969,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         <select id="lpTripRegion" style="padding:7px 10px;font-size:13px">
           <option value="北部">北部</option>
           <option value="南部">南部</option>
+          <option value="其他">其他</option>
         </select>
       </div>
       <div id="lpLeaveTimeWrap" style="display:none">
@@ -1976,6 +1979,10 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
           <span style="font-size:13px;color:#666;">～</span>
           <input type="time" id="lpEndTime" value="18:00" style="padding:7px 8px;font-size:13px">
         </div>
+      </div>
+      <div id="lpNoOTTimeWrap" style="display:none">
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">不加班時間</label>
+        <div style="padding:7px 10px;font-size:13px;background:#f4f4f4;border:1px solid #ccc;border-radius:4px;color:#555;white-space:nowrap;">⏰ 下午 06:00 ～ 下午 09:00（固定）</div>
       </div>
       <button id="lpAddBtn" onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
       <button id="lpCancelEditBtn" onclick="cancelEditLeaveRecordLP()" style="display:none;background:#95a5a6;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">取消編輯</button>
@@ -1987,6 +1994,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         <option value="">全部（不篩選）</option>
         <option value="北部">🚗 只看北部出差</option>
         <option value="南部">🚗 只看南部出差</option>
+        <option value="其他">🚗 只看其他出差</option>
       </select>
       <label style="font-size:13px;font-weight:bold;color:#333;margin-left:8px;">📅 月份篩選：</label>
       <select id="lpMonthFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
@@ -6021,6 +6029,7 @@ applyRoleUI();
                 <option value="公假">公假</option>
                 <option value="補休">補休</option>
                 <option value="出差">出差</option>
+                <option value="不加班">不加班</option>
               </select>
             </div>
             <button onclick="addLeaveRecord()" style="background:#218c74;padding:7px 14px">新增休假</button>
@@ -6619,7 +6628,7 @@ function deleteLeaveRecord(id){
 function renderLeaveList(){
   const box = document.getElementById('leaveList'); if(!box) return;
   if(!leaveRecords.length){ box.innerHTML='<div style="color:#888;font-size:13px;padding:8px 0">尚無休假紀錄。</div>'; return; }
-  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
+  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp','不加班':'noOT'};
   const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
   box.innerHTML = leaveRecords.map(r=>{
     const cls = getTripCls(r.type);
@@ -6641,6 +6650,8 @@ function lpTypeChange(){
   if(area) area.style.display = (t==='出差') ? 'block' : 'none';
   const timeWrap = document.getElementById('lpLeaveTimeWrap');
   if(timeWrap) timeWrap.style.display = (t==='請假') ? 'block' : 'none';
+  const noOTWrap = document.getElementById('lpNoOTTimeWrap');
+  if(noOTWrap) noOTWrap.style.display = (t==='不加班') ? 'block' : 'none';
 }
 
 function addLeaveRecordLP(){
@@ -6657,6 +6668,9 @@ function addLeaveRecordLP(){
     const et = etEl ? etEl.value : '';
     // 只有當使用者調整成「非整天（09:30~18:00）」的區間時才視為半天／自訂時段，否則維持預設整天不特別標記
     if(st && et && (st !== '09:30' || et !== '18:00')){ startTime = st; endTime = et; }
+  } else if(type==='不加班'){
+    // 不加班時段固定為下午 06:00～下午 09:00，不開放使用者調整
+    startTime = '18:00'; endTime = '21:00';
   }
   if(lpEditingId){
     updateLeaveRecordById(lpEditingId, eng, date, fullType, startTime, endTime);
@@ -6762,7 +6776,7 @@ function renderLeaveListLP(){
     renderTripStatsTable();
     return;
   }
-  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp'};
+  const typeCls = {'請假':'leave','休假':'leave','公假':'pub','補休':'comp','不加班':'noOT'};
   const getTripCls = t => t&&String(t).startsWith('出差') ? 'trip' : (typeCls[t]||'');
   box.innerHTML = filtered.map(r=>{
     const cls = getTripCls(r.type);
@@ -6788,7 +6802,7 @@ function renderTripStatsTable(){
   // 蒐集所有出差紀錄的月份（YYYY-MM），動態填入月份篩選選單
   const allTrips = (leaveRecords||[]).filter(function(r){
     const t = String(r.type||'');
-    return t.indexOf('出差（北部）') > -1 || t.indexOf('出差（南部）') > -1;
+    return t.indexOf('出差（北部）') > -1 || t.indexOf('出差（南部）') > -1 || t.indexOf('出差（其他）') > -1;
   });
   if(monthSel){
     const months = Array.from(new Set(allTrips.map(function(r){
@@ -6806,19 +6820,22 @@ function renderTripStatsTable(){
   const engList = (typeof engineers!=='undefined' && Array.isArray(engineers) && engineers.length)
     ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
 
-  const counts = {}; // eng -> {north, south}
-  engList.forEach(function(eng){ counts[eng] = {north:0, south:0}; });
+  const counts = {}; // eng -> {north, south, other}
+  engList.forEach(function(eng){ counts[eng] = {north:0, south:0, other:0}; });
   allTrips.forEach(function(r){
     if(selMonth && String(r.date||'').slice(0,7) !== selMonth) return;
     const t = String(r.type||'');
     const isNorth = t.indexOf('出差（北部）') > -1;
+    const isSouth = t.indexOf('出差（南部）') > -1;
     const eng = r.engineer || '未知';
-    if(!counts[eng]) counts[eng] = {north:0, south:0};
-    if(isNorth) counts[eng].north++; else counts[eng].south++;
+    if(!counts[eng]) counts[eng] = {north:0, south:0, other:0};
+    if(isNorth) counts[eng].north++;
+    else if(isSouth) counts[eng].south++;
+    else counts[eng].other++;
   });
   const rows = Object.keys(counts).map(function(eng){
     const c = counts[eng];
-    return {eng:eng, north:c.north, south:c.south, total:c.north+c.south};
+    return {eng:eng, north:c.north, south:c.south, other:c.other, total:c.north+c.south+c.other};
   });
   // 依總計數由多到少排序；總計相同則依工程師清單原始順序排列
   rows.sort(function(a,b){
@@ -6835,6 +6852,7 @@ function renderTripStatsTable(){
   const avatarColors = ['#8e5fd6','#2f8fd6','#2f8f5f','#d68f2f','#d65f5f','#5f7fd6'];
   const grandNorth = rows.reduce(function(s,r){return s+r.north;},0);
   const grandSouth = rows.reduce(function(s,r){return s+r.south;},0);
+  const grandOther = rows.reduce(function(s,r){return s+r.other;},0);
   const grandTotal = rows.reduce(function(s,r){return s+r.total;},0);
   const maxTotal = Math.max.apply(null, rows.map(function(r){return r.total;})) || 1;
 
@@ -6842,6 +6860,7 @@ function renderTripStatsTable(){
     + '<th style="padding:12px 16px;background:linear-gradient(135deg,#3a4a63,#2c3547);color:#fff;text-align:left;font-size:13px;letter-spacing:.5px;">工程師</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3a6fc4,#2f5fa3);color:#fff;font-size:13px;">🔵 北部</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#3aa876,#2f8f5f);color:#fff;font-size:13px;">🟢 南部</th>'
+    + '<th style="padding:12px 14px;background:linear-gradient(135deg,#8f6b3a,#6f4f26);color:#fff;font-size:13px;">🟡 其他</th>'
     + '<th style="padding:12px 14px;background:linear-gradient(135deg,#a83a4c,#8b1a2b);color:#fff;font-size:13px;">📌 總計</th>'
     + '<th style="padding:12px 14px;background:#eef1f6;color:#555;font-size:12px;min-width:110px;">比重</th>'
     + '</tr></thead><tbody>';
@@ -6860,6 +6879,7 @@ function renderTripStatsTable(){
       + '</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f5fa3;font-weight:bold;font-size:15px;">'+r.north+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#2f8f5f;font-weight:bold;font-size:15px;">'+r.south+'</td>'
+      + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#6f4f26;font-weight:bold;font-size:15px;">'+r.other+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;text-align:center;color:#8b1a2b;font-weight:bold;font-size:15px;">'+r.total+'</td>'
       + '<td style="padding:10px 14px;border-bottom:1px solid #edf0f5;">'
         + '<div style="background:#e3e8f0;border-radius:6px;height:8px;overflow:hidden;">'
@@ -6873,6 +6893,7 @@ function renderTripStatsTable(){
     + '<td style="padding:11px 16px;background:#2c3547;color:#fff;font-weight:bold;">總計</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#a8c8ff;text-align:center;font-weight:bold;">'+grandNorth+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#a8f0cc;text-align:center;font-weight:bold;">'+grandSouth+'</td>'
+    + '<td style="padding:11px 14px;background:#2c3547;color:#f0d8a8;text-align:center;font-weight:bold;">'+grandOther+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;color:#ffc2c2;text-align:center;font-weight:bold;">'+grandTotal+'</td>'
     + '<td style="padding:11px 14px;background:#2c3547;"></td>'
     + '</tr></tfoot>';
@@ -7873,7 +7894,43 @@ body.cartridge-scroll-mode {
       <table id="noChangeTable" style="border-collapse:collapse;width:100%;min-width:760px;font-size:13px;"></table>
     </div>
   </div>
+
+  <button id="cartridgeBackToTop" onclick="scrollCartridgePageToTop()" title="回到頂部" style="display:none;position:fixed;right:20px;bottom:28px;width:46px;height:46px;border-radius:50%;background:#2f3542;color:#fff;border:none;box-shadow:0 3px 10px rgba(0,0,0,.3);font-size:20px;cursor:pointer;z-index:500;align-items:center;justify-content:center;">⬆️</button>
 </div>
+<script>
+(function(){
+  function toggleCartridgeBackToTopBtn(){
+    var btn = document.getElementById('cartridgeBackToTop');
+    var page = document.getElementById('cartridgePage');
+    if(!btn || !page) return;
+    var active = page.classList.contains('active');
+    var scrolled = (window.scrollY || document.documentElement.scrollTop || 0) > 250 || (page.scrollTop || 0) > 250;
+    btn.style.display = (active && scrolled) ? 'flex' : 'none';
+  }
+  window.scrollCartridgePageToTop = function(){
+    try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+    var page = document.getElementById('cartridgePage');
+    if(page){ try{ page.scrollTo({top:0, behavior:'smooth'}); }catch(e){ page.scrollTop = 0; } }
+  };
+  window.addEventListener('scroll', toggleCartridgeBackToTopBtn, {passive:true});
+  document.addEventListener('DOMContentLoaded', function(){
+    var page = document.getElementById('cartridgePage');
+    if(page) page.addEventListener('scroll', toggleCartridgeBackToTopBtn, {passive:true});
+    toggleCartridgeBackToTopBtn();
+  });
+  // 切換分頁時（包含切到換芯名單頁）也重新檢查一次按鈕顯示狀態
+  var oldShowPage = window.showPage;
+  if(typeof oldShowPage === 'function' && !oldShowPage.__cartridgeBackToTopPatched){
+    var wrapped = function(){
+      var r = oldShowPage.apply(this, arguments);
+      setTimeout(toggleCartridgeBackToTopBtn, 50);
+      return r;
+    };
+    wrapped.__cartridgeBackToTopPatched = true;
+    window.showPage = wrapped;
+  }
+})();
+</script>
 
 <!-- 聯絡紀錄彈窗 -->
 <style>
@@ -8904,13 +8961,8 @@ window.saveContactLogEntry = async function(){
   saveContactLogs();
   if(typeof localDirty!=='undefined') localDirty = true;
 
-  // 新增聯絡紀錄後，這位客戶的「接觸狀態」會從尚未接觸→已接觸未約。
-  // 若目前正篩選在「尚未接觸」或「已約」，這筆資料會立刻從畫面上消失，
-  // 讓人誤以為「新增後不見了／資料遺失」。改成自動切回「全部」，
-  // 讓使用者能立刻看到剛剛新增的紀錄有生效。
-  if(typeof cartridgeStatusFilter!=='undefined' && cartridgeStatusFilter){
-    cartridgeStatusFilter = '';
-  }
+  // 新增聯絡紀錄後不再自動切回「全部」篩選，維持使用者原本所在的篩選/畫面，
+  // 避免每次新增都跳離目前正在看的列表。
 
   renderCartridgeTable();
 
@@ -9123,12 +9175,8 @@ window.saveBatchContactEntry = async function(){
   var addedCount = keys.length;
   cartridgeSelectedKeys = {}; // 清空選取
 
-  // 同單筆新增：批次加完聯絡紀錄後，這些客戶會從「尚未接觸」變成「已接觸未約」，
-  // 若畫面還停在「尚未接觸」或「已約」篩選，剛加的這一批會整批從畫面上消失，
-  // 造成「新增33個，現在只顯示一個」的錯覺。批次新增後自動切回「全部」。
-  if(typeof cartridgeStatusFilter!=='undefined' && cartridgeStatusFilter){
-    cartridgeStatusFilter = '';
-  }
+  // 批次新增聯絡紀錄後不再自動切回「全部」篩選，維持使用者原本所在的篩選/畫面，
+  // 避免每次新增都跳離目前正在看的列表。
 
   renderCartridgeTable();
 
