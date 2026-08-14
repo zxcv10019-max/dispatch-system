@@ -4287,10 +4287,11 @@ function buildScheduleBlockHtml(dates, today){
         const hasRealJob = activeJobs.some(j=>!j.isLeaveJob);
         const tripType = (holdCls || hasRealJob) ? "" : getEngineerTripRegion(dateStr, engineer);
         const tripCls = tripType ? "trip-slot-active" : "";
-        const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))) ? "leave-slot-active" : "";
+        const leaveCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && !String(j.workItem||'').startsWith('出差') && String(j.workItem||'')!=='不加班')) ? "leave-slot-active" : "";
+        const noOTCls = (!holdCls && !tripCls && activeJobs.some(j=>j.isLeaveJob && String(j.workItem||'')==='不加班')) ? "noOT-slot-active" : "";
         // 依派工的施工項目，讓整個時段格子（不只卡片本身）跟著變色
-        const slotColorCls = (!holdCls && !tripCls && !leaveCls) ? (activeJobs.map(j=>jobWorkColorClass(j)).find(c=>c) || "") : "";
-        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls} ${slotColorCls}${breakRowCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
+        const slotColorCls = (!holdCls && !tripCls && !leaveCls && !noOTCls) ? (activeJobs.map(j=>jobWorkColorClass(j)).find(c=>c) || "") : "";
+        html+=`<td class="slot ${activeJobs.length?`job-slot-active`:``} ${holdCls} ${tripCls} ${leaveCls} ${noOTCls} ${slotColorCls}${breakRowCls}" ${tripType?`title="${escapeHtml(tripType)}"`:``} ondragover="allowDrop(event)" ondragleave="leaveDrop(event)" ondrop="dropJobMulti(event,'${dateStr}','${engineer}','${time}')" onclick="slotClickNew(event,'${dateStr}','${engineer}','${time}')">`;
         startJobs.forEach(j=>html+=jobCard(j));
         html+="</td>";
       });
@@ -8135,6 +8136,12 @@ body.cartridge-scroll-mode {
 .week-schedule-table td.slot.job-slot-active.leave-slot-active{
   background:#e1bee7 !important;
 }
+
+/* 不加班格子變色：獨立顏色，跟其他請假類型區隔 */
+.week-schedule-table td.slot.noOT-slot-active,
+.week-schedule-table td.slot.job-slot-active.noOT-slot-active{
+  background:#00FFFF !important;
+}
 </style>
 <div id="contactLogModal">
   <div class="cbox">
@@ -9957,7 +9964,7 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
    紫色只出現在「沒有其他特別顏色」的一般/空白格子上。
    用 :not() 排除掉那幾種特殊 class，藉此讓紫色的優先權比它們低。
    ============================================================ */
-.week-schedule-table td.slot.break-slot:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
+.week-schedule-table td.slot.break-slot:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.noOT-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
   background:#CCCCFF !important;
 }
 
@@ -9967,12 +9974,13 @@ body:has(#schedulePage.page.active) #schedulePage > .toolbar{
 .week-schedule-table td.slot.break-slot.hold-slot-active{ background:#e8eaf6 !important; }
 .week-schedule-table td.slot.break-slot.trip-slot-active{ background:#ffb74d !important; }
 .week-schedule-table td.slot.break-slot.leave-slot-active{ background:#e1bee7 !important; }
+.week-schedule-table td.slot.break-slot.noOT-slot-active{ background:#00FFFF !important; }
 .week-schedule-table td.slot.break-slot.work-color-inspect{ background:#ffd9d9 !important; }
 .week-schedule-table td.slot.break-slot.work-color-install{ background:#d6e9ff !important; }
 .week-schedule-table td.slot.break-slot.work-color-remove{ background:#dcf5dc !important; }
 .week-schedule-table td.slot.break-slot.work-color-restore{ background:#ffe0b3 !important; }
 .week-schedule-table td.slot.break-slot.work-color-gas{ background:#e0e0e0 !important; }
-.week-schedule-table td.slot.break-slot.job-slot-active:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
+.week-schedule-table td.slot.break-slot.job-slot-active:not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.noOT-slot-active):not(.work-color-inspect):not(.work-color-install):not(.work-color-remove):not(.work-color-restore):not(.work-color-gas){
   background:#FFF2CC !important;
 }
 
