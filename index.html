@@ -965,6 +965,16 @@ body{
   color:#8e24aa;
   font-weight:bold;
 }
+/* 不加班：獨立底色，與其他請假類型區隔 */
+.noOT-job-card{
+  background:#00FFFF !important;
+  border:1px solid #00acc1 !important;
+}
+.noOT-job-card .card-main::before{
+  content:"🌙 不加班｜";
+  color:#006064;
+  font-weight:bold;
+}
 .hold-row td{
   background:#eef0ff !important;
 }
@@ -1949,9 +1959,23 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
           <option value="鄧長益">E 鄧長益</option>
         </select>
       </div>
-      <div>
-        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">休假日期</label>
-        <input type="date" id="lpDate" style="padding:7px 10px;font-size:13px">
+      <div style="position:relative;">
+        <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">休假日期（可複選）</label>
+        <div id="lpDateDisplay" onclick="toggleLpDatePicker()" style="min-width:190px;max-width:280px;padding:5px 8px;font-size:13px;border:1px solid #aaa;border-radius:4px;background:#fff;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-height:34px;">
+          <span id="lpDatePlaceholder" style="color:#999;">請選擇日期</span>
+        </div>
+        <div id="lpDatePickerPop" style="display:none;position:absolute;z-index:50;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:10px;width:260px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <button type="button" onclick="lpCalendarShiftMonth(-1)" style="background:none;color:#333;border:none;font-size:16px;cursor:pointer;padding:2px 8px;">‹</button>
+            <span id="lpCalendarLabel" style="font-weight:bold;font-size:13px;"></span>
+            <button type="button" onclick="lpCalendarShiftMonth(1)" style="background:none;color:#333;border:none;font-size:16px;cursor:pointer;padding:2px 8px;">›</button>
+          </div>
+          <div id="lpCalendarGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:12px;text-align:center;"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:10px;">
+            <button type="button" onclick="clearLpSelectedDates()" style="background:#95a5a6;color:#fff;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">清除</button>
+            <button type="button" onclick="toggleLpDatePicker(false)" style="background:#2f3542;color:#fff;border:none;border-radius:4px;padding:5px 10px;font-size:12px;cursor:pointer;">完成</button>
+          </div>
+        </div>
       </div>
       <div>
         <label style="display:block;font-size:13px;font-weight:bold;margin-bottom:4px">類型</label>
@@ -4377,7 +4401,7 @@ function jobCard(j){
   const compactCity = escapeHtml(String(j.city||"").trim());
   const compactDistrict = escapeHtml(String(j.district||"").trim());
 
-  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差'))?"leave-job-card":""} ${jobWorkColorClass(j)}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
+  return `<div class="job ${j.isHold?"hold-job-card":""} ${(j.isLeaveJob && String(j.workItem||'').startsWith('出差'))?"trip-job-card":""} ${(j.isLeaveJob && String(j.workItem||'')==='不加班')?"noOT-job-card":""} ${(j.isLeaveJob && !String(j.workItem||'').startsWith('出差') && String(j.workItem||'')!=='不加班')?"leave-job-card":""} ${jobWorkColorClass(j)}" data-job-id="${j.id}" style="" draggable="true" ondragstart="dragStart(${j.id})" onclick="toggleJobExpand(event,${j.id})">
     <div class="job-top">
       <div class="card-main" style="cursor:pointer;" onclick="handleCardMainClick(event,${j.id})" title="點擊修改此筆派工資料"><span class="compact-hide">${escapeHtml(codeName)}${overlapHtml}</span>${compactCity?`<span class="compact-city">${compactCity}</span>`:""}${compactDistrict?`<span class="compact-district">${compactDistrict}</span>`:""}<span class="compact-code">${compactCode}${overlapHtml}</span><span class="compact-name">${compactName}</span></div>
       <div class="actions">
@@ -6572,10 +6596,8 @@ function deleteLeaveJobByRecord(rec){
   return jobs.length !== before;
 }
 
-function addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime){
-  eng = normalizeEngineerName(eng || '');
-  if(!date){ alert('請選擇休假日期'); return; }
-  if(!eng){ alert('請選擇工程師'); return; }
+// 建立或更新單一一筆休假紀錄的核心邏輯（不含存檔／畫面重繪／提示，供單筆與批次共用）
+function upsertOneLeaveRecord(eng, date, fullType, startTime, endTime){
   const existing = leaveRecords.find(r=>normalizeEngineerName(r.engineer)===eng && String(r.date)===String(date));
   let rec;
   if(existing){
@@ -6585,12 +6607,20 @@ function addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime){
     if(endTime) existing.endTime = endTime; else delete existing.endTime;
     rec = existing;
   }else{
-    rec = { id: Date.now() + Math.floor(Math.random()*9999), engineer: eng, date, type: fullType, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    rec = { id: Date.now() + Math.floor(Math.random()*999999), engineer: eng, date, type: fullType, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
     if(startTime) rec.startTime = startTime;
     if(endTime) rec.endTime = endTime;
     leaveRecords.push(rec);
   }
   upsertLeaveJob(rec);
+  return { rec: rec, isNew: !existing };
+}
+
+function addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime){
+  eng = normalizeEngineerName(eng || '');
+  if(!date){ alert('請選擇休假日期'); return; }
+  if(!eng){ alert('請選擇工程師'); return; }
+  const result = upsertOneLeaveRecord(eng, date, fullType, startTime, endTime);
   saveLeaveRecords();
   saveJobs();
   renderLeaveList();
@@ -6598,7 +6628,30 @@ function addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime){
   renderSchedule();
   renderJobList();
   renderMyTodayPanel();
-  alert(existing ? '已更新休假紀錄，並同步更新派工表。' : '已新增休假紀錄，並同步加入派工表。');
+  alert(result.isNew ? '已新增休假紀錄，並同步加入派工表。' : '已更新休假紀錄，並同步更新派工表。');
+}
+
+// 一次新增／更新多個日期的休假紀錄（休假日期複選用），存檔／重繪／提示只做一次
+function addOrUpdateLeaveRecordsBatch(eng, dates, fullType, startTime, endTime){
+  eng = normalizeEngineerName(eng || '');
+  if(!dates || !dates.length){ alert('請選擇休假日期'); return; }
+  if(!eng){ alert('請選擇工程師'); return; }
+  let newCount = 0, updateCount = 0;
+  dates.forEach(function(date){
+    const result = upsertOneLeaveRecord(eng, date, fullType, startTime, endTime);
+    if(result.isNew) newCount++; else updateCount++;
+  });
+  saveLeaveRecords();
+  saveJobs();
+  renderLeaveList();
+  renderLeaveListLP();
+  renderSchedule();
+  renderJobList();
+  renderMyTodayPanel();
+  const parts = [];
+  if(newCount) parts.push('新增 '+newCount+' 筆');
+  if(updateCount) parts.push('更新 '+updateCount+' 筆');
+  alert('已處理 '+dates.length+' 天休假紀錄' + (parts.length ? '（'+parts.join('、')+'）' : '') + '，並同步更新派工表。');
 }
 
 function addLeaveRecord(){
@@ -6642,6 +6695,103 @@ function renderLeaveList(){
 
 // ===== 獨立休假管理頁籤 JS =====
 let lpEditingId = null;
+let lpSelectedDates = []; // 可複選的休假日期，格式 'YYYY-MM-DD'
+let lpCalendarYear, lpCalendarMonth; // 目前月曆顯示的年／月（月份 0-11）
+(function initLpCalendar(){
+  const now = new Date();
+  lpCalendarYear = now.getFullYear();
+  lpCalendarMonth = now.getMonth();
+})();
+
+function lpPad2(n){ return String(n).padStart(2,'0'); }
+
+function toggleLpDatePicker(forceState){
+  const pop = document.getElementById('lpDatePickerPop');
+  if(!pop) return;
+  const show = (typeof forceState === 'boolean') ? forceState : (pop.style.display === 'none');
+  pop.style.display = show ? 'block' : 'none';
+  if(show) renderLpCalendar();
+}
+document.addEventListener('click', function(e){
+  const pop = document.getElementById('lpDatePickerPop');
+  const disp = document.getElementById('lpDateDisplay');
+  if(!pop || !disp) return;
+  if(pop.style.display!=='none' && !pop.contains(e.target) && !disp.contains(e.target)){
+    pop.style.display = 'none';
+  }
+});
+
+function lpCalendarShiftMonth(delta){
+  lpCalendarMonth += delta;
+  if(lpCalendarMonth < 0){ lpCalendarMonth = 11; lpCalendarYear--; }
+  if(lpCalendarMonth > 11){ lpCalendarMonth = 0; lpCalendarYear++; }
+  renderLpCalendar();
+}
+
+function renderLpCalendar(){
+  const label = document.getElementById('lpCalendarLabel');
+  if(label) label.textContent = lpCalendarYear + ' 年 ' + (lpCalendarMonth+1) + ' 月';
+  const grid = document.getElementById('lpCalendarGrid');
+  if(!grid) return;
+  const weekdays = ['日','一','二','三','四','五','六'];
+  let html = weekdays.map(w=>'<div style="font-weight:bold;color:#888;padding:4px 0;">'+w+'</div>').join('');
+  const firstDay = new Date(lpCalendarYear, lpCalendarMonth, 1).getDay();
+  const daysInMonth = new Date(lpCalendarYear, lpCalendarMonth+1, 0).getDate();
+  for(let i=0;i<firstDay;i++) html += '<div></div>';
+  const now = new Date();
+  const todayStr = now.getFullYear()+'-'+lpPad2(now.getMonth()+1)+'-'+lpPad2(now.getDate());
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = lpCalendarYear+'-'+lpPad2(lpCalendarMonth+1)+'-'+lpPad2(d);
+    const selected = lpSelectedDates.indexOf(dateStr) > -1;
+    const isToday = dateStr === todayStr;
+    html += '<div onclick="toggleLpDate(\''+dateStr+'\')" style="padding:6px 0;border-radius:6px;cursor:pointer;'
+      + (selected ? 'background:#218c74;color:#fff;font-weight:bold;' : (isToday ? 'background:#eef4fb;color:#2f5fa3;font-weight:bold;' : 'color:#333;'))
+      + '">'+d+'</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function toggleLpDate(dateStr){
+  // 編輯模式下只允許單一日期，選新的日期會直接取代原本選取
+  if(lpEditingId){
+    lpSelectedDates = [dateStr];
+  }else{
+    const idx = lpSelectedDates.indexOf(dateStr);
+    if(idx>-1) lpSelectedDates.splice(idx,1);
+    else lpSelectedDates.push(dateStr);
+    lpSelectedDates.sort();
+  }
+  renderLpCalendar();
+  renderLpDateDisplay();
+}
+
+function removeLpDate(dateStr){
+  const idx = lpSelectedDates.indexOf(dateStr);
+  if(idx>-1) lpSelectedDates.splice(idx,1);
+  renderLpDateDisplay();
+  renderLpCalendar();
+}
+
+function clearLpSelectedDates(){
+  lpSelectedDates = [];
+  renderLpDateDisplay();
+  renderLpCalendar();
+}
+
+function renderLpDateDisplay(){
+  const disp = document.getElementById('lpDateDisplay');
+  if(!disp) return;
+  if(!lpSelectedDates.length){
+    disp.innerHTML = '<span id="lpDatePlaceholder" style="color:#999;">請選擇日期</span>';
+    return;
+  }
+  disp.innerHTML = lpSelectedDates.map(function(d){
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#e8f4fd;color:#155a8a;border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap;">'
+      + escapeHtml(d)
+      + '<span onclick="event.stopPropagation();removeLpDate(\''+d+'\')" style="cursor:pointer;font-weight:bold;">×</span>'
+      + '</span>';
+  }).join('');
+}
 
 function lpTypeChange(){
   const t = (document.getElementById('lpType')||{}).value;
@@ -6655,7 +6805,7 @@ function lpTypeChange(){
 
 function addLeaveRecordLP(){
   const eng = (document.getElementById('lpEngineer')||{}).value;
-  const date = (document.getElementById('lpDate')||{}).value;
+  const dates = lpSelectedDates.slice();
   const type = (document.getElementById('lpType')||{}).value;
   const region = (document.getElementById('lpTripRegion')||{}).value || '北部';
   const fullType = (type==='出差') ? '出差（'+region+'）' : type;
@@ -6671,10 +6821,15 @@ function addLeaveRecordLP(){
     // 不加班時段固定為下午 06:00～下午 09:00，不開放使用者調整
     startTime = '18:00'; endTime = '21:00';
   }
+  if(!dates.length){ alert('請選擇休假日期'); return; }
   if(lpEditingId){
-    updateLeaveRecordById(lpEditingId, eng, date, fullType, startTime, endTime);
+    updateLeaveRecordById(lpEditingId, eng, dates[0], fullType, startTime, endTime);
+  }else if(dates.length === 1){
+    addOrUpdateLeaveRecord(eng, dates[0], fullType, startTime, endTime);
+    clearLpSelectedDates();
   }else{
-    addOrUpdateLeaveRecord(eng, date, fullType, startTime, endTime);
+    addOrUpdateLeaveRecordsBatch(eng, dates, fullType, startTime, endTime);
+    clearLpSelectedDates();
   }
 }
 
@@ -6710,7 +6865,14 @@ function editLeaveRecordLP(id){
   lpEditingId = Number(id);
 
   const engEl = document.getElementById('lpEngineer'); if(engEl) engEl.value = rec.engineer;
-  const dateEl = document.getElementById('lpDate'); if(dateEl) dateEl.value = rec.date;
+
+  lpSelectedDates = rec.date ? [rec.date] : [];
+  if(rec.date){
+    const parts = String(rec.date).split('-');
+    if(parts.length===3){ lpCalendarYear = Number(parts[0]); lpCalendarMonth = Number(parts[1])-1; }
+  }
+  renderLpDateDisplay();
+  renderLpCalendar();
 
   let baseType = rec.type, region = '北部';
   const m = String(rec.type||'').match(/^出差（(.+)）$/);
@@ -6735,6 +6897,7 @@ function editLeaveRecordLP(id){
 
 function cancelEditLeaveRecordLP(){
   lpEditingId = null;
+  clearLpSelectedDates();
   const addBtn = document.getElementById('lpAddBtn'); if(addBtn) addBtn.textContent = '新增';
   const cancelBtn = document.getElementById('lpCancelEditBtn'); if(cancelBtn) cancelBtn.style.display = 'none';
   const hint = document.getElementById('lpEditingHint'); if(hint) hint.style.display = 'none';
@@ -7705,6 +7868,9 @@ body.compact-schedule .job.expanded .job-resize-handle{ display:flex !important;
   // 精簡模式下，點卡片本身展開浮出完整內容；再點關閉
   window.toggleJobExpand = function(ev, id){
     if(!document.body.classList.contains('compact-schedule')) return;
+    // 卡片裡的連結（例如地址→Google Maps）、按鈕、checkbox 等本身有自己的動作，
+    // 不能被這裡的 preventDefault/stopPropagation 擋掉，否則會點了沒反應
+    if(ev && ev.target && ev.target.closest && ev.target.closest('a,button,input,textarea,select,.actions,.status-checks')) return;
     if(ev){ ev.preventDefault(); ev.stopPropagation(); }
     var el = document.querySelector('.job[data-job-id="'+id+'"]');
     if(!el) return;
