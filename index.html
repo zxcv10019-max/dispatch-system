@@ -9050,6 +9050,25 @@ document.getElementById('contactLogModal').addEventListener('click',function(e){
   if(e.target===this) closeContactLog();
 });
 
+// 捲動位置保護：換芯名單頁用整個視窗捲動（見 body.cartridge-scroll-mode）。
+// 新增／刪除聯絡紀錄常會讓表格列數變動（延後月份、標記不更換都會讓客戶從目前篩選消失），
+// 表格變矮後瀏覽器會自動把捲動位置往上夾住，畫面因此往上跳一段。
+// 這裡先記住目前的捲動位置，回傳一個 restore 函式，在畫面更新完（含非同步同步流程）之後
+// 多呼叫幾次把捲動位置設回去，蓋掉瀏覽器自動調整的效果。
+function __keepScrollPosition(){
+  var sx = window.scrollX, sy = window.scrollY;
+  var page = document.getElementById('cartridgePage');
+  var psx = page ? page.scrollLeft : 0, psy = page ? page.scrollTop : 0;
+  function restore(){
+    window.scrollTo(sx, sy);
+    if(page){ page.scrollLeft = psx; page.scrollTop = psy; }
+  }
+  restore();
+  requestAnimationFrame(restore);
+  requestAnimationFrame(function(){ requestAnimationFrame(restore); });
+  return restore;
+}
+
 function renderContactLogList(){
   var list = contactLogs[_contactLogCustKey] || [];
   var div = document.getElementById('contactLogList');
@@ -9069,6 +9088,11 @@ function renderContactLogList(){
   div.innerHTML=html;
 }
 window.saveContactLogEntry = async function(){
+  // 記住目前畫面捲動位置：延後／不更換會讓該客戶從目前月份篩選中消失，
+  // 造成下方表格內容變少、頁面高度縮短，瀏覽器會把畫面往上頂，看起來像「亂跳」。
+  // 存下位置，等表格重繪、彈窗關閉、雲端同步都做完後再還原捲動位置。
+  var __restoreScroll = __keepScrollPosition();
+
   var date = document.getElementById('clDate').value;
   var method = document.getElementById('clMethod').value;
   var note = document.getElementById('clNote').value.trim();
@@ -9125,9 +9149,11 @@ window.saveContactLogEntry = async function(){
       logEntry._snapshot = snapshot; // 存進這筆聯絡紀錄，刪除時可還原
       saveCD();
       if(typeof localDirty!=='undefined') localDirty = true;
-      var targetKey = String(tYear) + '/' + String(tMonth).padStart(2,'0');
-      var sel = document.getElementById('cartridgeMonthFilter');
-      if(sel) sel.value = targetKey;
+      // 註：這裡故意不再把「顯示月份」篩選切到延後後的目標月份。
+      // 之前的版本會在這裡把 cartridgeMonthFilter 的值改成目標月份，
+      // 結果使用者一按「延後」，整個表格內容就被換成別的月份，畫面像是「亂跳」一樣。
+      // 現在維持使用者原本選的篩選／畫面，該客戶若不再符合目前篩選，
+      // 就自然從目前列表消失，不會整批換成別的月份。
     }
   }
 
@@ -9139,6 +9165,8 @@ window.saveContactLogEntry = async function(){
   // 避免每次新增都跳離目前正在看的列表。
 
   renderCartridgeTable();
+  __restoreScroll();
+  requestAnimationFrame(__restoreScroll);
 
   // 強制立即同步雲端（不用等 650ms 防抖），並鎖住畫面避免使用者太快關閉/重新整理造成變更遺失
   var btn = document.getElementById('clSaveBtn');
@@ -9149,6 +9177,7 @@ window.saveContactLogEntry = async function(){
     syncOk = await saveCartridgeAndLogsNow('新增聯絡紀錄');
   }
   if(btn){ btn.disabled = false; btn.textContent = '✅ 儲存紀錄'; }
+  __restoreScroll();
 
   if(syncOk === false){
     showCartridgeToast('⚠️ 已存在本機，但雲端同步失敗，請檢查網路後重新操作一次，避免其他裝置看不到這筆變更');
@@ -9158,9 +9187,12 @@ window.saveContactLogEntry = async function(){
     showCartridgeToast('✅ 已儲存在本機' + (postponeTo==='__NO_CHANGE__' ? '，已從換芯名單移除' : (postponeTo ? '，已移至 '+postponeTo : '')) + '（尚未同步到雲端，請確認登入狀態）');
   }
   closeContactLog();
+  __restoreScroll();
+  requestAnimationFrame(__restoreScroll);
 };
 window.deleteContactLogEntry = async function(idx){
   if(!confirm('確定刪除此聯絡紀錄？\n若此紀錄曾將換芯日期移月或標記不更換，刪除後會還原原本狀態。')) return;
+  var __restoreScroll = __keepScrollPosition();
   var list = contactLogs[_contactLogCustKey]||[];
   var entry = list[idx];
 
@@ -9212,6 +9244,8 @@ window.deleteContactLogEntry = async function(idx){
   if(typeof localDirty!=='undefined') localDirty = true;
   renderContactLogList();
   renderCartridgeTable();
+  __restoreScroll();
+  requestAnimationFrame(__restoreScroll);
   var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
     : ((entry && entry._exSnapshot && entry._exSnapshot.length) || !stillHasNoChange) ? '並重新加回換芯名單' : '';
 
@@ -9221,6 +9255,7 @@ window.deleteContactLogEntry = async function(idx){
   if(typeof saveCartridgeAndLogsNow === 'function'){
     syncOk = await saveCartridgeAndLogsNow('刪除聯絡紀錄');
   }
+  __restoreScroll();
   if(syncOk === false){
     showCartridgeToast('⚠️ 已在本機刪除，但雲端同步失敗，請檢查網路後再確認一次');
   } else if(syncOk === true){
