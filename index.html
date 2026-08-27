@@ -7196,7 +7196,27 @@ if(typeof showAdminPage === 'function'){
     <textarea id="reminderText"></textarea>
     <div class="reminder-actions">
       <button onclick="copyReminderText()" style="background:#218c74">複製內容</button>
+      <button onclick="openReminderTemplateEditor()" style="background:#8e44ad">✏️ 編輯格式</button>
       <button onclick="closeReminderModal()" style="background:#6c757d">關閉</button>
+    </div>
+  </div>
+</div>
+<div id="reminderTemplateModal" style="display:none;position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.45);align-items:center;justify-content:center;" onclick="if(event.target.id==='reminderTemplateModal')closeReminderTemplateEditor()">
+  <div style="background:#fff;width:min(640px,94vw);max-height:88vh;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+    <div style="background:#2f3542;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-weight:bold">✏️ 編輯提醒訊息格式</span>
+      <button onclick="closeReminderTemplateEditor()" style="background:transparent;color:#fff;font-size:18px;padding:0 4px;">×</button>
+    </div>
+    <div style="padding:12px 16px;background:#fffbe6;border-bottom:1px solid #e1c542;font-size:13px;line-height:1.7;">
+      可用欄位代碼（會自動代入該筆派工的資料）：<br>
+      <code>{date}</code> 日期時間　<code>{workItem}</code> 服務內容　<code>{amount}</code> 應收款項　<code>{payment}</code> 付款方式　<code>{address}</code> 服務地址<br>
+      提醒：含 <code>{payment}</code> 的那一行，若該筆派工沒有填付款方式，會自動整行省略。
+    </div>
+    <textarea id="reminderTemplateText" style="flex:1;min-height:320px;border:0;padding:14px;font-size:14px;line-height:1.6;font-family:'Microsoft JhengHei',Arial,sans-serif;resize:vertical;white-space:pre-wrap;"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px;background:#f8f9fa;flex-wrap:wrap;">
+      <button onclick="resetReminderTemplate()" style="background:#b33939">還原預設格式</button>
+      <button onclick="closeReminderTemplateEditor()" style="background:#6c757d">取消</button>
+      <button onclick="saveReminderTemplate()" style="background:#218c74">儲存</button>
     </div>
   </div>
 </div>
@@ -7321,25 +7341,72 @@ if(typeof showAdminPage === 'function'){
   function weekday(dateStr){ const d=new Date(String(dateStr||'').replace(/-/g,'/')); const arr=['日','一','二','三','四','五','六']; return isNaN(d)?'':arr[d.getDay()]; }
   function md(dateStr){ const p=String(dateStr||'').split('-'); return p.length>=3 ? (Number(p[1])+'/'+Number(p[2])) : String(dateStr||''); }
   function money(v){ const s=String(v||'').trim(); if(!s) return ''; const n=Number(s.replace(/,/g,'')); return isNaN(n)?s:(n.toLocaleString('zh-TW')+' 元'); }
+  const DEFAULT_REMINDER_TEMPLATE =
+    '您好，這邊提醒您有預約\n'
+    + '📅 {date}\n'
+    + '🔧 服務內容：{workItem}\n'
+    + '💰 應收款項：{amount}\n'
+    + '💳 {payment}\n'
+    + '📍 服務地址：{address}\n'
+    + '—\n'
+    + '⚠️ 當日取消案件會有$600的空趟費，於取消後下趟服務收取，請務必確認時間正確!\n'
+    + '⚠️若遇颱風假當日不會前往服務!客服會在下一個上班日陸續改約時間\n'
+    + '⚠️如有其他問題或需改約其他日期，請提早通知。\n'
+    + '—\n'
+    + '因工程前一日已排定整日行程，當日件無法變更時段，以上確認後無法臨時變更喔！\n'
+    + '如有其他問題或需改約其他日期，請提早通知。\n'
+    + '確認正確請再傳個貼圖～謝謝！😊';
+  const REMINDER_TEMPLATE_KEY = 'reminderTemplate';
+  function getReminderTemplate(){
+    try{ return localStorage.getItem(REMINDER_TEMPLATE_KEY) || DEFAULT_REMINDER_TEMPLATE; }
+    catch(e){ return DEFAULT_REMINDER_TEMPLATE; }
+  }
+  let _currentReminderJobId = null;
   function reminderMessage(j){
     const dateLine = (j.date? md(j.date)+'（'+weekday(j.date)+'）':'') + (j.startTime ? ' '+j.startTime : '');
-    return '您好，這邊提醒您有預約\n'
-      + '📅 ' + dateLine.trim() + '\n'
-      + '🔧 服務內容：' + (j.workItem||'') + '\n'
-      + '💰 應收款項：' + money(j.amount) + '\n'
-      + (j.payment ? '💳 ' + j.payment + '\n' : '')
-      + '📍 服務地址：' + (j.address||'') + '\n'
-      + '—\n'
-      + '⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️\n'
-      + '❗ 當日取消案件會有$600的空趟費，於取消後下趟服務收取，請務必確認時間正確! ❗\n'
-      + '⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️⚠️\n'
-      + '—\n'
-      + '因工程前一日已排定整日行程，當日件無法變更時段，以上確認後無法臨時變更喔！\n'
-      + '如有其他問題或需改約其他日期，請提早通知。\n'
-      + '確認正確請再傳個貼圖～謝謝！😊';
+    const values = {
+      date: dateLine.trim(),
+      workItem: j.workItem||'',
+      amount: money(j.amount),
+      payment: j.payment||'',
+      address: j.address||''
+    };
+    let lines = getReminderTemplate().split('\n');
+    // 若某行含有 {payment} 但該筆派工沒有填付款方式，整行省略
+    lines = lines.filter(line => !(line.indexOf('{payment}')>=0 && !values.payment));
+    return lines.map(line => line.replace(/\{(date|workItem|amount|payment|address)\}/g, (m,k)=>values[k])).join('\n');
   }
-  window.showReminderPreview = function(id,ev){ if(ev){ev.preventDefault();ev.stopPropagation();} const j=window.findJobById(id); if(!j){alert('找不到這筆派工資料');return;} const modal=document.getElementById('reminderModal'); const txt=document.getElementById('reminderText'); if(txt) txt.value=reminderMessage(j); if(modal) modal.style.display='flex'; setTimeout(()=>txt&&txt.focus(),60); };
-  window.closeReminderModal=function(){ const m=document.getElementById('reminderModal'); if(m) m.style.display='none'; };
+  window.openReminderTemplateEditor = function(){
+    const ta = document.getElementById('reminderTemplateText');
+    if(ta) ta.value = getReminderTemplate();
+    const m = document.getElementById('reminderTemplateModal');
+    if(m) m.style.display = 'flex';
+  };
+  window.closeReminderTemplateEditor = function(){
+    const m = document.getElementById('reminderTemplateModal');
+    if(m) m.style.display = 'none';
+  };
+  window.saveReminderTemplate = function(){
+    const ta = document.getElementById('reminderTemplateText');
+    if(!ta) return;
+    try{ localStorage.setItem(REMINDER_TEMPLATE_KEY, ta.value); }catch(e){}
+    window.closeReminderTemplateEditor();
+    // 若目前預覽視窗開著，馬上套用新格式
+    if(_currentReminderJobId!=null){
+      const j = window.findJobById(_currentReminderJobId);
+      const txt = document.getElementById('reminderText');
+      if(j && txt) txt.value = reminderMessage(j);
+    }
+    if(typeof showToast==='function') showToast('✅ 已儲存提醒訊息格式'); else alert('已儲存提醒訊息格式');
+  };
+  window.resetReminderTemplate = function(){
+    if(!confirm('確定要還原為預設格式嗎？目前編輯內容將被覆蓋。')) return;
+    try{ localStorage.removeItem(REMINDER_TEMPLATE_KEY); }catch(e){}
+    const ta = document.getElementById('reminderTemplateText');
+    if(ta) ta.value = DEFAULT_REMINDER_TEMPLATE;
+  };
+  window.showReminderPreview = function(id,ev){ if(ev){ev.preventDefault();ev.stopPropagation();} const j=window.findJobById(id); if(!j){alert('找不到這筆派工資料');return;} _currentReminderJobId=id; const modal=document.getElementById('reminderModal'); const txt=document.getElementById('reminderText'); if(txt) txt.value=reminderMessage(j); if(modal) modal.style.display='flex'; setTimeout(()=>txt&&txt.focus(),60); };
+  window.closeReminderModal=function(){ const m=document.getElementById('reminderModal'); if(m) m.style.display='none'; _currentReminderJobId=null; };
   window.copyReminderText=async function(){ const txt=document.getElementById('reminderText'); if(!txt) return; txt.select(); try{ await navigator.clipboard.writeText(txt.value); alert('已複製提醒內容'); }catch(e){ document.execCommand('copy'); alert('已複製提醒內容'); } };
 
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') window.closeReminderModal(); });
