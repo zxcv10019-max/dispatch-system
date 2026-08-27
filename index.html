@@ -780,8 +780,7 @@ body{
 }
 
 
-/* 非派工表頁面可上下滑動：新增派工資料 / 客戶資料 / 派工明細 / 休假管理 */
-#dispatchPage.page.active,
+/* 非派工表頁面可上下滑動：客戶資料 / 派工明細 / 休假管理 */
 #customerPage.page.active,
 #listPage.page.active,
 #leavePage.page.active{
@@ -794,9 +793,49 @@ body{
   padding-bottom:80px !important;
 }
 
-/* 新增派工頁內容太長時，表單區本身可以滑動到底 */
-#dispatchPage{
-  min-height:0 !important;
+/* 新增派工：右側滑出面板（在任何頁面都能開啟，不需要切換頁籤） */
+.dispatch-drawer-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  z-index:900; opacity:0; pointer-events:none;
+  transition:opacity .25s ease;
+}
+.dispatch-drawer-overlay.open{ opacity:1; pointer-events:auto; }
+
+#dispatchPage.dispatch-drawer{
+  position:fixed; top:0; right:0; bottom:0;
+  width:min(760px,96vw);
+  background:#f3f3f3;
+  box-shadow:-6px 0 24px rgba(0,0,0,.28);
+  z-index:901;
+  transform:translateX(100%);
+  transition:transform .28s ease;
+  display:flex; flex-direction:column;
+  min-height:0;
+}
+#dispatchPage.dispatch-drawer.open{ transform:translateX(0); }
+.dispatch-drawer-header{
+  position:sticky; top:0; z-index:2;
+  background:#2f3542; color:#fff;
+  padding:14px 18px; display:flex; align-items:center; justify-content:space-between;
+  flex:0 0 auto;
+}
+.dispatch-drawer-header h3{margin:0;font-size:16px}
+.dispatch-drawer-close{
+  background:transparent; border:none; color:#fff; font-size:22px;
+  line-height:1; cursor:pointer; padding:2px 10px; border-radius:4px;
+}
+.dispatch-drawer-close:hover{background:rgba(255,255,255,.18)}
+.dispatch-drawer-body{
+  flex:1 1 auto; min-height:0; overflow-y:auto; padding-bottom:60px;
+}
+.dispatch-drawer .form-card{margin:0;border:none;background:transparent;padding:14px}
+.dispatch-drawer .help{margin:0 0 12px}
+.dispatch-drawer .form-grid{grid-template-columns:repeat(2,1fr)}
+.dispatch-drawer .field-wide{grid-column:span 2}
+body.dispatch-drawer-lock{overflow:hidden}
+@media(max-width:640px){
+  .dispatch-drawer .form-grid{grid-template-columns:1fr}
+  .dispatch-drawer .field-wide{grid-column:auto}
 }
 
 
@@ -1842,9 +1881,14 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
   <div class="repair-list" id="repairList"></div>
 </div>
 
-<div id="dispatchPage" class="page">
-  <div class="form-card">
+<div id="dispatchOverlay" class="dispatch-drawer-overlay" onclick="closeDispatchDrawer()"></div>
+<div id="dispatchPage" class="dispatch-drawer">
+  <div class="dispatch-drawer-header">
     <h3>新增 / 填寫派工資料</h3>
+    <button class="dispatch-drawer-close" onclick="closeDispatchDrawer()" title="關閉">✕</button>
+  </div>
+  <div class="dispatch-drawer-body">
+  <div class="form-card">
     <div class="help">
       輸入「客編」後會自動連結客戶資料，帶入客名、客人電話、縣市、區域、地址。地址可直接開 Google Maps。
     </div>
@@ -1943,6 +1987,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
       </div>
       <div id="twoWeekList2"></div>
     </div>
+  </div>
   </div>
 </div>
 
@@ -3203,7 +3248,30 @@ function syncEndTimeByStart(){
 }
 
 
+function openDispatchDrawer(){
+  const panel=document.getElementById("dispatchPage");
+  const overlay=document.getElementById("dispatchOverlay");
+  if(panel) panel.classList.add("open");
+  if(overlay) overlay.classList.add("open");
+  document.body.classList.add("dispatch-drawer-lock");
+  if(typeof renderAvailableSlots==='function') renderAvailableSlots();
+}
+function closeDispatchDrawer(){
+  const panel=document.getElementById("dispatchPage");
+  const overlay=document.getElementById("dispatchOverlay");
+  if(panel) panel.classList.remove("open");
+  if(overlay) overlay.classList.remove("open");
+  document.body.classList.remove("dispatch-drawer-lock");
+}
+document.addEventListener("keydown", function(e){
+  if(e.key==="Escape"){
+    const panel=document.getElementById("dispatchPage");
+    if(panel && panel.classList.contains("open")) closeDispatchDrawer();
+  }
+});
+
 function showPage(pageId){
+  if(pageId==="dispatchPage"){ openDispatchDrawer(); return; }
   document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage" || pageId==="statsPage");
   document.body.classList.toggle("cartridge-scroll-mode", pageId==="cartridgePage");
   document.body.classList.toggle("schedule-scroll-mode", pageId==="schedulePage");
@@ -3255,7 +3323,6 @@ function showPage(pageId){
   document.getElementById(pageId).classList.add("active");
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
   if(pageId==="schedulePage")document.getElementById("tabSchedule").classList.add("active");
-  if(pageId==="dispatchPage"){document.getElementById("tabDispatch").classList.add("active");renderAvailableSlots();}
   if(pageId==="customerPage")document.getElementById("tabCustomer").classList.add("active");
   if(pageId==="listPage"){document.getElementById("tabList").classList.add("active");renderJobList();}
   if(pageId==="repairPage"){
