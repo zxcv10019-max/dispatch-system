@@ -867,6 +867,8 @@ body.dispatch-drawer-lock{overflow:hidden}
 .rt-stat-label{font-size:11px;color:#666;margin-top:2px}
 
 .rt-status-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;white-space:nowrap;background:#f1f2f6;border:1px solid #ccc}
+.rt-status-select{display:inline-block;padding:2px 20px 2px 9px;border-radius:12px;font-size:12px;white-space:nowrap;background:#f1f2f6;border:1px solid #ccc;font-weight:bold;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><path d="M1 3l4 4 4-4" stroke="%23888" stroke-width="1.4" fill="none"/></svg>');background-repeat:no-repeat;background-position:right 6px center}
+.rt-status-select:hover{box-shadow:0 0 0 2px rgba(9,132,227,.2)}
 
 .rt-table-wrap{display:block}
 .rt-cards{display:none;padding:10px;grid-template-columns:1fr;gap:10px}
@@ -2028,9 +2030,6 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <input id="rtSearch" placeholder="🔍 搜尋客編／姓名／電話／機碼" style="min-width:220px" oninput="renderRepairTicketList()">
     <select id="rtStatusFilter" onchange="renderRepairTicketList()" title="狀態篩選">
       <option value="全部">全部狀態</option>
-      <option>🔴 待聯絡</option>
-      <option>🟠 待預約</option>
-      <option>🟡 已預約</option>
       <option>🔵 已派工</option>
       <option>🟣 送修中</option>
       <option>🟢 待復機</option>
@@ -2127,9 +2126,6 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
       <div class="field">
         <label>報修狀態</label>
         <select id="rtStatus">
-          <option>🔴 待聯絡</option>
-          <option>🟠 待預約</option>
-          <option>🟡 已預約</option>
           <option>🔵 已派工</option>
           <option>🟣 送修中</option>
           <option>🟢 待復機</option>
@@ -10593,6 +10589,12 @@ function repairEsc(v){
     "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
   }[c]));
 }
+// 產生安全的「單引號」JS 字串常值，放進 onclick="..."（雙引號屬性）裡不會把 HTML 屬性截斷。
+// Firestore 文件 ID／狀態文字如果直接用 JSON.stringify()（雙引號）塞進雙引號屬性，會把屬性提早截斷，
+// 導致按鈕整個失效（例如報修管理的「查看」按鈕、狀態統計卡片點了沒反應）。
+function jsStr(v){
+  return "'" + String(v==null?"":v).replace(/\\/g,"\\\\").replace(/'/g,"\\'").replace(/\n/g,"\\n").replace(/\r/g,"") + "'";
+}
 
 function repairDate(v){
   try{
@@ -10919,9 +10921,8 @@ let editingRepairTicketId = null;
 let rtCurrentDispatchIds = [];
 let pendingRepairLinkTicketId = null; // 從報修單點「建立派工」後，等待派工儲存完成回頭連結
 
-const RT_STATUSES = ["🔴 待聯絡","🟠 待預約","🟡 已預約","🔵 已派工","🟣 送修中","🟢 待復機","⚫ 已完成"];
+const RT_STATUSES = ["🔵 已派工","🟣 送修中","🟢 待復機","⚫ 已完成"];
 const RT_STATUS_COLORS = {
-  "🔴 待聯絡":"#d63031", "🟠 待預約":"#e67e22", "🟡 已預約":"#f0a500",
   "🔵 已派工":"#0984e3", "🟣 送修中":"#8e44ad", "🟢 待復機":"#16a085", "⚫ 已完成":"#57606f"
 };
 
@@ -10947,7 +10948,7 @@ function loadRepairTickets(){
           rtCurrentDispatchIds = Array.isArray(t.dispatchIds) ? t.dispatchIds.slice() : [];
           renderRepairDispatchList();
           const statusEl = document.getElementById("rtStatus");
-          if(statusEl) statusEl.value = t.status || "🔴 待聯絡";
+          if(statusEl) statusEl.value = t.status || "🔵 已派工";
         }
       }
     }, err => {
@@ -10957,7 +10958,7 @@ function loadRepairTickets(){
 }
 
 function updateRepairTicketPendingBadge(){
-  const count = repairTickets.filter(t => (t.status || "🔴 待聯絡") === "🔴 待聯絡").length;
+  const count = repairTickets.filter(t => (t.status || "🔵 已派工") === "🔵 已派工").length;
   const el = document.getElementById("repairTicketPendingCount");
   if(!el) return;
   el.textContent = count;
@@ -10967,11 +10968,9 @@ function updateRepairTicketPendingBadge(){
 // ===== 狀態自動判斷 =====
 function rtComputeStatus(f){
   if(f.completeDate) return "⚫ 已完成";
-  if(f.returnDate && !f.restoreDate) return "🟢 待復機";
-  if(f.removeDate || f.sendFactoryDate) return "🟣 送修中";
-  if(f.dispatchCount > 0) return "🔵 已派工";
-  if(f.appointmentDate) return "🟡 已預約";
-  return "🔴 待聯絡";
+  if(f.returnDate) return "🟢 待復機";
+  if(f.appointmentDate) return "🟣 送修中";
+  return "🔵 已派工";
 }
 function rtSuggestStatus(){
   const g = id => (document.getElementById(id) || {}).value || "";
@@ -10990,7 +10989,7 @@ function rtSuggestStatus(){
 // 建立派工成功並連結回報修單時：只在目前狀態還「落後」於已派工時才自動推進，
 // 避免覆蓋掉更後面的手動狀態（例如已在送修中／待復機時又建立第二次派工，不應該退回已派工）。
 function rtStatusAfterLink(ticket){
-  const cur = (ticket && ticket.status) || "🔴 待聯絡";
+  const cur = (ticket && ticket.status) || "🔵 已派工";
   const curIdx = RT_STATUSES.indexOf(cur);
   const targetIdx = RT_STATUSES.indexOf("🔵 已派工");
   if(curIdx === -1 || curIdx < targetIdx) return "🔵 已派工";
@@ -11080,7 +11079,7 @@ function openRepairTicketDrawer(ticketId){
     document.getElementById("rtCompleteDate").value = t.completeDate || "";
     document.getElementById("rtResult").value = t.result || "";
     document.getElementById("rtRemark").value = t.remark || "";
-    document.getElementById("rtStatus").value = t.status || "🔴 待聯絡";
+    document.getElementById("rtStatus").value = t.status || "🔵 已派工";
     document.getElementById("rtCreatedByDisplay").value = t.createdBy || "";
     document.getElementById("rtCreatedAtDisplay").value = repairDate(t.createdAt);
     document.getElementById("rtUpdatedAtDisplay").value = repairDate(t.updatedAt);
@@ -11088,7 +11087,7 @@ function openRepairTicketDrawer(ticketId){
   } else {
     if(title) title.textContent = "新增報修單";
     const dEl = document.getElementById("rtReportDate"); if(dEl) dEl.valueAsDate = new Date();
-    document.getElementById("rtStatus").value = "🔴 待聯絡";
+    document.getElementById("rtStatus").value = "🔵 已派工";
     document.getElementById("rtCreatedByDisplay").value = (currentUser && (currentUser.displayName || currentUser.email)) || "";
   }
 
@@ -11136,7 +11135,7 @@ function renderRepairDispatchList(){
     const timeTxt = [j.startTime || j.time || "", j.endTime || ""].filter(Boolean).join(" ~ ");
     return `<div class="rt-dispatch-item">
       <span>📅 ${repairEsc(dateTxt)}${timeTxt ? "　⏰ " + repairEsc(timeTxt) : ""}　👷 ${repairEsc(j.engineer || "")}</span>
-      <button style="background:#40739e" onclick="viewDispatchFromTicket(${JSON.stringify(String(j.id))})">查看派工</button>
+      <button style="background:#40739e" onclick="viewDispatchFromTicket(${jsStr(String(j.id))})">查看派工</button>
     </div>`;
   }).join("");
 }
@@ -11173,7 +11172,7 @@ function renderRepairHistory(){
   }
   box.innerHTML = list.map(t => {
     const parts = [t.reportDate || "-", t.issue || "未分類", t.result || t.status || ""].filter(Boolean);
-    return `<div class="rt-history-item" onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})" style="cursor:pointer">
+    return `<div class="rt-history-item" onclick="openRepairTicketDrawer(${jsStr(t.id)})" style="cursor:pointer">
       ${parts.map(repairEsc).join("｜")}
     </div>`;
   }).join("");
@@ -11215,7 +11214,7 @@ async function saveRepairTicket(){
     completeDate: g("rtCompleteDate"),
     result: g("rtResult").trim(),
     remark: g("rtRemark").trim(),
-    status: g("rtStatus") || "🔴 待聯絡",
+    status: g("rtStatus") || "🔵 已派工",
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -11325,7 +11324,7 @@ function normalizeRepairTicketFromArray(row, idx){
     }
   }
   const rawStatus=String(get("status")||"").trim();
-  const status=RT_STATUSES.includes(rawStatus) ? rawStatus : "🔴 待聯絡";
+  const status=RT_STATUSES.includes(rawStatus) ? rawStatus : "🔵 已派工";
   // 「項目」（維修/大保養等分類）跟「報修問題/機器狀況」合併成報修問題欄位，避免漏掉資訊
   const itemType=String(get("itemType")||"").trim();
   const issueRaw=String(get("issue")||"").trim();
@@ -11514,13 +11513,13 @@ function renderRepairTicketStats(){
   const counts = {};
   RT_STATUSES.forEach(s => counts[s] = 0);
   repairTickets.forEach(t => {
-    const s = t.status || "🔴 待聯絡";
+    const s = t.status || "🔵 已派工";
     if(counts[s] === undefined) counts[s] = 0;
     counts[s]++;
   });
   box.innerHTML = RT_STATUSES.map(s => {
     const active = curFilter === s;
-    return `<div class="rt-stat-card${active ? " active" : ""}" onclick="rtFilterByStat(${JSON.stringify(s)})">
+    return `<div class="rt-stat-card${active ? " active" : ""}" onclick="rtFilterByStat(${jsStr(s)})">
       <div class="rt-stat-num">${counts[s] || 0}</div>
       <div class="rt-stat-label">${repairEsc(s)}</div>
     </div>`;
@@ -11540,7 +11539,7 @@ function renderRepairTicketList(){
   const dateFilter = (document.getElementById("rtDateFilter")||{}).value || "";
 
   const list = repairTickets.filter(t => {
-    const statusOk = statusFilter === "全部" || (t.status || "🔴 待聯絡") === statusFilter;
+    const statusOk = statusFilter === "全部" || (t.status || "🔵 已派工") === statusFilter;
     const dateOk = !dateFilter || t.reportDate === dateFilter;
     const searchOk = !q || [t.customerCode, t.customerName, t.phone, t.machineCode]
       .join(" ").toLowerCase().includes(q);
@@ -11554,6 +11553,32 @@ function renderRepairTicketList(){
   renderRepairTicketCards(list);
 }
 
+// ===== 狀態直接在列表點選修改，不用開查看視窗 =====
+async function updateRepairTicketStatusInline(ticketId, newStatus){
+  if(!requireEdit("修改報修狀態")){ renderRepairTicketList(); return; }
+  if(!firebaseDb){ alert("Firebase 尚未連線"); renderRepairTicketList(); return; }
+  try{
+    await firebaseDb.collection("repairTickets").doc(ticketId).update({
+      status:newStatus,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast("✅ 已更新狀態");
+  }catch(e){
+    alert("更新狀態失敗：" + e.message);
+    renderRepairTicketList();
+  }
+}
+function rtStatusSelectHtml(t){
+  const status = t.status || "🔵 已派工";
+  const color = RT_STATUS_COLORS[status] || "#777";
+  const options = RT_STATUSES.map(s =>
+    `<option value="${repairEsc(s)}"${s===status?" selected":""}>${repairEsc(s)}</option>`
+  ).join("");
+  return `<select class="rt-status-select" style="border-color:${color};color:${color}"
+    onclick="event.stopPropagation()"
+    onchange="event.stopPropagation();updateRepairTicketStatusInline(${jsStr(t.id)},this.value)">${options}</select>`;
+}
+
 function renderRepairTicketTable(list){
   const table = document.getElementById("rtTable");
   if(!table) return;
@@ -11561,23 +11586,42 @@ function renderRepairTicketTable(list){
     table.innerHTML = '<tr><td style="padding:16px;color:#999">目前沒有符合條件的報修案件。</td></tr>';
     return;
   }
-  let html = "<tr><th>狀態</th><th>報修日</th><th>客戶</th><th>機型／機碼</th><th>機器狀況</th><th>預約日期</th><th>處理方式</th><th>備機</th><th>操作</th></tr>";
+  // 只顯示這些欄位：狀態、報修日期、客戶代號、機型、項目、機器狀況、保固、
+  // 處理方式、拆機、預約日期、機碼、備機、機回日期、完成日期、備註（＋編輯）
+  let html = `<tr>
+    <th>狀態</th><th>報修日期</th><th>客戶代號</th><th>機型</th><th>項目</th><th>機器狀況</th>
+    <th>保固</th><th>處理方式</th><th>拆機</th><th>預約日期</th><th>機碼</th><th>備機</th>
+    <th>機回日期</th><th>完成日期</th><th>備註</th><th>編輯</th>
+  </tr>`;
   list.forEach(t => {
-    const status = t.status || "🔴 待聯絡";
+    const status = t.status || "🔵 已派工";
     const color = RT_STATUS_COLORS[status] || "#777";
     const codeName = [t.customerCode, t.customerName].filter(Boolean).join(" ") || "-";
-    const modelCode = [t.model, t.machineCode].filter(Boolean).join(" / ") || "-";
-    const loanerTxt = [t.needLoaner ? "備機" : "", t.needNewLoaner ? "備新機" : ""].filter(Boolean).join("、") || "-";
+    // 匯入時「項目」與「機器狀況」是用「｜」合併存在 issue 欄位裡，這裡拆開顯示成兩欄
+    const issueParts = String(t.issue || "").split("｜");
+    const itemType = issueParts.length > 1 ? issueParts[0] : "";
+    const conditionText = issueParts.length > 1 ? issueParts.slice(1).join("｜") : (t.issue || "");
+    // 匯入時「拆機」欄位是用「拆機：xxx｜」前綴併進 remark，這裡拆回來顯示成獨立一欄
+    let removeNote = "", remarkText = t.remark || "";
+    const rm = remarkText.match(/^拆機：([^｜]*)(?:｜(.*))?$/);
+    if(rm){ removeNote = rm[1] || ""; remarkText = rm[2] || ""; }
     html += `<tr>
-      <td><span class="rt-status-badge" style="border-color:${color};color:${color}">${repairEsc(status)}</span></td>
+      <td>${rtStatusSelectHtml(t)}</td>
       <td>${repairEsc(t.reportDate || "-")}</td>
       <td>${repairEsc(codeName)}</td>
-      <td>${repairEsc(modelCode)}</td>
-      <td>${repairEsc(t.condition || t.issue || "-")}</td>
-      <td>${repairEsc(t.appointmentDate || "-")}</td>
+      <td>${repairEsc(t.model || "-")}</td>
+      <td>${repairEsc(itemType || "-")}</td>
+      <td>${repairEsc(conditionText || t.condition || "-")}</td>
+      <td>${repairEsc(t.warranty || "-")}</td>
       <td>${repairEsc(t.handlingMethod || "-")}</td>
-      <td>${repairEsc(loanerTxt)}</td>
-      <td><button onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})">查看</button></td>
+      <td>${repairEsc(removeNote || "-")}</td>
+      <td>${repairEsc(t.appointmentDate || "-")}</td>
+      <td>${repairEsc(t.machineCode || "-")}</td>
+      <td>${t.needLoaner ? "✓" : "-"}</td>
+      <td>${repairEsc(t.returnDate || "-")}</td>
+      <td>${repairEsc(t.completeDate || "-")}</td>
+      <td>${repairEsc(remarkText || "-")}</td>
+      <td><button onclick="openRepairTicketDrawer(${jsStr(t.id)})">✏️ 編輯</button></td>
     </tr>`;
   });
   table.innerHTML = html;
@@ -11591,18 +11635,18 @@ function renderRepairTicketCards(list){
     return;
   }
   box.innerHTML = list.map(t => {
-    const status = t.status || "🔴 待聯絡";
+    const status = t.status || "🔵 已派工";
     const color = RT_STATUS_COLORS[status] || "#777";
     const codeName = [t.customerCode, t.customerName].filter(Boolean).join(" ") || "未填客戶";
     const modelCode = [t.model, t.machineCode].filter(Boolean).join(" / ");
     const loanerTxt = [t.needLoaner ? "備機" : "", t.needNewLoaner ? "備新機" : ""].filter(Boolean).join("、");
-    return `<div class="rt-card" style="border-left-color:${color}" onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})">
+    return `<div class="rt-card" style="border-left-color:${color}" onclick="openRepairTicketDrawer(${jsStr(t.id)})">
       <div class="rt-card-top">
         <div>
           <div class="rt-card-title">${repairEsc(t.issue || "未分類")}｜${repairEsc(codeName)}</div>
           <div class="rt-card-meta">${repairEsc(t.reportDate || "-")}${modelCode ? "｜" + repairEsc(modelCode) : ""}</div>
         </div>
-        <span class="rt-status-badge" style="border-color:${color};color:${color}">${repairEsc(status)}</span>
+        <span onclick="event.stopPropagation()">${rtStatusSelectHtml(t)}</span>
       </div>
       <div class="rt-card-grid">
         <div><b>機況：</b>${repairEsc(t.condition || "-")}</div>
