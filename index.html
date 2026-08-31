@@ -11468,16 +11468,18 @@ function importRepairTicketExcel(event){
 }
 
 // ===== 報修單 →「建立派工」：帶入既有的新增派工 Drawer =====
-function repairTicketCreateDispatch(){
+// ticketId 可選：從表格列直接點「建立派工」時會傳入，不用先打開編輯視窗
+function repairTicketCreateDispatch(ticketId){
   if(!requireEdit("建立派工")) return;
-  if(!editingRepairTicketId){
+  const id = ticketId || editingRepairTicketId;
+  if(!id){
     alert("請先儲存報修單，才能建立對應的派工。");
     return;
   }
-  const t = repairTickets.find(x => x.id === editingRepairTicketId);
+  const t = repairTickets.find(x => x.id === id);
   if(!t){ alert("找不到這筆報修單"); return; }
 
-  pendingRepairLinkTicketId = editingRepairTicketId;
+  pendingRepairLinkTicketId = id;
   closeRepairTicketDrawer();
 
   clearDispatchForm();
@@ -11686,7 +11688,7 @@ function renderRepairTicketTable(list){
       <td>${repairEsc(t.returnDate || "-")}</td>
       <td>${repairEsc(t.completeDate || "-")}</td>
       <td>${repairEsc(remarkText || "-")}</td>
-      <td><button onclick="openRepairTicketDrawer(${jsStr(t.id)})">✏️ 編輯</button></td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap"><button onclick="openRepairTicketDrawer(${jsStr(t.id)})">✏️ 編輯</button>${status === "🟢 待復機" ? `<button style="background:#0984e3" onclick="repairTicketCreateDispatch(${jsStr(t.id)})">📅 建立派工</button>` : ""}</div></td>
     </tr>`;
   });
   table.innerHTML = html;
