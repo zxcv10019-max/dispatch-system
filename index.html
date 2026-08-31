@@ -5175,7 +5175,7 @@ function renderCustomers(){
       <td>${escapeHtml(c.shortName)}</td>
       <td>${escapeHtml(c.mobile)}</td>
       <td>${c.deliveryAddress?`<a href="${mapUrl(c.deliveryAddress)}" target="_blank">${escapeHtml(c.deliveryAddress)}</a>`:""}</td>
-      <td>${escapeHtml((c.machineCodes||[]).join("、"))}</td>
+      <td><input type="text" value="${escapeHtml((c.machineCodes||[]).join("、"))}" placeholder="多組請用逗號或頓號分隔" style="width:100%;border:1px solid #ccc" onchange="updateCustomerMachineCodes(${c.id}, this.value)" ${canEdit()?"":"readonly"}></td>
     </tr>`;
   });
   document.getElementById("customerTable").innerHTML=html;
@@ -5185,6 +5185,14 @@ function clearCustomerSearch(){
   const el=document.getElementById("customerSearch");
   if(el) el.value="";
   renderCustomers();
+}
+
+function updateCustomerMachineCodes(id, value){
+  if(!requireEdit("編輯機碼")) { renderCustomers(); return; }
+  const c=customers.find(x=>x.id===id);if(!c)return;
+  c.machineCodes=parseMachineCodesInput(value);
+  writeLog("customer_edit",{customerNo:c.customerNo||"",fullName:c.fullName||c.personName||"",field:"machineCodes"});
+  saveCustomers();renderCustomers();
 }
 
 function editCustomer(id){
