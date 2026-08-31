@@ -2368,8 +2368,9 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
 <div id="customerPage" class="page">
   <div class="help">
-    客戶資料只顯示這 6 欄：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址。<br>
-    匯入 Excel 時，只會抓這些欄位；「行動電話」會合併抓 Excel 的「行動電話」與「聯絡電話一」。其他欄位不顯示。
+    客戶資料顯示這 7 欄：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址、機碼。<br>
+    匯入 Excel 時，只會抓這些欄位；「行動電話」會合併抓 Excel 的「行動電話」與「聯絡電話一」。其他欄位不顯示。<br>
+    在「報修管理」新增/修改報修單時，若有填客戶編號＋機碼，系統會自動把機碼同步存到這裡的客戶資料（同一客戶可有多組機碼，不會重複）。
   </div>
 
   <div class="customer-form">
@@ -2379,6 +2380,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <div class="field"><label>客戶簡稱</label><input id="cShortName"></div>
     <div class="field"><label>行動電話</label><input id="cMobile"></div>
     <div class="field"><label>送貨地址</label><input id="cDeliveryAddress"></div>
+    <div class="field"><label>機碼（多組請用逗號分隔）</label><input id="cMachineCodes" placeholder="例如：ABC123, XYZ789"></div>
     <div class="field-full">
       <button onclick="addCustomer()">新增 / 更新客戶</button>
       <button class="map-btn" onclick="openCustomerFormMap()">開啟地址地圖</button>
@@ -5095,6 +5097,12 @@ function clearAllJobs(){
   }
 }
 
+// 把逗號/頓號/空白分隔的機碼字串拆成陣列，去除空白與重複
+function parseMachineCodesInput(str){
+  return Array.from(new Set(
+    String(str||"").split(/[,，、\s]+/).map(s=>s.trim()).filter(Boolean)
+  ));
+}
 function addCustomer(){
   if(!requireEdit("新增/修改客戶")) return;
   const customerNo=document.getElementById("cCustomerNo").value.trim();
@@ -5106,12 +5114,15 @@ function addCustomer(){
     fullName:document.getElementById("cFullName").value.trim(),
     shortName:document.getElementById("cShortName").value.trim(),
     mobile:document.getElementById("cMobile").value.trim(),
-    deliveryAddress:document.getElementById("cDeliveryAddress").value.trim()
+    deliveryAddress:document.getElementById("cDeliveryAddress").value.trim(),
+    machineCodes:parseMachineCodesInput(document.getElementById("cMachineCodes").value)
   };
   const idx=customers.findIndex(x=>x.customerNo&&x.customerNo===customerNo);
   if(idx>=0){
     if(confirm("此客戶編號已存在，要覆蓋嗎？")){
-      customers[idx]={...customers[idx],...c};
+      // 機碼採合併（保留舊有機碼＋新填的），避免覆蓋掉之前累積的機碼
+      const mergedCodes=Array.from(new Set([...(customers[idx].machineCodes||[]),...c.machineCodes]));
+      customers[idx]={...customers[idx],...c,machineCodes:mergedCodes};
       writeLog("customer_edit",{customerNo:c.customerNo,fullName:c.fullName||c.personName||""});
     }
   }else{
@@ -5119,7 +5130,23 @@ function addCustomer(){
     writeLog("customer_add",{customerNo:c.customerNo,fullName:c.fullName||c.personName||""});
   }
   saveCustomers();renderCustomers();
-  ["cCustomerNo","cPersonName","cFullName","cShortName","cMobile","cDeliveryAddress"].forEach(id=>document.getElementById(id).value="");
+  ["cCustomerNo","cPersonName","cFullName","cShortName","cMobile","cDeliveryAddress","cMachineCodes"].forEach(id=>document.getElementById(id).value="");
+}
+// 把機碼同步存進客戶資料：依客戶編號比對，找不到再依客戶姓名比對；都找不到就略過（不會憑空建立新客戶）
+function syncMachineCodeToCustomer(customerCode, customerName, machineCode){
+  const code=String(customerCode||"").trim();
+  const name=String(customerName||"").trim();
+  const mCode=String(machineCode||"").trim();
+  if(!mCode || (!code && !name)) return false;
+  let cust=null;
+  if(code) cust=customers.find(c=>String(c.customerNo||"").trim()===code);
+  if(!cust && name) cust=customers.find(c=>c.fullName===name||c.shortName===name||c.personName===name);
+  if(!cust) return false;
+  const list=Array.isArray(cust.machineCodes)?cust.machineCodes:[];
+  if(list.some(x=>String(x).trim().toLowerCase()===mCode.toLowerCase())) return false; // 已存在，不重複加
+  cust.machineCodes=[...list, mCode];
+  saveCustomers();
+  return true;
 }
 
 function renderCustomers(){
@@ -5136,9 +5163,9 @@ function renderCustomers(){
     countEl.textContent = kw ? `查詢結果：${list.length} / ${customers.length} 筆` : `共 ${customers.length} 筆客戶資料`;
   }
 
-  let html="<tr><th>操作</th><th>客戶編號</th><th>人員姓名</th><th>客戶全稱</th><th>客戶簡稱</th><th>行動電話</th><th>送貨地址</th></tr>";
+  let html="<tr><th>操作</th><th>客戶編號</th><th>人員姓名</th><th>客戶全稱</th><th>客戶簡稱</th><th>行動電話</th><th>送貨地址</th><th>機碼</th></tr>";
   if(list.length===0){
-    html += `<tr><td colspan="7" style="text-align:center;color:#888;padding:24px;">查無客戶資料</td></tr>`;
+    html += `<tr><td colspan="8" style="text-align:center;color:#888;padding:24px;">查無客戶資料</td></tr>`;
   }
   list.forEach(c=>{
     const actionHtml = canEdit()
@@ -5152,6 +5179,7 @@ function renderCustomers(){
       <td>${escapeHtml(c.shortName)}</td>
       <td>${escapeHtml(c.mobile)}</td>
       <td>${c.deliveryAddress?`<a href="${mapUrl(c.deliveryAddress)}" target="_blank">${escapeHtml(c.deliveryAddress)}</a>`:""}</td>
+      <td>${escapeHtml((c.machineCodes||[]).join("、"))}</td>
     </tr>`;
   });
   document.getElementById("customerTable").innerHTML=html;
@@ -5171,7 +5199,8 @@ function editCustomer(id){
   const shortName=prompt("客戶簡稱",c.shortName||"");if(shortName===null)return;
   const mobile=prompt("行動電話",c.mobile||"");if(mobile===null)return;
   const deliveryAddress=prompt("送貨地址",c.deliveryAddress||"");if(deliveryAddress===null)return;
-  Object.assign(c,{customerNo,personName,fullName,shortName,mobile,deliveryAddress});
+  const machineCodesStr=prompt("機碼（多組請用逗號分隔）",(c.machineCodes||[]).join("、"));if(machineCodesStr===null)return;
+  Object.assign(c,{customerNo,personName,fullName,shortName,mobile,deliveryAddress,machineCodes:parseMachineCodesInput(machineCodesStr)});
   writeLog("customer_edit",{customerNo,fullName:fullName||personName||""});
   saveCustomers();renderCustomers();
 }
@@ -5603,6 +5632,15 @@ function importExcel(event){
 
     let count=0;
     let skipped=0;
+    let keptCodes=0;
+
+    // 匯入前先把目前客戶資料的機碼記錄下來（依客戶編號比對，忽略大小寫/空白），
+    // 這樣不管是更新既有客戶還是被判定成「新客戶」，機碼都不會因為重新匯入而消失。
+    const machineCodeMap = {};
+    customers.forEach(c=>{
+      const key=String(c.customerNo||"").trim().toLowerCase();
+      if(key && Array.isArray(c.machineCodes) && c.machineCodes.length) machineCodeMap[key]=c.machineCodes;
+    });
 
     for(let r=found.headerRow+1;r<found.rows.length;r++){
       const row=found.rows[r]||[];
@@ -5613,9 +5651,17 @@ function importExcel(event){
         continue;
       }
 
-      const idx=customers.findIndex(x=>x.customerNo&&x.customerNo===c.customerNo);
-      if(idx>=0) customers[idx]={...customers[idx],...c};
-      else customers.push(c);
+      const key=String(c.customerNo||"").trim().toLowerCase();
+      const existingCodes = key && machineCodeMap[key] ? machineCodeMap[key] : null;
+
+      const idx=customers.findIndex(x=>String(x.customerNo||"").trim().toLowerCase()===key);
+      if(idx>=0){
+        const mergedCodes=Array.from(new Set([...(customers[idx].machineCodes||[]), ...(existingCodes||[])]));
+        customers[idx]={...customers[idx],...c,machineCodes:mergedCodes};
+      }else{
+        customers.push({...c, machineCodes: existingCodes ? existingCodes.slice() : []});
+      }
+      if(existingCodes && existingCodes.length) keptCodes++;
       count++;
     }
 
@@ -5625,7 +5671,7 @@ function importExcel(event){
     const importStatusEl = document.getElementById("importStatus");
     if(importStatusEl) importStatusEl.innerHTML=
       `已匯入 ${count} 筆客戶資料。來源工作表：${escapeHtml(found.sheetName)}，標題列：第 ${found.headerRow+1} 列。<br>`+
-      `顯示欄位只保留：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址。<br>`+
+      `顯示欄位只保留：客戶編號、人員姓名、客戶全稱、客戶簡稱、行動電話、送貨地址（機碼會依客戶編號自動保留，共保留 ${keptCodes} 筆客戶的機碼）。<br>`+
       `行動電話欄已合併 Excel 的「行動電話」與「聯絡電話一」。`;
 
     alert("已匯入 "+count+" 筆客戶資料");
@@ -5827,7 +5873,8 @@ function exportCustomers(){
     "客戶全稱":c.fullName,
     "客戶簡稱":c.shortName,
     "行動電話":c.mobile,
-    "送貨地址":c.deliveryAddress
+    "送貨地址":c.deliveryAddress,
+    "機碼":(c.machineCodes||[]).join("、")
   }));
   const ws=XLSX.utils.json_to_sheet(data);
   const wb=XLSX.utils.book_new();
@@ -11183,6 +11230,10 @@ async function saveRepairTicket(){
       await firebaseDb.collection("repairTickets").add(data);
       showToast("✅ 已新增報修單");
     }
+    // 有填機碼的話，自動同步存到客戶資料（依客戶編號／姓名比對既有客戶，找不到就略過）
+    if(data.machineCode){
+      syncMachineCodeToCustomer(data.customerCode, data.customerName, data.machineCode);
+    }
     closeRepairTicketDrawer();
   }catch(e){
     alert("儲存失敗：" + e.message);
@@ -11213,25 +11264,28 @@ function findRepairTicketSheet(workbook){
     for(let r=0;r<Math.min(rows.length,30);r++){
       const headers=rows[r]||[];
       const idx={
-        reportDate:findHeaderIndex(headers,["報修日期","日期"]),
-        customerCode:findHeaderIndex(headers,["客戶編號","客編","客代","客戶代號"]),
+        reportDate:findHeaderIndex(headers,["報修日期","日期","報修時間"]),
+        weekday:findHeaderIndex(headers,["星期","週別"]),
+        customerCode:findHeaderIndex(headers,["客戶編號","客編","客代","客戶代號","客戶代碼"]),
         customerName:findHeaderIndex(headers,["客戶姓名","姓名","客戶名稱","客名"]),
         phone:findHeaderIndex(headers,["電話","行動電話","聯絡電話"]),
         address:findHeaderIndex(headers,["地址","送貨地址","服務地址"]),
         model:findHeaderIndex(headers,["機型"]),
         machineCode:findHeaderIndex(headers,["機碼","序號","機身序號"]),
         warranty:findHeaderIndex(headers,["保固","保固狀態"]),
-        issue:findHeaderIndex(headers,["報修問題","故障狀況","問題"]),
+        itemType:findHeaderIndex(headers,["項目","服務項目","類別"]),
+        issue:findHeaderIndex(headers,["報修問題","故障狀況","問題","機器狀況","故障原因"]),
         condition:findHeaderIndex(headers,["機況"]),
         description:findHeaderIndex(headers,["說明","備註說明","詳細說明"]),
         handlingMethod:findHeaderIndex(headers,["處理方式"]),
+        removeNote:findHeaderIndex(headers,["拆機","拆機部位","拆機內容"]),
         appointmentDate:findHeaderIndex(headers,["預約日期"]),
         appointmentTime:findHeaderIndex(headers,["預約時間"]),
         needLoaner:findHeaderIndex(headers,["需要備機","備機"]),
-        needNewLoaner:findHeaderIndex(headers,["需要新機","新機"]),
+        needNewLoaner:findHeaderIndex(headers,["需要新機","新機","備新機"]),
         removeDate:findHeaderIndex(headers,["拆機日期"]),
         sendFactoryDate:findHeaderIndex(headers,["送廠日期"]),
-        returnDate:findHeaderIndex(headers,["回機日期"]),
+        returnDate:findHeaderIndex(headers,["回機日期","機回日期"]),
         restoreDate:findHeaderIndex(headers,["復機日期"]),
         completeDate:findHeaderIndex(headers,["完成日期"]),
         result:findHeaderIndex(headers,["處理結果","結果"]),
@@ -11239,7 +11293,8 @@ function findRepairTicketSheet(workbook){
         status:findHeaderIndex(headers,["狀態"])
       };
       let score=0;
-      [idx.reportDate,idx.customerCode,idx.customerName,idx.phone,idx.address,idx.issue].forEach(v=>{if(v>=0)score++});
+      [idx.reportDate,idx.customerCode,idx.customerName,idx.phone,idx.address,idx.issue,
+       idx.machineCode,idx.model,idx.itemType,idx.condition,idx.appointmentDate,idx.completeDate].forEach(v=>{if(v>=0)score++});
       if(score>=3 && (!best || score>best.score)){
         best={sheetName,rows,headerRow:r,headers,idx,score};
       }
@@ -11248,6 +11303,8 @@ function findRepairTicketSheet(workbook){
   return best;
 }
 function rtTruthyCell(v){
+  if(v===true) return true;
+  if(v===false) return false;
   const s=String(v==null?"":v).trim().toLowerCase();
   if(!s) return false;
   return ["v","✓","☑","是","true","1","yes","y","需要","o"].includes(s);
@@ -11269,13 +11326,21 @@ function normalizeRepairTicketFromArray(row, idx){
   }
   const rawStatus=String(get("status")||"").trim();
   const status=RT_STATUSES.includes(rawStatus) ? rawStatus : "🔴 待聯絡";
+  // 「項目」（維修/大保養等分類）跟「報修問題/機器狀況」合併成報修問題欄位，避免漏掉資訊
+  const itemType=String(get("itemType")||"").trim();
+  const issueRaw=String(get("issue")||"").trim();
+  const issue=[itemType,issueRaw].filter(Boolean).join("｜");
+  // 「拆機」欄位（例如：無／主+龍）沒有對應欄位，併入備註，避免匯入時遺失資料
+  const removeNote=String(get("removeNote")||"").trim();
+  const remarkRaw=String(get("remark")||"").trim();
+  const remark=[removeNote?`拆機：${removeNote}`:"",remarkRaw].filter(Boolean).join("｜");
   return {
     reportDate:normalizeExcelDate(get("reportDate")),
     customerCode,customerName,phone,address,
     model:String(get("model")||"").trim(),
     machineCode:String(get("machineCode")||"").trim(),
     warranty:String(get("warranty")||"").trim(),
-    issue:String(get("issue")||"").trim(),
+    issue,
     condition:String(get("condition")||"").trim(),
     description:String(get("description")||"").trim(),
     handlingMethod:String(get("handlingMethod")||"").trim(),
@@ -11289,7 +11354,7 @@ function normalizeRepairTicketFromArray(row, idx){
     restoreDate:normalizeExcelDate(get("restoreDate")),
     completeDate:normalizeExcelDate(get("completeDate")),
     result:String(get("result")||"").trim(),
-    remark:String(get("remark")||"").trim(),
+    remark,
     status,
     dispatchIds:[]
   };
@@ -11360,7 +11425,12 @@ function importRepairTicketExcel(event){
         if(opCount>=400){ await batch.commit(); batch=firebaseDb.batch(); opCount=0; }
       }
       await batch.commit();
-      alert(`已匯入 ${count} 筆報修資料${replaceOld?"（已先清空舊報修案件）":"（追加匯入）"}${skipped?`，略過 ${skipped} 筆空白資料`:""}。\n\n來源工作表：${found.sheetName}，標題列：第 ${found.headerRow+1} 列。`);
+      // 有機碼的匯入資料，一併同步到客戶資料
+      let syncedCount=0;
+      importedRows.forEach(item=>{
+        if(item.machineCode && syncMachineCodeToCustomer(item.customerCode, item.customerName, item.machineCode)) syncedCount++;
+      });
+      alert(`已匯入 ${count} 筆報修資料${replaceOld?"（已先清空舊報修案件）":"（追加匯入）"}${skipped?`，略過 ${skipped} 筆空白資料`:""}${syncedCount?`，其中 ${syncedCount} 筆機碼已同步到客戶資料`:""}。\n\n來源工作表：${found.sheetName}，標題列：第 ${found.headerRow+1} 列。`);
       event.target.value="";
     }catch(err){
       console.error(err);
