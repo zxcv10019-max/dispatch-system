@@ -838,6 +838,51 @@ body.dispatch-drawer-lock{overflow:hidden}
   .dispatch-drawer .field-wide{grid-column:auto}
 }
 
+/* ===== 📋 報修管理（repairTickets）===== */
+#repairTicketDrawer.dispatch-drawer{
+  position:fixed; top:0; right:0; bottom:0;
+  width:min(820px,96vw);
+  background:#f3f3f3;
+  box-shadow:-6px 0 24px rgba(0,0,0,.28);
+  z-index:901;
+  transform:translateX(100%);
+  transition:transform .28s ease;
+  display:flex; flex-direction:column;
+  min-height:0;
+}
+#repairTicketDrawer.dispatch-drawer.open{ transform:translateX(0); }
+.rt-section-title{font-weight:bold;font-size:13px;color:#2f3542;margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid #dfe4ea}
+.rt-section-title:first-of-type{margin-top:0}
+.rt-weekday{font-size:11px;color:#888;margin-left:4px}
+.rt-dispatch-list, .rt-history-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.rt-dispatch-item{background:#eaf6ff;border:1px solid #b3d8f0;border-radius:6px;padding:8px 10px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.rt-history-item{background:#f8f9fa;border:1px solid #e0e0e0;border-radius:6px;padding:7px 10px;font-size:12.5px}
+.rt-history-empty, .rt-dispatch-empty{color:#999;font-size:12px}
+
+.rt-stats{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px 0}
+.rt-stat-card{flex:1 1 110px;min-width:100px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:8px 10px;cursor:pointer;text-align:center;transition:box-shadow .15s}
+.rt-stat-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.rt-stat-card.active{border-color:#0984e3;box-shadow:0 0 0 2px rgba(9,132,227,.25)}
+.rt-stat-num{font-size:20px;font-weight:bold;color:#2f3542}
+.rt-stat-label{font-size:11px;color:#666;margin-top:2px}
+
+.rt-status-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;white-space:nowrap;background:#f1f2f6;border:1px solid #ccc}
+
+.rt-table-wrap{display:block}
+.rt-cards{display:none;padding:10px;grid-template-columns:1fr;gap:10px}
+.rt-card{background:#fff;border:1px solid #ddd;border-left:5px solid #0984e3;border-radius:8px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.rt-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.rt-card-title{font-weight:bold;font-size:15px;color:#2f3542}
+.rt-card-meta{font-size:12px;color:#777;margin-top:3px}
+.rt-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;margin-top:10px;font-size:12.5px}
+.rt-card-actions{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.rt-card-actions button{font-size:12px}
+
+@media(max-width:900px){
+  .rt-table-wrap{display:none}
+  .rt-cards{display:grid}
+  #repairTicketDrawer.dispatch-drawer{width:100vw}
+}
 
 .export-range-label{font-size:12px;align-self:center;color:#333;font-weight:bold}
 .export-date{min-width:138px!important}
@@ -1837,6 +1882,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
   <button id="tabCustomer" onclick="showPage('customerPage')">客戶資料</button>
   <button id="tabList" onclick="showPage('listPage')">派工明細</button>
   <button id="tabRepair" onclick="showPage('repairPage')">🛠️ 報修案件 <span id="repairPendingCount" style="background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;display:none">0</span></button>
+  <button id="tabRepairManage" onclick="showPage('repairManagePage')">📋 報修管理 <span id="repairTicketPendingCount" style="background:#d63031;color:#fff;border-radius:999px;padding:1px 6px;font-size:11px;display:none">0</span></button>
   <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
   <button id="tabCartridge" onclick="showPage('cartridgePage')">🔄 換芯名單</button>
   <button id="tabStats" onclick="showPage('statsPage')" style="display:none">📊 派工統計</button>
@@ -1972,6 +2018,143 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
   </div>
   <div class="summary" id="repairSummary">報修案件載入中…</div>
   <div class="repair-list" id="repairList"></div>
+</div>
+
+<div id="repairManagePage" class="page">
+  <div class="toolbar">
+    <button style="background:#218c74" onclick="openRepairTicketDrawer()">＋新增報修</button>
+    <input id="rtSearch" placeholder="🔍 搜尋客編／姓名／電話／機碼" style="min-width:220px" oninput="renderRepairTicketList()">
+    <select id="rtStatusFilter" onchange="renderRepairTicketList()" title="狀態篩選">
+      <option value="全部">全部狀態</option>
+      <option>🔴 待聯絡</option>
+      <option>🟠 待預約</option>
+      <option>🟡 已預約</option>
+      <option>🔵 已派工</option>
+      <option>🟣 送修中</option>
+      <option>🟢 待復機</option>
+      <option>⚫ 已完成</option>
+    </select>
+    <input type="date" id="rtDateFilter" onchange="renderRepairTicketList()" title="報修日期篩選">
+    <button style="background:#888" onclick="document.getElementById('rtDateFilter').value='';renderRepairTicketList()">清除日期</button>
+    <button onclick="loadRepairTickets()">重新整理</button>
+  </div>
+
+  <div class="rt-stats" id="rtStats"></div>
+  <div class="summary" id="rtSummary">報修案件載入中…</div>
+
+  <div class="rt-table-wrap">
+    <div class="customer-table"><table id="rtTable"></table></div>
+  </div>
+  <div class="rt-cards" id="rtCards"></div>
+</div>
+
+<div id="repairTicketDrawerOverlay" class="dispatch-drawer-overlay" onclick="closeRepairTicketDrawer()"></div>
+<div id="repairTicketDrawer" class="dispatch-drawer rt-drawer">
+  <div class="dispatch-drawer-header">
+    <h3 id="rtDrawerTitle">新增報修單</h3>
+    <button class="dispatch-drawer-close" onclick="closeRepairTicketDrawer()" title="關閉">✕</button>
+  </div>
+  <div class="dispatch-drawer-body">
+  <div class="form-card">
+    <input type="hidden" id="rtId">
+
+    <div class="rt-section-title">基本資料</div>
+    <div class="form-grid">
+      <div class="field"><label>報修日期 <span class="required">*</span></label><input type="date" id="rtReportDate" onchange="rtOnDateChange();rtSuggestStatus()"> <span class="rt-weekday" id="rtReportDateWeekday"></span></div>
+      <div class="field"><label>客戶代號</label><input id="rtCustomerCode" list="customerCodeList" onchange="fillRepairCustomerByCode()"></div>
+      <div class="field"><label>客戶姓名</label><input id="rtCustomerName"></div>
+      <div class="field"><label>電話</label><input id="rtPhone"></div>
+      <div class="field-wide field"><label>地址</label><input id="rtAddress"></div>
+    </div>
+
+    <div class="rt-section-title">機器資料</div>
+    <div class="form-grid">
+      <div class="field"><label>機型</label><input id="rtModel"></div>
+      <div class="field"><label>機碼</label><input id="rtMachineCode" onchange="renderRepairHistory()"></div>
+      <div class="field">
+        <label>保固狀態</label>
+        <select id="rtWarranty"><option value="">— 請選擇 —</option><option>保內</option><option>保外</option></select>
+      </div>
+    </div>
+
+    <div class="rt-section-title">報修內容</div>
+    <div class="form-grid">
+      <div class="field"><label>報修項目</label><input id="rtIssue" placeholder="例如：漏水、不出冰水、跳電"></div>
+      <div class="field"><label>機器狀況</label><input id="rtCondition"></div>
+      <div class="field-wide field"><label>詳細說明</label><textarea id="rtDescription" rows="3"></textarea></div>
+      <div class="field">
+        <label>處理方式</label>
+        <select id="rtHandlingMethod" onchange="rtSuggestStatus()">
+          <option value="">— 請選擇 —</option>
+          <option>現場維修</option>
+          <option>拆機</option>
+          <option>其他</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="rt-section-title">預約 ／ 備機</div>
+    <div class="form-grid">
+      <div class="field"><label>預約日期</label><input type="date" id="rtAppointmentDate" onchange="rtOnDateChange();rtSuggestStatus()"> <span class="rt-weekday" id="rtAppointmentDateWeekday"></span></div>
+      <div class="field"><label>預約時段</label><input id="rtAppointmentTime" placeholder="例如：上午 / 14:00~16:00"></div>
+      <div class="field"><label>是否需要備機</label>
+        <select id="rtNeedLoaner"><option value="">否</option><option value="yes">需要</option></select>
+      </div>
+      <div class="field"><label>是否需要備新機</label>
+        <select id="rtNeedNewLoaner"><option value="">否</option><option value="yes">需要</option></select>
+      </div>
+    </div>
+
+    <div class="rt-section-title">維修追蹤</div>
+    <div class="form-grid">
+      <div class="field"><label>拆機日期</label><input type="date" id="rtRemoveDate" onchange="rtSuggestStatus()"></div>
+      <div class="field"><label>送廠日期</label><input type="date" id="rtSendFactoryDate" onchange="rtSuggestStatus()"></div>
+      <div class="field"><label>機回日期</label><input type="date" id="rtReturnDate" onchange="rtSuggestStatus()"></div>
+      <div class="field"><label>復機日期</label><input type="date" id="rtRestoreDate" onchange="rtSuggestStatus()"></div>
+    </div>
+
+    <div class="rt-section-title">結案</div>
+    <div class="form-grid">
+      <div class="field"><label>完成日期</label><input type="date" id="rtCompleteDate" onchange="rtSuggestStatus()"></div>
+      <div class="field-wide field"><label>處理結果</label><input id="rtResult"></div>
+      <div class="field-wide field"><label>備註</label><textarea id="rtRemark" rows="2"></textarea></div>
+    </div>
+
+    <div class="rt-section-title">系統欄位</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>報修狀態</label>
+        <select id="rtStatus">
+          <option>🔴 待聯絡</option>
+          <option>🟠 待預約</option>
+          <option>🟡 已預約</option>
+          <option>🔵 已派工</option>
+          <option>🟣 送修中</option>
+          <option>🟢 待復機</option>
+          <option>⚫ 已完成</option>
+        </select>
+      </div>
+      <div class="field"><label>建立人</label><input id="rtCreatedByDisplay" class="readonly" readonly></div>
+      <div class="field"><label>建立時間</label><input id="rtCreatedAtDisplay" class="readonly" readonly></div>
+      <div class="field"><label>最後修改時間</label><input id="rtUpdatedAtDisplay" class="readonly" readonly></div>
+    </div>
+
+    <div class="rt-section-title">派工紀錄</div>
+    <div id="rtDispatchList" class="rt-dispatch-list"></div>
+    <div class="field-full" style="margin:8px 0 4px;">
+      <button style="background:#0984e3" onclick="repairTicketCreateDispatch()">📅 建立派工</button>
+    </div>
+
+    <div class="rt-section-title">歷史維修紀錄</div>
+    <div id="rtHistoryList" class="rt-history-list"></div>
+
+    <div class="field-full" style="margin-top:16px;">
+      <button onclick="openRepairFormMap()" class="map-btn">開啟地址地圖</button>
+      <button id="rtSaveBtn" onclick="saveRepairTicket()">儲存報修單</button>
+      <button class="admin-only" style="background:#c0392b" onclick="deleteRepairTicket()">🗑️ 刪除報修單</button>
+    </div>
+  </div>
+  </div>
 </div>
 
 <div id="dispatchOverlay" class="dispatch-drawer-overlay" onclick="closeDispatchDrawer()"></div>
@@ -3446,6 +3629,11 @@ function showPage(pageId){
     if(tb)tb.classList.add("active");
     loadRepairRequests();
   }
+  if(pageId==="repairManagePage"){
+    const tb=document.getElementById("tabRepairManage");
+    if(tb)tb.classList.add("active");
+    if(typeof loadRepairTickets==='function') loadRepairTickets();
+  }
   if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgeTable();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");if(typeof lpTypeChange==='function')lpTypeChange();renderLeaveListLP();}
   if(pageId==="statsPage"){
@@ -3731,6 +3919,7 @@ function addJobFromForm(){
   if(!job.customerCode&&!job.customerName){alert("請至少輸入客編或客名");return}
 
   const wasEditing = !!editingJobId;
+  const savedJobId = wasEditing ? editingJobId : job.id;
   if(editingJobId){
     const idx=jobs.findIndex(x=>x.id===editingJobId);
     if(idx>=0){
@@ -3751,6 +3940,11 @@ function addJobFromForm(){
   setupFixedBottomScrollbar();
   renderJobList();
   clearDispatchForm();
+
+  // 若這筆派工是從「報修管理」的報修單點擊「建立派工」帶入的，儲存後回頭把派工 ID 連結回報修單
+  if(typeof afterDispatchSavedForRepairTicket==='function'){
+    try{ afterDispatchSavedForRepairTicket(savedJobId, job); }catch(e){}
+  }
 
   showToast(wasEditing ? "✅ 已更新派工" : "✅ 已新增派工");
 }
@@ -10662,6 +10856,530 @@ setTimeout(() => {
     if(firebaseDb) loadRepairRequests();
   }catch(e){}
 }, 2500);
+</script>
+
+<script>
+// =====================================================================
+// 📋 報修管理（repairTickets）：報修案件的生命週期管理
+// 獨立於既有的 repairRequests（自助報修收件匣），使用獨立 collection「repairTickets」。
+// 沿用既有的 Firebase / 權限（requireEdit / isAdmin）/ 新增派工 Drawer 架構。
+// =====================================================================
+let repairTickets = [];
+let repairTicketsUnsubscribe = null;
+let editingRepairTicketId = null;
+let rtCurrentDispatchIds = [];
+let pendingRepairLinkTicketId = null; // 從報修單點「建立派工」後，等待派工儲存完成回頭連結
+
+const RT_STATUSES = ["🔴 待聯絡","🟠 待預約","🟡 已預約","🔵 已派工","🟣 送修中","🟢 待復機","⚫ 已完成"];
+const RT_STATUS_COLORS = {
+  "🔴 待聯絡":"#d63031", "🟠 待預約":"#e67e22", "🟡 已預約":"#f0a500",
+  "🔵 已派工":"#0984e3", "🟣 送修中":"#8e44ad", "🟢 待復機":"#16a085", "⚫ 已完成":"#57606f"
+};
+
+function loadRepairTickets(){
+  const summaryBox = document.getElementById("rtSummary");
+  if(summaryBox) summaryBox.textContent = "報修案件載入中…";
+  if(!firebaseDb){
+    if(summaryBox) summaryBox.textContent = "Firebase 尚未連線";
+    return;
+  }
+  if(repairTicketsUnsubscribe){ repairTicketsUnsubscribe(); repairTicketsUnsubscribe = null; }
+  repairTicketsUnsubscribe = firebaseDb.collection("repairTickets")
+    .orderBy("createdAt","desc")
+    .onSnapshot(snapshot => {
+      repairTickets = snapshot.docs.map(doc => ({id:doc.id, ...doc.data()}));
+      renderRepairTicketStats();
+      renderRepairTicketList();
+      updateRepairTicketPendingBadge();
+      // 若目前正開著某筆報修單的抽屜，雲端資料剛好更新（例如連結了新派工），同步刷新顯示
+      if(editingRepairTicketId){
+        const t = repairTickets.find(x => x.id === editingRepairTicketId);
+        if(t){
+          rtCurrentDispatchIds = Array.isArray(t.dispatchIds) ? t.dispatchIds.slice() : [];
+          renderRepairDispatchList();
+          const statusEl = document.getElementById("rtStatus");
+          if(statusEl) statusEl.value = t.status || "🔴 待聯絡";
+        }
+      }
+    }, err => {
+      console.error(err);
+      if(summaryBox) summaryBox.textContent = "讀取失敗：" + err.message;
+    });
+}
+
+function updateRepairTicketPendingBadge(){
+  const count = repairTickets.filter(t => (t.status || "🔴 待聯絡") === "🔴 待聯絡").length;
+  const el = document.getElementById("repairTicketPendingCount");
+  if(!el) return;
+  el.textContent = count;
+  el.style.display = count ? "inline-block" : "none";
+}
+
+// ===== 狀態自動判斷 =====
+function rtComputeStatus(f){
+  if(f.completeDate) return "⚫ 已完成";
+  if(f.returnDate && !f.restoreDate) return "🟢 待復機";
+  if(f.removeDate || f.sendFactoryDate) return "🟣 送修中";
+  if(f.dispatchCount > 0) return "🔵 已派工";
+  if(f.appointmentDate) return "🟡 已預約";
+  return "🔴 待聯絡";
+}
+function rtSuggestStatus(){
+  const g = id => (document.getElementById(id) || {}).value || "";
+  const f = {
+    appointmentDate: g("rtAppointmentDate"),
+    removeDate: g("rtRemoveDate"),
+    sendFactoryDate: g("rtSendFactoryDate"),
+    returnDate: g("rtReturnDate"),
+    restoreDate: g("rtRestoreDate"),
+    completeDate: g("rtCompleteDate"),
+    dispatchCount: rtCurrentDispatchIds.length
+  };
+  const el = document.getElementById("rtStatus");
+  if(el) el.value = rtComputeStatus(f);
+}
+// 建立派工成功並連結回報修單時：只在目前狀態還「落後」於已派工時才自動推進，
+// 避免覆蓋掉更後面的手動狀態（例如已在送修中／待復機時又建立第二次派工，不應該退回已派工）。
+function rtStatusAfterLink(ticket){
+  const cur = (ticket && ticket.status) || "🔴 待聯絡";
+  const curIdx = RT_STATUSES.indexOf(cur);
+  const targetIdx = RT_STATUSES.indexOf("🔵 已派工");
+  if(curIdx === -1 || curIdx < targetIdx) return "🔵 已派工";
+  return null;
+}
+
+// ===== 星期顯示（不儲存，僅畫面顯示）=====
+function rtWeekdayLabel(dateStr){
+  if(!dateStr) return "";
+  const d = new Date(dateStr + "T00:00:00");
+  if(isNaN(d.getTime())) return "";
+  const names = ["日","一","二","三","四","五","六"];
+  return "（週" + names[d.getDay()] + "）";
+}
+function rtOnDateChange(){
+  const rEl = document.getElementById("rtReportDateWeekday");
+  const aEl = document.getElementById("rtAppointmentDateWeekday");
+  if(rEl) rEl.textContent = rtWeekdayLabel((document.getElementById("rtReportDate")||{}).value);
+  if(aEl) aEl.textContent = rtWeekdayLabel((document.getElementById("rtAppointmentDate")||{}).value);
+}
+
+// ===== 客戶代號自動帶入（沿用客戶資料庫 customers）=====
+function fillRepairCustomerByCode(){
+  const code = (document.getElementById("rtCustomerCode")||{}).value.trim();
+  if(!code) { renderRepairHistory(); return; }
+  const c = (typeof customers !== "undefined" ? customers : []).find(x => String(x.customerNo).trim() === code);
+  if(c){
+    document.getElementById("rtCustomerName").value = c.fullName || c.shortName || c.personName || "";
+    document.getElementById("rtPhone").value = c.mobile || "";
+    document.getElementById("rtAddress").value = c.deliveryAddress || "";
+  }
+  renderRepairHistory();
+}
+
+function openRepairFormMap(){
+  const address = (document.getElementById("rtAddress")||{}).value.trim();
+  if(!address){ alert("請先輸入或帶入地址"); return; }
+  window.open(mapUrl(address), "_blank");
+}
+
+// ===== 新增／編輯報修單 Drawer =====
+function clearRepairTicketFormFields(){
+  ["rtId","rtReportDate","rtCustomerCode","rtCustomerName","rtPhone","rtAddress",
+   "rtModel","rtMachineCode","rtIssue","rtCondition","rtDescription",
+   "rtAppointmentDate","rtAppointmentTime","rtRemoveDate","rtSendFactoryDate",
+   "rtReturnDate","rtRestoreDate","rtCompleteDate","rtResult","rtRemark",
+   "rtCreatedByDisplay","rtCreatedAtDisplay","rtUpdatedAtDisplay"
+  ].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+  ["rtWarranty","rtHandlingMethod","rtNeedLoaner","rtNeedNewLoaner"].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = "";
+  });
+  const rw = document.getElementById("rtReportDateWeekday"); if(rw) rw.textContent = "";
+  const aw = document.getElementById("rtAppointmentDateWeekday"); if(aw) aw.textContent = "";
+  rtCurrentDispatchIds = [];
+}
+
+function openRepairTicketDrawer(ticketId){
+  editingRepairTicketId = ticketId || null;
+  clearRepairTicketFormFields();
+  const title = document.getElementById("rtDrawerTitle");
+
+  if(ticketId){
+    const t = repairTickets.find(x => x.id === ticketId);
+    if(!t){ alert("找不到這筆報修單，可能已被刪除。"); return; }
+    if(title) title.textContent = "編輯報修單";
+    document.getElementById("rtId").value = t.id;
+    document.getElementById("rtReportDate").value = t.reportDate || "";
+    document.getElementById("rtCustomerCode").value = t.customerCode || "";
+    document.getElementById("rtCustomerName").value = t.customerName || "";
+    document.getElementById("rtPhone").value = t.phone || "";
+    document.getElementById("rtAddress").value = t.address || "";
+    document.getElementById("rtModel").value = t.model || "";
+    document.getElementById("rtMachineCode").value = t.machineCode || "";
+    document.getElementById("rtWarranty").value = t.warranty || "";
+    document.getElementById("rtIssue").value = t.issue || "";
+    document.getElementById("rtCondition").value = t.condition || "";
+    document.getElementById("rtDescription").value = t.description || "";
+    document.getElementById("rtHandlingMethod").value = t.handlingMethod || "";
+    document.getElementById("rtAppointmentDate").value = t.appointmentDate || "";
+    document.getElementById("rtAppointmentTime").value = t.appointmentTime || "";
+    document.getElementById("rtNeedLoaner").value = t.needLoaner ? "yes" : "";
+    document.getElementById("rtNeedNewLoaner").value = t.needNewLoaner ? "yes" : "";
+    document.getElementById("rtRemoveDate").value = t.removeDate || "";
+    document.getElementById("rtSendFactoryDate").value = t.sendFactoryDate || "";
+    document.getElementById("rtReturnDate").value = t.returnDate || "";
+    document.getElementById("rtRestoreDate").value = t.restoreDate || "";
+    document.getElementById("rtCompleteDate").value = t.completeDate || "";
+    document.getElementById("rtResult").value = t.result || "";
+    document.getElementById("rtRemark").value = t.remark || "";
+    document.getElementById("rtStatus").value = t.status || "🔴 待聯絡";
+    document.getElementById("rtCreatedByDisplay").value = t.createdBy || "";
+    document.getElementById("rtCreatedAtDisplay").value = repairDate(t.createdAt);
+    document.getElementById("rtUpdatedAtDisplay").value = repairDate(t.updatedAt);
+    rtCurrentDispatchIds = Array.isArray(t.dispatchIds) ? t.dispatchIds.slice() : [];
+  } else {
+    if(title) title.textContent = "新增報修單";
+    const dEl = document.getElementById("rtReportDate"); if(dEl) dEl.valueAsDate = new Date();
+    document.getElementById("rtStatus").value = "🔴 待聯絡";
+    document.getElementById("rtCreatedByDisplay").value = (currentUser && (currentUser.displayName || currentUser.email)) || "";
+  }
+
+  rtOnDateChange();
+  renderRepairDispatchList();
+  renderRepairHistory();
+
+  const panel = document.getElementById("repairTicketDrawer");
+  const overlay = document.getElementById("repairTicketDrawerOverlay");
+  if(panel) panel.classList.add("open");
+  if(overlay) overlay.classList.add("open");
+  document.body.classList.add("dispatch-drawer-lock");
+}
+
+function closeRepairTicketDrawer(){
+  const panel = document.getElementById("repairTicketDrawer");
+  const overlay = document.getElementById("repairTicketDrawerOverlay");
+  if(panel) panel.classList.remove("open");
+  if(overlay) overlay.classList.remove("open");
+  document.body.classList.remove("dispatch-drawer-lock");
+  editingRepairTicketId = null;
+}
+
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape"){
+    const panel = document.getElementById("repairTicketDrawer");
+    if(panel && panel.classList.contains("open")) closeRepairTicketDrawer();
+  }
+});
+
+// ===== 派工紀錄（一張報修單可關聯多筆派工，例如拆機一次、復機一次）=====
+function renderRepairDispatchList(){
+  const box = document.getElementById("rtDispatchList");
+  if(!box) return;
+  if(!rtCurrentDispatchIds.length){
+    box.innerHTML = '<div class="rt-dispatch-empty">尚未建立派工。</div>';
+    return;
+  }
+  box.innerHTML = rtCurrentDispatchIds.map(jid => {
+    const j = (typeof jobs !== "undefined" ? jobs : []).find(x => String(x.id) === String(jid));
+    if(!j){
+      return `<div class="rt-dispatch-item"><span>派工 ID：${repairEsc(jid)}（找不到，可能已被刪除）</span></div>`;
+    }
+    const dateTxt = (j.isHold || !j.date) ? "暫押未排日期" : j.date;
+    const timeTxt = [j.startTime || j.time || "", j.endTime || ""].filter(Boolean).join(" ~ ");
+    return `<div class="rt-dispatch-item">
+      <span>📅 ${repairEsc(dateTxt)}${timeTxt ? "　⏰ " + repairEsc(timeTxt) : ""}　👷 ${repairEsc(j.engineer || "")}</span>
+      <button style="background:#40739e" onclick="viewDispatchFromTicket(${JSON.stringify(String(j.id))})">查看派工</button>
+    </div>`;
+  }).join("");
+}
+function viewDispatchFromTicket(jobIdStr){
+  closeRepairTicketDrawer();
+  const j = (typeof jobs !== "undefined" ? jobs : []).find(x => String(x.id) === String(jobIdStr));
+  if(j && typeof editJobForm === "function") editJobForm(j.id);
+}
+
+// ===== 維修歷史：優先依機碼查詢，沒有機碼則依客戶代號查詢 =====
+function renderRepairHistory(){
+  const box = document.getElementById("rtHistoryList");
+  if(!box) return;
+  const machineCode = (document.getElementById("rtMachineCode")||{}).value.trim();
+  const customerCode = (document.getElementById("rtCustomerCode")||{}).value.trim();
+
+  let list = [];
+  if(machineCode){
+    list = repairTickets.filter(t => t.id !== editingRepairTicketId && String(t.machineCode||"").trim() === machineCode);
+  } else if(customerCode){
+    list = repairTickets.filter(t => t.id !== editingRepairTicketId && String(t.customerCode||"").trim() === customerCode);
+  }
+  list = list.slice()
+    .sort((a,b) => String(b.reportDate||"").localeCompare(String(a.reportDate||"")))
+    .slice(0, 10);
+
+  if(!machineCode && !customerCode){
+    box.innerHTML = '<div class="rt-history-empty">請先填寫機碼或客戶代號，以便查詢歷史維修紀錄。</div>';
+    return;
+  }
+  if(!list.length){
+    box.innerHTML = '<div class="rt-history-empty">查無歷史維修紀錄。</div>';
+    return;
+  }
+  box.innerHTML = list.map(t => {
+    const parts = [t.reportDate || "-", t.issue || "未分類", t.result || t.status || ""].filter(Boolean);
+    return `<div class="rt-history-item" onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})" style="cursor:pointer">
+      ${parts.map(repairEsc).join("｜")}
+    </div>`;
+  }).join("");
+}
+
+// ===== 儲存／刪除報修單 =====
+async function saveRepairTicket(){
+  if(!requireEdit("新增/修改報修單")) return;
+  if(!firebaseDb){ alert("Firebase 尚未連線"); return; }
+
+  const g = id => (document.getElementById(id)||{}).value || "";
+  const reportDate = g("rtReportDate");
+  const customerCode = g("rtCustomerCode").trim();
+  const customerName = g("rtCustomerName").trim();
+  if(!reportDate){ alert("請填寫報修日期"); return; }
+  if(!customerCode && !customerName){ alert("請至少輸入客戶代號或客戶姓名"); return; }
+
+  const data = {
+    reportDate,
+    customerCode,
+    customerName,
+    phone: g("rtPhone").trim(),
+    address: g("rtAddress").trim(),
+    model: g("rtModel").trim(),
+    machineCode: g("rtMachineCode").trim(),
+    warranty: g("rtWarranty"),
+    issue: g("rtIssue").trim(),
+    condition: g("rtCondition").trim(),
+    description: g("rtDescription").trim(),
+    handlingMethod: g("rtHandlingMethod"),
+    appointmentDate: g("rtAppointmentDate"),
+    appointmentTime: g("rtAppointmentTime").trim(),
+    needLoaner: g("rtNeedLoaner") === "yes",
+    needNewLoaner: g("rtNeedNewLoaner") === "yes",
+    removeDate: g("rtRemoveDate"),
+    sendFactoryDate: g("rtSendFactoryDate"),
+    returnDate: g("rtReturnDate"),
+    restoreDate: g("rtRestoreDate"),
+    completeDate: g("rtCompleteDate"),
+    result: g("rtResult").trim(),
+    remark: g("rtRemark").trim(),
+    status: g("rtStatus") || "🔴 待聯絡",
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try{
+    if(editingRepairTicketId){
+      await firebaseDb.collection("repairTickets").doc(editingRepairTicketId).update(data);
+      showToast("✅ 已更新報修單");
+    }else{
+      data.dispatchIds = [];
+      data.createdBy = (currentUser && (currentUser.displayName || currentUser.email)) || "";
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await firebaseDb.collection("repairTickets").add(data);
+      showToast("✅ 已新增報修單");
+    }
+    closeRepairTicketDrawer();
+  }catch(e){
+    alert("儲存失敗：" + e.message);
+  }
+}
+
+async function deleteRepairTicket(){
+  if(!isAdmin()){ alert("只有管理員可以刪除報修單。"); return; }
+  if(!editingRepairTicketId){ closeRepairTicketDrawer(); return; }
+  const t = repairTickets.find(x => x.id === editingRepairTicketId);
+  const label = t ? `${t.customerName || t.customerCode || ""}｜${t.issue || ""}` : editingRepairTicketId;
+  if(!confirm(`確定要永久刪除這筆報修單嗎？\n「${label}」\n此動作無法復原。`)) return;
+  try{
+    await firebaseDb.collection("repairTickets").doc(editingRepairTicketId).delete();
+    showToast("已刪除報修單");
+    closeRepairTicketDrawer();
+  }catch(e){
+    alert("刪除失敗：" + e.message);
+  }
+}
+
+// ===== 報修單 →「建立派工」：帶入既有的新增派工 Drawer =====
+function repairTicketCreateDispatch(){
+  if(!requireEdit("建立派工")) return;
+  if(!editingRepairTicketId){
+    alert("請先儲存報修單，才能建立對應的派工。");
+    return;
+  }
+  const t = repairTickets.find(x => x.id === editingRepairTicketId);
+  if(!t){ alert("找不到這筆報修單"); return; }
+
+  pendingRepairLinkTicketId = editingRepairTicketId;
+  closeRepairTicketDrawer();
+
+  clearDispatchForm();
+  document.getElementById("fCustomerCode").value = t.customerCode || "";
+  document.getElementById("fCustomerName").value = t.customerName || "";
+  document.getElementById("fPhone").value = t.phone || "";
+  document.getElementById("fAddress").value = t.address || "";
+  const p = parseTaiwanAddress(t.address || "");
+  document.getElementById("fCity").value = p.city || "";
+  document.getElementById("fDistrict").value = p.district || "";
+  if(t.appointmentDate) document.getElementById("fDate").value = t.appointmentDate;
+  updateCodeName();
+  syncCityChecks();
+
+  const contentLines = [
+    `【報修管理】${t.issue || ""}`,
+    t.model ? `機型：${t.model}` : "",
+    t.machineCode ? `機碼：${t.machineCode}` : "",
+    t.condition ? `機況：${t.condition}` : "",
+    t.handlingMethod ? `處理方式：${t.handlingMethod}` : "",
+    t.description || ""
+  ].filter(Boolean);
+  document.getElementById("fWorkContent").value = contentLines.join("\n");
+
+  showPage("dispatchPage");
+  if(typeof renderAvailableSlots === "function") renderAvailableSlots();
+  showToast("已帶入報修資料，請選擇工程師與時間後儲存派工");
+}
+
+// 由 addJobFromForm() 儲存派工成功後呼叫（見該函式結尾的呼叫點）
+function afterDispatchSavedForRepairTicket(jobId, job){
+  if(!pendingRepairLinkTicketId) return;
+  const ticketId = pendingRepairLinkTicketId;
+  pendingRepairLinkTicketId = null;
+  linkDispatchToRepairTicket(ticketId, jobId);
+}
+async function linkDispatchToRepairTicket(ticketId, jobId){
+  if(!firebaseDb) return;
+  try{
+    const t = repairTickets.find(x => x.id === ticketId);
+    const update = {
+      dispatchIds: firebase.firestore.FieldValue.arrayUnion(jobId),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    const newStatus = rtStatusAfterLink(t);
+    if(newStatus) update.status = newStatus;
+    await firebaseDb.collection("repairTickets").doc(ticketId).update(update);
+    showToast("✅ 已建立派工並連結報修單");
+  }catch(e){
+    console.error(e);
+    alert("派工已建立，但連結回報修單失敗：" + e.message);
+  }
+}
+
+// ===== 列表：統計卡片／表格（桌機）／卡片（手機）=====
+function renderRepairTicketStats(){
+  const box = document.getElementById("rtStats");
+  if(!box) return;
+  const curFilter = (document.getElementById("rtStatusFilter")||{}).value || "全部";
+  const counts = {};
+  RT_STATUSES.forEach(s => counts[s] = 0);
+  repairTickets.forEach(t => {
+    const s = t.status || "🔴 待聯絡";
+    if(counts[s] === undefined) counts[s] = 0;
+    counts[s]++;
+  });
+  box.innerHTML = RT_STATUSES.map(s => {
+    const active = curFilter === s;
+    return `<div class="rt-stat-card${active ? " active" : ""}" onclick="rtFilterByStat(${JSON.stringify(s)})">
+      <div class="rt-stat-num">${counts[s] || 0}</div>
+      <div class="rt-stat-label">${repairEsc(s)}</div>
+    </div>`;
+  }).join("");
+}
+function rtFilterByStat(status){
+  const sel = document.getElementById("rtStatusFilter");
+  if(!sel) return;
+  sel.value = (sel.value === status) ? "全部" : status;
+  renderRepairTicketStats();
+  renderRepairTicketList();
+}
+
+function renderRepairTicketList(){
+  const q = ((document.getElementById("rtSearch")||{}).value || "").trim().toLowerCase();
+  const statusFilter = (document.getElementById("rtStatusFilter")||{}).value || "全部";
+  const dateFilter = (document.getElementById("rtDateFilter")||{}).value || "";
+
+  const list = repairTickets.filter(t => {
+    const statusOk = statusFilter === "全部" || (t.status || "🔴 待聯絡") === statusFilter;
+    const dateOk = !dateFilter || t.reportDate === dateFilter;
+    const searchOk = !q || [t.customerCode, t.customerName, t.phone, t.machineCode]
+      .join(" ").toLowerCase().includes(q);
+    return statusOk && dateOk && searchOk;
+  }).sort((a,b) => String(b.reportDate||"").localeCompare(String(a.reportDate||"")));
+
+  const summary = document.getElementById("rtSummary");
+  if(summary) summary.textContent = `目前顯示 ${list.length} 件｜全部 ${repairTickets.length} 件`;
+
+  renderRepairTicketTable(list);
+  renderRepairTicketCards(list);
+}
+
+function renderRepairTicketTable(list){
+  const table = document.getElementById("rtTable");
+  if(!table) return;
+  if(!list.length){
+    table.innerHTML = '<tr><td style="padding:16px;color:#999">目前沒有符合條件的報修案件。</td></tr>';
+    return;
+  }
+  let html = "<tr><th>狀態</th><th>報修日</th><th>客戶</th><th>機型／機碼</th><th>機器狀況</th><th>預約日期</th><th>處理方式</th><th>備機</th><th>操作</th></tr>";
+  list.forEach(t => {
+    const status = t.status || "🔴 待聯絡";
+    const color = RT_STATUS_COLORS[status] || "#777";
+    const codeName = [t.customerCode, t.customerName].filter(Boolean).join(" ") || "-";
+    const modelCode = [t.model, t.machineCode].filter(Boolean).join(" / ") || "-";
+    const loanerTxt = [t.needLoaner ? "備機" : "", t.needNewLoaner ? "備新機" : ""].filter(Boolean).join("、") || "-";
+    html += `<tr>
+      <td><span class="rt-status-badge" style="border-color:${color};color:${color}">${repairEsc(status)}</span></td>
+      <td>${repairEsc(t.reportDate || "-")}</td>
+      <td>${repairEsc(codeName)}</td>
+      <td>${repairEsc(modelCode)}</td>
+      <td>${repairEsc(t.condition || t.issue || "-")}</td>
+      <td>${repairEsc(t.appointmentDate || "-")}</td>
+      <td>${repairEsc(t.handlingMethod || "-")}</td>
+      <td>${repairEsc(loanerTxt)}</td>
+      <td><button onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})">查看</button></td>
+    </tr>`;
+  });
+  table.innerHTML = html;
+}
+
+function renderRepairTicketCards(list){
+  const box = document.getElementById("rtCards");
+  if(!box) return;
+  if(!list.length){
+    box.innerHTML = '<div class="help">目前沒有符合條件的報修案件。</div>';
+    return;
+  }
+  box.innerHTML = list.map(t => {
+    const status = t.status || "🔴 待聯絡";
+    const color = RT_STATUS_COLORS[status] || "#777";
+    const codeName = [t.customerCode, t.customerName].filter(Boolean).join(" ") || "未填客戶";
+    const modelCode = [t.model, t.machineCode].filter(Boolean).join(" / ");
+    const loanerTxt = [t.needLoaner ? "備機" : "", t.needNewLoaner ? "備新機" : ""].filter(Boolean).join("、");
+    return `<div class="rt-card" style="border-left-color:${color}" onclick="openRepairTicketDrawer(${JSON.stringify(t.id)})">
+      <div class="rt-card-top">
+        <div>
+          <div class="rt-card-title">${repairEsc(t.issue || "未分類")}｜${repairEsc(codeName)}</div>
+          <div class="rt-card-meta">${repairEsc(t.reportDate || "-")}${modelCode ? "｜" + repairEsc(modelCode) : ""}</div>
+        </div>
+        <span class="rt-status-badge" style="border-color:${color};color:${color}">${repairEsc(status)}</span>
+      </div>
+      <div class="rt-card-grid">
+        <div><b>機況：</b>${repairEsc(t.condition || "-")}</div>
+        <div><b>處理方式：</b>${repairEsc(t.handlingMethod || "-")}</div>
+        <div><b>預約日期：</b>${repairEsc(t.appointmentDate || "-")}</div>
+        <div><b>備機：</b>${repairEsc(loanerTxt || "-")}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+setTimeout(() => {
+  try{
+    if(firebaseDb) loadRepairTickets();
+  }catch(e){}
+}, 2600);
 </script>
 
 <div id="repairImageLightbox" class="repair-lightbox hidden" onclick="closeRepairImage()">
