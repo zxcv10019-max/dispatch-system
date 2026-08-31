@@ -1767,6 +1767,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 .os-badge.vendor{background:#cfe2f3;color:#134f5c}.os-badge.service{background:#fff2cc;color:#7f6000}
 .os-badge.repair{background:#f4cccc;color:#990000}.os-badge.restore{background:#d9d9d9;color:#333}.os-badge.install{background:#c9daf8;color:#073763}
 .os-checked{font-size:18px;font-weight:bold;color:#f39c12}.os-unchecked{font-size:18px;color:#b7b7b7}
+.os-cancelled-tag{color:#b33939;font-weight:700}
 .os-row-actions{display:flex;gap:4px;justify-content:center}.os-row-actions button{padding:4px 7px;font-size:11px}
 .os-save-btn{background:#2f3542!important}.os-save-btn:hover{background:#57606f!important}.os-cancel-btn{background:#888!important}.os-del-btn{background:#b33939!important}
 .os-view-btn{background:#e9edf2!important;color:#333!important;border:1px solid #b8c0cc!important;padding:6px 12px!important;font-weight:bold}
@@ -11152,6 +11153,7 @@ async function saveInlineOutsourceRow(id){
     completed:chk('Completed'),
     service:val('Service'),
     content:val('Content'),
+    cancelled:chk('Cancelled'),
     updatedAt:new Date().toISOString()
   };
   row.customer=[row.customerCode,row.customerName].filter(Boolean).join(' ');
@@ -11225,13 +11227,13 @@ function renderOutsourceTable(){
         <td class="os-center"><input type="checkbox" id="osEditCompleted_${osEsc(r.id)}" ${r.completed?'checked':''}></td>
         <td><select id="osEditService_${osEsc(r.id)}">${optionHtml(serviceOptions,r.service||'換芯')}</select></td>
         <td><input id="osEditContent_${osEsc(r.id)}" value="${osEsc(r.content||'')}"></td>
-        <td><div class="os-row-actions"><button class="os-inline-save" onclick="saveInlineOutsourceRow('${osEsc(r.id)}')">💾 儲存</button><button class="os-inline-cancel" onclick="cancelInlineOutsourceEdit()">取消</button></div></td>
+        <td><div class="os-row-actions" style="flex-wrap:wrap;gap:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12.5px;color:#b33939;font-weight:600;white-space:nowrap"><input type="checkbox" id="osEditCancelled_${osEsc(r.id)}" ${r.cancelled?'checked':''}> 標記為取消</label><button class="os-inline-save" onclick="saveInlineOutsourceRow('${osEsc(r.id)}')">💾 儲存</button><button class="os-inline-cancel" onclick="cancelInlineOutsourceEdit()">取消編輯</button></div></td>
       </tr>`;
     }
     return `<tr>
-      <td class="os-center">${osEsc(osDateText(r.date))}</td><td class="os-center">${osEsc(osWeekday(r.date))}</td><td class="os-center">${osEsc(r.time||'')}</td><td>${osEsc(r.customerCode ? (r.customerCode + (r.customerName?' '+r.customerName:'')) : (r.customer||''))}</td>
+      <td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.date))}</td><td class="os-center">${osEsc(osWeekday(r.date))}</td><td class="os-center">${osEsc(r.time||'')}</td><td>${osEsc(r.customerCode ? (r.customerCode + (r.customerName?' '+r.customerName:'')) : (r.customer||''))}</td>
       <td class="os-center">${osEsc(r.city||'')}</td><td class="os-center">${osEsc(r.district||'')}</td><td>${osEsc(r.address||'')}</td><td class="os-center">${r.vendor?`<span class="os-badge vendor">${osEsc(r.vendor)}</span>`:''}</td>
-      <td class="os-center"><input type="checkbox" ${r.printed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','printed',this.checked)"></td><td class="os-center">${osEsc(osDateText(r.shipDate))}</td><td>${osEsc(r.tracking||'')}</td><td class="os-center"><input type="checkbox" ${r.photo?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','photo',this.checked)"></td><td class="os-center"><input type="checkbox" ${r.completed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','completed',this.checked)"></td>
+      <td class="os-center"><input type="checkbox" ${r.printed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','printed',this.checked)"></td><td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.shipDate))}</td><td>${osEsc(r.tracking||'')}</td><td class="os-center"><input type="checkbox" ${r.photo?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','photo',this.checked)"></td><td class="os-center"><input type="checkbox" ${r.completed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','completed',this.checked)"></td>
       <td class="os-center">${osServiceBadge(r.service||'')}</td><td>${osEsc(r.content||'')}</td>
       <td><div class="os-row-actions"><button onclick="editOutsourceRow('${osEsc(r.id)}')">編輯</button><button class="os-del-btn" onclick="deleteOutsourceRow('${osEsc(r.id)}')">刪除</button></div></td>
     </tr>`;
