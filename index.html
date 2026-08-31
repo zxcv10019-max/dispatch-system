@@ -2023,6 +2023,8 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 <div id="repairManagePage" class="page">
   <div class="toolbar">
     <button style="background:#218c74" onclick="openRepairTicketDrawer()">＋新增報修</button>
+    <button onclick="document.getElementById('rtExcelFile').click()" style="background:#2980b9">📥 一鍵匯入</button>
+    <input type="file" id="rtExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importRepairTicketExcel(event)">
     <input id="rtSearch" placeholder="🔍 搜尋客編／姓名／電話／機碼" style="min-width:220px" oninput="renderRepairTicketList()">
     <select id="rtStatusFilter" onchange="renderRepairTicketList()" title="狀態篩選">
       <option value="全部">全部狀態</option>
@@ -11200,6 +11202,173 @@ async function deleteRepairTicket(){
   }catch(e){
     alert("刪除失敗：" + e.message);
   }
+}
+
+// ===== 報修管理：Excel/CSV 一鍵匯入 =====
+function findRepairTicketSheet(workbook){
+  let best=null;
+  workbook.SheetNames.forEach(sheetName=>{
+    const sheet=workbook.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:true});
+    for(let r=0;r<Math.min(rows.length,30);r++){
+      const headers=rows[r]||[];
+      const idx={
+        reportDate:findHeaderIndex(headers,["報修日期","日期"]),
+        customerCode:findHeaderIndex(headers,["客戶編號","客編","客代","客戶代號"]),
+        customerName:findHeaderIndex(headers,["客戶姓名","姓名","客戶名稱","客名"]),
+        phone:findHeaderIndex(headers,["電話","行動電話","聯絡電話"]),
+        address:findHeaderIndex(headers,["地址","送貨地址","服務地址"]),
+        model:findHeaderIndex(headers,["機型"]),
+        machineCode:findHeaderIndex(headers,["機碼","序號","機身序號"]),
+        warranty:findHeaderIndex(headers,["保固","保固狀態"]),
+        issue:findHeaderIndex(headers,["報修問題","故障狀況","問題"]),
+        condition:findHeaderIndex(headers,["機況"]),
+        description:findHeaderIndex(headers,["說明","備註說明","詳細說明"]),
+        handlingMethod:findHeaderIndex(headers,["處理方式"]),
+        appointmentDate:findHeaderIndex(headers,["預約日期"]),
+        appointmentTime:findHeaderIndex(headers,["預約時間"]),
+        needLoaner:findHeaderIndex(headers,["需要備機","備機"]),
+        needNewLoaner:findHeaderIndex(headers,["需要新機","新機"]),
+        removeDate:findHeaderIndex(headers,["拆機日期"]),
+        sendFactoryDate:findHeaderIndex(headers,["送廠日期"]),
+        returnDate:findHeaderIndex(headers,["回機日期"]),
+        restoreDate:findHeaderIndex(headers,["復機日期"]),
+        completeDate:findHeaderIndex(headers,["完成日期"]),
+        result:findHeaderIndex(headers,["處理結果","結果"]),
+        remark:findHeaderIndex(headers,["備註"]),
+        status:findHeaderIndex(headers,["狀態"])
+      };
+      let score=0;
+      [idx.reportDate,idx.customerCode,idx.customerName,idx.phone,idx.address,idx.issue].forEach(v=>{if(v>=0)score++});
+      if(score>=3 && (!best || score>best.score)){
+        best={sheetName,rows,headerRow:r,headers,idx,score};
+      }
+    }
+  });
+  return best;
+}
+function rtTruthyCell(v){
+  const s=String(v==null?"":v).trim().toLowerCase();
+  if(!s) return false;
+  return ["v","✓","☑","是","true","1","yes","y","需要","o"].includes(s);
+}
+function normalizeRepairTicketFromArray(row, idx){
+  const get=(key)=>idx[key]>=0 ? row[idx[key]] : "";
+  let customerCode=String(get("customerCode")||"").trim();
+  let customerName=String(get("customerName")||"").trim();
+  let address=String(get("address")||"").trim();
+  let phone=String(get("phone")||"").trim();
+  // 地址/客名/電話沒填時，依客編去客戶資料庫自動帶入
+  if(customerCode && (!address || !customerName || !phone)){
+    const cust=(customers||[]).find(c=>String(c.customerNo||"").trim().toLowerCase()===customerCode.toLowerCase());
+    if(cust){
+      if(!customerName) customerName=cust.fullName||cust.shortName||cust.personName||"";
+      if(!address) address=cust.deliveryAddress||"";
+      if(!phone) phone=cust.mobile||"";
+    }
+  }
+  const rawStatus=String(get("status")||"").trim();
+  const status=RT_STATUSES.includes(rawStatus) ? rawStatus : "🔴 待聯絡";
+  return {
+    reportDate:normalizeExcelDate(get("reportDate")),
+    customerCode,customerName,phone,address,
+    model:String(get("model")||"").trim(),
+    machineCode:String(get("machineCode")||"").trim(),
+    warranty:String(get("warranty")||"").trim(),
+    issue:String(get("issue")||"").trim(),
+    condition:String(get("condition")||"").trim(),
+    description:String(get("description")||"").trim(),
+    handlingMethod:String(get("handlingMethod")||"").trim(),
+    appointmentDate:normalizeExcelDate(get("appointmentDate")),
+    appointmentTime:normalizeExcelTime(get("appointmentTime")),
+    needLoaner:rtTruthyCell(get("needLoaner")),
+    needNewLoaner:rtTruthyCell(get("needNewLoaner")),
+    removeDate:normalizeExcelDate(get("removeDate")),
+    sendFactoryDate:normalizeExcelDate(get("sendFactoryDate")),
+    returnDate:normalizeExcelDate(get("returnDate")),
+    restoreDate:normalizeExcelDate(get("restoreDate")),
+    completeDate:normalizeExcelDate(get("completeDate")),
+    result:String(get("result")||"").trim(),
+    remark:String(get("remark")||"").trim(),
+    status,
+    dispatchIds:[]
+  };
+}
+function importRepairTicketExcel(event){
+  if(!requireEdit("匯入報修管理")){ if(event&&event.target) event.target.value=""; return; }
+  const file=event && event.target && event.target.files ? event.target.files[0] : null;
+  if(!file) return;
+  if(typeof XLSX==="undefined"){
+    alert("Excel 讀取套件沒有載入成功，請確認有網路後再重新整理網頁。");
+    return;
+  }
+  if(!firebaseDb){ alert("Firebase 尚未連線，無法匯入。"); event.target.value=""; return; }
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      const data=new Uint8Array(e.target.result);
+      const wb=XLSX.read(data,{type:"array",cellDates:false});
+      const found=findRepairTicketSheet(wb);
+      if(!found){
+        alert("找不到可匯入的報修資料欄位。請確認 Excel 有報修日期、客戶編號/姓名、電話、地址、報修問題等欄位。");
+        event.target.value="";
+        return;
+      }
+      const replaceOld=confirm("匯入報修管理資料：\n\n按「確定」＝清空目前報修案件後重新匯入\n按「取消」＝保留現有資料並追加匯入");
+      let count=0, skipped=0;
+      const importedRows=[];
+      for(let r=found.headerRow+1;r<found.rows.length;r++){
+        const row=found.rows[r]||[];
+        const item=normalizeRepairTicketFromArray(row,found.idx);
+        if(!item.reportDate && !item.customerCode && !item.customerName && !item.issue){
+          skipped++;
+          continue;
+        }
+        importedRows.push(item);
+        count++;
+      }
+      if(count===0){
+        alert("Excel 裡沒有找到可匯入的資料列。");
+        event.target.value="";
+        return;
+      }
+      if(replaceOld){
+        const oldDocs=await firebaseDb.collection("repairTickets").get();
+        const delBatchArr=[];
+        let delBatch=firebaseDb.batch();
+        let opCount=0;
+        oldDocs.forEach(doc=>{
+          delBatch.delete(doc.ref);
+          opCount++;
+          if(opCount>=400){ delBatchArr.push(delBatch); delBatch=firebaseDb.batch(); opCount=0; }
+        });
+        delBatchArr.push(delBatch);
+        for(const b of delBatchArr){ await b.commit(); }
+      }
+      let batch=firebaseDb.batch();
+      let opCount=0;
+      const nowUser=(currentUser && (currentUser.displayName || currentUser.email)) || "";
+      for(const item of importedRows){
+        const ref=firebaseDb.collection("repairTickets").doc();
+        batch.set(ref,{
+          ...item,
+          createdBy:nowUser,
+          createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        opCount++;
+        if(opCount>=400){ await batch.commit(); batch=firebaseDb.batch(); opCount=0; }
+      }
+      await batch.commit();
+      alert(`已匯入 ${count} 筆報修資料${replaceOld?"（已先清空舊報修案件）":"（追加匯入）"}${skipped?`，略過 ${skipped} 筆空白資料`:""}。\n\n來源工作表：${found.sheetName}，標題列：第 ${found.headerRow+1} 列。`);
+      event.target.value="";
+    }catch(err){
+      console.error(err);
+      alert("匯入失敗："+(err.message||err));
+      event.target.value="";
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ===== 報修單 →「建立派工」：帶入既有的新增派工 Drawer =====
