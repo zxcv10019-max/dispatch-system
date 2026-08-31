@@ -2038,6 +2038,8 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <input type="date" id="rtDateFilter" onchange="renderRepairTicketList()" title="報修日期篩選">
     <button style="background:#888" onclick="document.getElementById('rtDateFilter').value='';renderRepairTicketList()">清除日期</button>
     <button onclick="loadRepairTickets()">重新整理</button>
+    <button style="background:#8e44ad" onclick="bulkSyncMachineCodesToCustomers()">🔄 一鍵補齊機碼</button>
+    <button style="background:#0984e3" onclick="bulkRecomputeRepairStatuses()">🔄 重新計算全部狀態</button>
   </div>
 
   <div class="rt-stats" id="rtStats"></div>
@@ -5129,6 +5131,20 @@ function addCustomer(){
   ["cCustomerNo","cPersonName","cFullName","cShortName","cMobile","cDeliveryAddress","cMachineCodes"].forEach(id=>document.getElementById(id).value="");
 }
 // 把機碼同步存進客戶資料：依客戶編號比對，找不到再依客戶姓名比對；都找不到就略過（不會憑空建立新客戶）
+// 一鍵補齊：把「目前所有」報修單上已填的機碼，回頭同步進客戶資料（適用於這個自動同步機制上線前就存在的舊資料）
+function bulkSyncMachineCodesToCustomers(){
+  if(!requireEdit("補齊機碼")) return;
+  if(!confirm(`確定要掃描全部 ${repairTickets.length} 筆報修單，把有填機碼的資料同步回客戶資料嗎？`)) return;
+  let updated=0, skipped=0;
+  repairTickets.forEach(t=>{
+    if(!t.machineCode) return;
+    const ok=syncMachineCodeToCustomer(t.customerCode, t.customerName, t.machineCode);
+    if(ok) updated++; else skipped++;
+  });
+  renderCustomers();
+  alert(`補齊完成：新增了 ${updated} 筆機碼到客戶資料。\n（${skipped} 筆略過，可能是機碼已存在、或找不到對應的客戶編號／姓名。）`);
+}
+
 function syncMachineCodeToCustomer(customerCode, customerName, machineCode){
   const code=String(customerCode||"").trim();
   const name=String(customerName||"").trim();
@@ -11331,8 +11347,6 @@ function normalizeRepairTicketFromArray(row, idx){
       if(!phone) phone=cust.mobile||"";
     }
   }
-  const rawStatus=String(get("status")||"").trim();
-  const status=RT_STATUSES.includes(rawStatus) ? rawStatus : "🔵 已派工";
   // 「項目」（維修/大保養等分類）跟「報修問題/機器狀況」合併成報修問題欄位，避免漏掉資訊
   const itemType=String(get("itemType")||"").trim();
   const issueRaw=String(get("issue")||"").trim();
@@ -11341,6 +11355,11 @@ function normalizeRepairTicketFromArray(row, idx){
   const removeNote=String(get("removeNote")||"").trim();
   const remarkRaw=String(get("remark")||"").trim();
   const remark=[removeNote?`拆機：${removeNote}`:"",remarkRaw].filter(Boolean).join("｜");
+  const appointmentDate=normalizeExcelDate(get("appointmentDate"));
+  const returnDate=normalizeExcelDate(get("returnDate"));
+  const completeDate=normalizeExcelDate(get("completeDate"));
+  // 狀態一律依日期規則自動算出，不採用 Excel 裡的「狀態」欄文字（避免舊資料/舊狀態文字誤導）
+  const status=rtComputeStatus({appointmentDate,returnDate,completeDate});
   return {
     reportDate:normalizeExcelDate(get("reportDate")),
     customerCode,customerName,phone,address,
@@ -11351,15 +11370,15 @@ function normalizeRepairTicketFromArray(row, idx){
     condition:String(get("condition")||"").trim(),
     description:String(get("description")||"").trim(),
     handlingMethod:String(get("handlingMethod")||"").trim(),
-    appointmentDate:normalizeExcelDate(get("appointmentDate")),
+    appointmentDate,
     appointmentTime:normalizeExcelTime(get("appointmentTime")),
     needLoaner:rtTruthyCell(get("needLoaner")),
     needNewLoaner:rtTruthyCell(get("needNewLoaner")),
     removeDate:normalizeExcelDate(get("removeDate")),
     sendFactoryDate:normalizeExcelDate(get("sendFactoryDate")),
-    returnDate:normalizeExcelDate(get("returnDate")),
+    returnDate,
     restoreDate:normalizeExcelDate(get("restoreDate")),
-    completeDate:normalizeExcelDate(get("completeDate")),
+    completeDate,
     result:String(get("result")||"").trim(),
     remark,
     status,
@@ -11562,6 +11581,43 @@ function renderRepairTicketList(){
 }
 
 // ===== 狀態直接在列表點選修改，不用開查看視窗 =====
+// 一鍵重算：把「目前所有」報修單依「完成日期／機回日期／預約日期」規則重新算出狀態並存回去
+// （適用於這套自動判斷規則上線前就存在的舊資料／批次匯入資料，狀態欄位還停在舊值的情況）
+async function bulkRecomputeRepairStatuses(){
+  if(!requireEdit("重新計算狀態")) return;
+  if(!firebaseDb){ alert("Firebase 尚未連線"); return; }
+  if(!confirm(`確定要依日期規則，重新計算全部 ${repairTickets.length} 筆報修單的狀態嗎？\n（有完成日期→已完成／有機回日期→待復機／有預約日期→送修中／都沒有→已派工）`)) return;
+  let changed=0, failed=0;
+  const toUpdate = repairTickets.filter(t=>{
+    const newStatus = rtComputeStatus({
+      appointmentDate: t.appointmentDate,
+      returnDate: t.returnDate,
+      completeDate: t.completeDate
+    });
+    return newStatus !== (t.status || "🔵 已派工");
+  }).map(t=>({
+    id: t.id,
+    newStatus: rtComputeStatus({
+      appointmentDate: t.appointmentDate,
+      returnDate: t.returnDate,
+      completeDate: t.completeDate
+    })
+  }));
+  const chunkSize=400; // Firestore batch 上限 500 筆，留點餘裕
+  for(let i=0;i<toUpdate.length;i+=chunkSize){
+    const chunk=toUpdate.slice(i,i+chunkSize);
+    const batch=firebaseDb.batch();
+    chunk.forEach(({id,newStatus})=>{
+      batch.update(firebaseDb.collection("repairTickets").doc(id),{
+        status:newStatus,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    try{ await batch.commit(); changed+=chunk.length; }catch(e){ failed+=chunk.length; console.error(e); }
+  }
+  alert(`重新計算完成：更新了 ${changed} 筆狀態。${failed?`（${failed} 筆更新失敗，請重試）`:""}`);
+}
+
 async function updateRepairTicketStatusInline(ticketId, newStatus){
   if(!requireEdit("修改報修狀態")){ renderRepairTicketList(); return; }
   if(!firebaseDb){ alert("Firebase 尚未連線"); renderRepairTicketList(); return; }
@@ -11594,17 +11650,16 @@ function renderRepairTicketTable(list){
     table.innerHTML = '<tr><td style="padding:16px;color:#999">目前沒有符合條件的報修案件。</td></tr>';
     return;
   }
-  // 只顯示這些欄位：狀態、報修日期、客戶代號、機型、項目、機器狀況、保固、
+  // 只顯示這些欄位：狀態、報修日期、客戶代號、客戶名字、客戶地址、機型、項目、機器狀況、保固、
   // 處理方式、拆機、預約日期、機碼、備機、機回日期、完成日期、備註（＋編輯）
   let html = `<tr>
-    <th>狀態</th><th>報修日期</th><th>客戶代號</th><th>機型</th><th>項目</th><th>機器狀況</th>
+    <th>狀態</th><th>報修日期</th><th>客戶代號</th><th>客戶名字</th><th>客戶地址</th><th>機型</th><th>項目</th><th>機器狀況</th>
     <th>保固</th><th>處理方式</th><th>拆機</th><th>預約日期</th><th>機碼</th><th>備機</th>
     <th>機回日期</th><th>完成日期</th><th>備註</th><th>編輯</th>
   </tr>`;
   list.forEach(t => {
     const status = t.status || "🔵 已派工";
     const color = RT_STATUS_COLORS[status] || "#777";
-    const codeName = [t.customerCode, t.customerName].filter(Boolean).join(" ") || "-";
     // 匯入時「項目」與「機器狀況」是用「｜」合併存在 issue 欄位裡，這裡拆開顯示成兩欄
     const issueParts = String(t.issue || "").split("｜");
     const itemType = issueParts.length > 1 ? issueParts[0] : "";
@@ -11616,7 +11671,9 @@ function renderRepairTicketTable(list){
     html += `<tr>
       <td>${rtStatusSelectHtml(t)}</td>
       <td>${repairEsc(t.reportDate || "-")}</td>
-      <td>${repairEsc(codeName)}</td>
+      <td>${repairEsc(t.customerCode || "-")}</td>
+      <td>${repairEsc(t.customerName || "-")}</td>
+      <td>${t.address ? `<a href="${mapUrl(t.address)}" target="_blank">${repairEsc(t.address)}</a>` : "-"}</td>
       <td>${repairEsc(t.model || "-")}</td>
       <td>${repairEsc(itemType || "-")}</td>
       <td>${repairEsc(conditionText || t.condition || "-")}</td>
