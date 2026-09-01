@@ -2072,7 +2072,19 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
     <div class="rt-section-title">機器資料</div>
     <div class="form-grid">
-      <div class="field"><label>機型</label><input id="rtModel"></div>
+      <div class="field"><label>機型</label>
+        <select id="rtModel">
+          <option value="">— 請選擇 —</option>
+          <option>GD 600</option>
+          <option>GD 800</option>
+          <option>GD CROSS</option>
+          <option>GD CROSS III</option>
+          <option>GD SODA</option>
+          <option>GD SOLO</option>
+          <option>GD TWINKLE</option>
+          <option>iZERO</option>
+        </select>
+      </div>
       <div class="field"><label>機碼</label><input id="rtMachineCode" onchange="renderRepairHistory()"></div>
       <div class="field">
         <label>保固狀態</label>
@@ -11062,7 +11074,25 @@ function openRepairFormMap(){
 }
 
 // ===== 新增／編輯報修單 Drawer =====
+function ensureRtModelOption(modelValue){
+  const sel = document.getElementById("rtModel");
+  if(!sel) return;
+  // 先移除上一次動態補的舊機型選項，避免每次打開編輯視窗都多累積一個
+  const old = sel.querySelector('option[data-rt-model-extra="1"]');
+  if(old) old.remove();
+  if(!modelValue) return;
+  const exists = Array.from(sel.options).some(o => o.value === modelValue);
+  if(!exists){
+    const opt = document.createElement("option");
+    opt.value = modelValue;
+    opt.textContent = modelValue;
+    opt.setAttribute("data-rt-model-extra", "1");
+    sel.appendChild(opt);
+  }
+}
+
 function clearRepairTicketFormFields(){
+  ensureRtModelOption("");
   ["rtId","rtReportDate","rtCustomerCode","rtCustomerName","rtPhone","rtAddress",
    "rtModel","rtMachineCode","rtIssue","rtCondition","rtDescription",
    "rtAppointmentDate","rtAppointmentTime","rtRemoveDate","rtSendFactoryDate",
@@ -11092,6 +11122,9 @@ function openRepairTicketDrawer(ticketId){
     document.getElementById("rtCustomerName").value = t.customerName || "";
     document.getElementById("rtPhone").value = t.phone || "";
     document.getElementById("rtAddress").value = t.address || "";
+    // 舊資料的機型文字可能跟下拉選單選項對不上（例如少了空格），這裡自動補一個選項進去，
+    // 避免打開舊單子時機型變成空白、存檔又把原本的機型資料蓋掉。
+    ensureRtModelOption(t.model || "");
     document.getElementById("rtModel").value = t.model || "";
     document.getElementById("rtMachineCode").value = t.machineCode || "";
     document.getElementById("rtWarranty").value = t.warranty || "";
