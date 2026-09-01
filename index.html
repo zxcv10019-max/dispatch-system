@@ -2082,8 +2082,15 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
     <div class="rt-section-title">報修內容</div>
     <div class="form-grid">
-      <div class="field"><label>報修項目</label><input id="rtIssue" placeholder="例如：漏水、不出冰水、跳電"></div>
-      <div class="field"><label>機器狀況</label><input id="rtCondition"></div>
+      <div class="field"><label>報修項目</label>
+        <select id="rtIssue">
+          <option value="">— 請選擇 —</option>
+          <option>維修</option>
+          <option>大保養</option>
+          <option>修轉保</option>
+        </select>
+      </div>
+      <div class="field"><label>機器狀況</label><input id="rtCondition" placeholder="例如：漏水、不出冰水、跳電、E5"></div>
       <div class="field-wide field"><label>詳細說明</label><textarea id="rtDescription" rows="3"></textarea></div>
       <div class="field">
         <label>處理方式</label>
@@ -11088,8 +11095,17 @@ function openRepairTicketDrawer(ticketId){
     document.getElementById("rtModel").value = t.model || "";
     document.getElementById("rtMachineCode").value = t.machineCode || "";
     document.getElementById("rtWarranty").value = t.warranty || "";
-    document.getElementById("rtIssue").value = t.issue || "";
-    document.getElementById("rtCondition").value = t.condition || "";
+    // 舊資料若報修項目跟機器狀況是用「｜」合併存成一個欄位（例如「維修｜E5」），這裡拆開回填，
+    // 避免舊單子打開後下拉選單對不到值、機器狀況內容也不見。
+    const issueRaw = t.issue || "";
+    const barIdx = issueRaw.indexOf("｜");
+    if(barIdx >= 0){
+      document.getElementById("rtIssue").value = issueRaw.slice(0, barIdx);
+      document.getElementById("rtCondition").value = t.condition || issueRaw.slice(barIdx + 1);
+    } else {
+      document.getElementById("rtIssue").value = issueRaw;
+      document.getElementById("rtCondition").value = t.condition || "";
+    }
     document.getElementById("rtDescription").value = t.description || "";
     document.getElementById("rtHandlingMethod").value = t.handlingMethod || "";
     document.getElementById("rtAppointmentDate").value = t.appointmentDate || "";
@@ -11347,10 +11363,13 @@ function normalizeRepairTicketFromArray(row, idx){
       if(!phone) phone=cust.mobile||"";
     }
   }
-  // 「項目」（維修/大保養等分類）跟「報修問題/機器狀況」合併成報修問題欄位，避免漏掉資訊
+  // 「項目」（維修/大保養等分類）跟「報修問題/機器狀況」分開存成兩個獨立欄位，
+  // 避免像過去用「｜」合併成一欄，導致編輯時兩者混在一起、報修項目也沒辦法用下拉選單對應。
   const itemType=String(get("itemType")||"").trim();
   const issueRaw=String(get("issue")||"").trim();
-  const issue=[itemType,issueRaw].filter(Boolean).join("｜");
+  const conditionRaw=String(get("condition")||"").trim();
+  const issue=itemType;
+  const condition=conditionRaw || issueRaw;
   // 「拆機」欄位（例如：無／主+龍）沒有對應欄位，併入備註，避免匯入時遺失資料
   const removeNote=String(get("removeNote")||"").trim();
   const remarkRaw=String(get("remark")||"").trim();
@@ -11367,7 +11386,7 @@ function normalizeRepairTicketFromArray(row, idx){
     machineCode:String(get("machineCode")||"").trim(),
     warranty:String(get("warranty")||"").trim(),
     issue,
-    condition:String(get("condition")||"").trim(),
+    condition,
     description:String(get("description")||"").trim(),
     handlingMethod:String(get("handlingMethod")||"").trim(),
     appointmentDate,
@@ -11574,8 +11593,8 @@ function renderRepairTicketList(){
       .join(" ").toLowerCase().includes(q);
     return statusOk && dateOk && searchOk;
   }).sort((a,b) => {
-    // 送修中：依預約日期由小到大排序；沒填預約日期的排到最後
-    if(statusFilter === "🟣 送修中"){
+    // 送修中／待復機：依預約日期由小到大排序；沒填預約日期的排到最後
+    if(statusFilter === "🟣 送修中" || statusFilter === "🟢 待復機"){
       const ad = a.appointmentDate || "9999-99-99";
       const bd = b.appointmentDate || "9999-99-99";
       return String(ad).localeCompare(String(bd));
@@ -11671,9 +11690,11 @@ function renderRepairTicketTable(list){
     const status = t.status || "🔵 已派工";
     const color = RT_STATUS_COLORS[status] || "#777";
     // 匯入時「項目」與「機器狀況」是用「｜」合併存在 issue 欄位裡，這裡拆開顯示成兩欄
+    // 舊資料若報修項目跟機器狀況用「｜」合併存在 issue 欄位，這裡拆開顯示成兩欄；
+    // 新資料則是 issue（報修項目分類）、condition（機器狀況）本來就是分開存的，直接顯示即可。
     const issueParts = String(t.issue || "").split("｜");
-    const itemType = issueParts.length > 1 ? issueParts[0] : "";
-    const conditionText = issueParts.length > 1 ? issueParts.slice(1).join("｜") : (t.issue || "");
+    const itemType = issueParts.length > 1 ? issueParts[0] : (t.issue || "");
+    const conditionText = issueParts.length > 1 ? issueParts.slice(1).join("｜") : (t.condition || "");
     // 匯入時「拆機」欄位是用「拆機：xxx｜」前綴併進 remark，這裡拆回來顯示成獨立一欄
     let removeNote = "", remarkText = t.remark || "";
     const rm = remarkText.match(/^拆機：([^｜]*)(?:｜(.*))?$/);
