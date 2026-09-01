@@ -11573,7 +11573,15 @@ function renderRepairTicketList(){
     const searchOk = !q || [t.customerCode, t.customerName, t.phone, t.machineCode]
       .join(" ").toLowerCase().includes(q);
     return statusOk && dateOk && searchOk;
-  }).sort((a,b) => String(b.reportDate||"").localeCompare(String(a.reportDate||"")));
+  }).sort((a,b) => {
+    // 送修中：依預約日期由小到大排序；沒填預約日期的排到最後
+    if(statusFilter === "🟣 送修中"){
+      const ad = a.appointmentDate || "9999-99-99";
+      const bd = b.appointmentDate || "9999-99-99";
+      return String(ad).localeCompare(String(bd));
+    }
+    return String(b.reportDate||"").localeCompare(String(a.reportDate||""));
+  });
 
   const summary = document.getElementById("rtSummary");
   if(summary) summary.textContent = `目前顯示 ${list.length} 件｜全部 ${repairTickets.length} 件`;
@@ -11683,7 +11691,7 @@ function renderRepairTicketTable(list){
       <td>${repairEsc(t.handlingMethod || "-")}</td>
       <td>${repairEsc(removeNote || "-")}</td>
       <td>${repairEsc(t.appointmentDate || "-")}</td>
-      <td>${repairEsc(t.machineCode || "-")}</td>
+      <td style="white-space:normal;word-break:break-all;overflow-wrap:anywhere">${repairEsc(t.machineCode || "-")}</td>
       <td>${t.needLoaner ? "✓" : "-"}</td>
       <td>${repairEsc(t.returnDate || "-")}</td>
       <td>${repairEsc(t.completeDate || "-")}</td>
