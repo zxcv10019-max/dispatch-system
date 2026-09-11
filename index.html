@@ -5231,17 +5231,17 @@ function updateCustomerMachineCodes(id, value){
 }
 
 function editCustomer(id){
+  if(!requireEdit("編輯客戶")) return;
   const c=customers.find(x=>x.id===id);if(!c)return;
-  const customerNo=prompt("客戶編號",c.customerNo||"");if(customerNo===null)return;
-  const personName=prompt("人員姓名",c.personName||"");if(personName===null)return;
-  const fullName=prompt("客戶全稱",c.fullName||"");if(fullName===null)return;
-  const shortName=prompt("客戶簡稱",c.shortName||"");if(shortName===null)return;
-  const mobile=prompt("行動電話",c.mobile||"");if(mobile===null)return;
-  const deliveryAddress=prompt("送貨地址",c.deliveryAddress||"");if(deliveryAddress===null)return;
-  const machineCodesStr=prompt("機碼（多組請用逗號分隔）",(c.machineCodes||[]).join("、"));if(machineCodesStr===null)return;
-  Object.assign(c,{customerNo,personName,fullName,shortName,mobile,deliveryAddress,machineCodes:parseMachineCodesInput(machineCodesStr)});
-  writeLog("customer_edit",{customerNo,fullName:fullName||personName||""});
-  saveCustomers();renderCustomers();
+  document.getElementById("cCustomerNo").value=c.customerNo||"";
+  document.getElementById("cPersonName").value=c.personName||"";
+  document.getElementById("cFullName").value=c.fullName||"";
+  document.getElementById("cShortName").value=c.shortName||"";
+  document.getElementById("cMobile").value=c.mobile||"";
+  document.getElementById("cDeliveryAddress").value=c.deliveryAddress||"";
+  document.getElementById("cMachineCodes").value=(c.machineCodes||[]).join("、");
+  document.getElementById("cCustomerNo").scrollIntoView({behavior:"smooth",block:"center"});
+  document.getElementById("cCustomerNo").focus();
 }
 
 function deleteCustomer(id){
@@ -6985,12 +6985,38 @@ function syncAllLeaveJobs(){
   });
   if(jobs.length !== beforeCount) changed = true;
 
+  // 3) 清掉重複的休假／出差卡片：
+  // 因為歷史資料/多裝置同步等原因，可能同一筆休假紀錄（同 leaveId），
+  // 或內容完全相同（同工程師＋同日期＋同請假類型）的卡片，在 jobs 裡出現不只一筆，
+  // 導致排班表同一格顯示兩張一模一樣的卡片。這裡只保留最後一筆，其餘刪除。
+  if(dedupeLeaveJobs()) changed = true;
+
   if(changed) saveJobs();
 }
 syncAllLeaveJobs();
 
+// 移除 jobs 裡重複的休假／出差卡片：同一個 leaveId，或同工程師＋同日期＋同請假類型
+// 只保留最後一筆（陣列裡較後面、代表較新的一筆），回傳是否有清除任何重複。
+function dedupeLeaveJobs(){
+  const seen = new Set();
+  const kept = [];
+  for(let i=jobs.length-1;i>=0;i--){
+    const j = jobs[i];
+    if(!j || !j.isLeaveJob){ kept.unshift(j); continue; }
+    const key = (j.leaveId!=null && j.leaveId!=='')
+      ? ('id:'+Number(j.leaveId))
+      : ('c:'+normalizeEngineerName(j.engineer||'')+'|'+String(j.date||'')+'|'+String(j.workItem||j.workContent||''));
+    if(seen.has(key)) continue; // 較舊的重複卡片，捨棄
+    seen.add(key);
+    kept.unshift(j);
+  }
+  const changed = kept.length !== jobs.length;
+  if(changed) jobs = kept;
+  return changed;
+}
+
 function normalizeLeaveRecords(list){
-  return (Array.isArray(list)?list:[]).map(function(r){
+  const normalized = (Array.isArray(list)?list:[]).map(function(r){
     const id = Number(r.id || r.leaveId || Date.now() + Math.floor(Math.random()*9999));
     const out = {
       id,
@@ -7004,7 +7030,21 @@ function normalizeLeaveRecords(list){
     if(r.startTime) out.startTime = String(r.startTime);
     if(r.endTime) out.endTime = String(r.endTime);
     return out;
-  }).filter(r=>r.engineer && r.date && r.type)
+  }).filter(r=>r.engineer && r.date && r.type);
+
+  // 去重：同一位工程師、同一天，理論上只會有一筆休假／出差紀錄。
+  // 若因歷史資料或多裝置同時新增，出現同工程師＋同日期的重複紀錄，
+  // 只保留最後更新的那一筆，避免派工表上同一格出現兩張一樣的卡片。
+  const byKey = new Map();
+  normalized.forEach(function(r){
+    const key = r.engineer + '|' + r.date;
+    const existing = byKey.get(key);
+    if(!existing || String(r.updatedAt||'') >= String(existing.updatedAt||'')){
+      byKey.set(key, r);
+    }
+  });
+
+  return Array.from(byKey.values())
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)) || String(a.engineer).localeCompare(String(b.engineer)));
 }
 
@@ -9726,30 +9766,54 @@ window.deleteContactLogEntry = async function(idx){
   var list = contactLogs[_contactLogCustKey]||[];
   var entry = list[idx];
 
-  // 若此紀錄有移月快照，刪除時還原資料（用客戶編號+產品編號比對，避免陣列重新排序後 index 失效）
+  // 修正：只有當這筆紀錄是「目前最後一次」的移月／不更換紀錄時，才還原日期。
+  // 原因：同一位客戶可能延後過不只一次（例如先延到9月，之後又再延到10月）。
+  // 如果刪掉的是比較舊的那一筆，卻仍然把日期還原回「那筆舊紀錄發生之前」的狀態，
+  // 會誤把後面那次（較新、仍然有效的）延後結果蓋掉，造成畫面上「➡ 移至10月」的提示
+  // 還在，但客戶卻又跑回9月名單裡的矛盾情形。
+  var isLatestSnapshot = true;
+  for(var j=idx+1;j<list.length;j++){
+    if(list[j] && list[j]._snapshot && list[j]._snapshot.length){ isLatestSnapshot = false; break; }
+  }
+  var isLatestExSnapshot = true;
+  for(var k=idx+1;k<list.length;k++){
+    if(list[k] && list[k]._exSnapshot && list[k]._exSnapshot.length){ isLatestExSnapshot = false; break; }
+  }
+  var dateRestoreSkipped = false, exRestoreSkipped = false;
+
+  // 若此紀錄有移月快照，且是最後一次移月紀錄，刪除時才還原資料
+  // （用客戶編號+產品編號比對，避免陣列重新排序後 index 失效）
   if(entry && entry._snapshot && entry._snapshot.length){
-    entry._snapshot.forEach(function(snap){
-      var r = cartridgeData.find(function(row){
-        var rKey = row.客戶編號 || '';
-        return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+    if(isLatestSnapshot){
+      entry._snapshot.forEach(function(snap){
+        var r = cartridgeData.find(function(row){
+          var rKey = row.客戶編號 || '';
+          return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+        });
+        if(!r) return;
+        r.下次換芯 = snap.prevNext;
+        r._nextYear = snap.prevYear;
+        r._nextMonth = snap.prevMonth;
       });
-      if(!r) return;
-      r.下次換芯 = snap.prevNext;
-      r._nextYear = snap.prevYear;
-      r._nextMonth = snap.prevMonth;
-    });
-    saveCD();
+      saveCD();
+    } else {
+      dateRestoreSkipped = true; // 後面還有更新的移月紀錄，保留目前日期，不還原
+    }
   }
   if(entry && entry._exSnapshot && entry._exSnapshot.length){
-    entry._exSnapshot.forEach(function(snap){
-      var r = cartridgeData.find(function(row){
-        var rKey = row.客戶編號 || '';
-        return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+    if(isLatestExSnapshot){
+      entry._exSnapshot.forEach(function(snap){
+        var r = cartridgeData.find(function(row){
+          var rKey = row.客戶編號 || '';
+          return rKey === snap.custKey && (row.產品編號||'') === (snap.prodNo||'');
+        });
+        if(!r) return;
+        if(snap.prevExcluded) r._excluded = true; else delete r._excluded;
       });
-      if(!r) return;
-      if(snap.prevExcluded) r._excluded = true; else delete r._excluded;
-    });
-    saveCD();
+      saveCD();
+    } else {
+      exRestoreSkipped = true;
+    }
   }
 
   list.splice(idx,1);
@@ -9776,8 +9840,9 @@ window.deleteContactLogEntry = async function(idx){
   renderCartridgeTable();
   __restoreScroll();
   requestAnimationFrame(__restoreScroll);
-  var restored = (entry && entry._snapshot && entry._snapshot.length) ? '並還原原本月份'
-    : ((entry && entry._exSnapshot && entry._exSnapshot.length) || !stillHasNoChange) ? '並重新加回換芯名單' : '';
+  var restored = (entry && entry._snapshot && entry._snapshot.length && !dateRestoreSkipped) ? '並還原原本月份'
+    : (dateRestoreSkipped ? '（偵測到之後還有更新的移月紀錄，此次刪除未變動換芯日期）'
+    : ((entry && entry._exSnapshot && entry._exSnapshot.length && !exRestoreSkipped) || !stillHasNoChange) ? '並重新加回換芯名單' : '');
 
   // 強制立即同步雲端，避免使用者太快關閉/重新整理造成還原動作遺失
   if(typeof cloudSaveTimer !== 'undefined' && cloudSaveTimer){ clearTimeout(cloudSaveTimer); }
