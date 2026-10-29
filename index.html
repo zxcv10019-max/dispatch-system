@@ -12374,9 +12374,23 @@ async function updateOutsourceCheckbox(id, field, checked){
   renderOutsourceTable(); // 完成後立刻從進行中隱藏；取消完成則立刻回到進行中
   await persistOutsourceRow(r);
 }
+let _osRenderPending=false;
 function renderOutsourceTable(){
   updateOutsourceCustomerCodeList();
   const table=document.getElementById('outsourceTable'); if(!table)return;
+  // 正在操作新增列（例如時間選單開著）時不重繪，避免選單被銷毀而「卡住」；離開欄位後再補繪
+  const _ae=document.activeElement;
+  if(_ae && _ae!==document.getElementById('osSearch') && _ae.closest && _ae.closest('.os-add-row')){
+    _osRenderPending=true; return;
+  }
+  // 重繪前保存新增列已輸入的內容
+  const _osIds=['osDate','osTime','osCustomerCode','osCustomerName','osCity','osDistrict','osAddress','osVendor','osShipDate','osTracking','osContent','osService'];
+  const _osSaved={}; _osIds.forEach(id=>{const e=document.getElementById(id); if(e) _osSaved[id]=e.value;});
+  const _osChk={}; ['osPrinted','osPhoto','osCompleted'].forEach(id=>{const e=document.getElementById(id); if(e) _osChk[id]=e.checked;});
+  setTimeout(()=>{
+    _osIds.forEach(id=>{const e=document.getElementById(id); if(e && _osSaved[id]) e.value=_osSaved[id];});
+    Object.keys(_osChk).forEach(id=>{const e=document.getElementById(id); if(e) e.checked=_osChk[id];});
+  },0);
   const q=(document.getElementById('osSearch')?.value||'').trim().toLowerCase();
   const activeCount=outsourceRows.filter(r=>!r.completed).length;
   const completedCount=outsourceRows.filter(r=>!!r.completed).length;
@@ -12445,3 +12459,15 @@ function renderOutsourceTable(){
 </script>
 </body>
 </html>
+
+<script>
+document.addEventListener('focusout',e=>{
+  if(e.target.closest && e.target.closest('.os-add-row') && _osRenderPending){
+    setTimeout(()=>{
+      const a=document.activeElement;
+      if(a && a.closest && a.closest('.os-add-row')) return;
+      _osRenderPending=false; renderOutsourceTable();
+    },150);
+  }
+});
+</script>
