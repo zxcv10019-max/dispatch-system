@@ -209,7 +209,7 @@ textarea{min-height:70px;resize:vertical}
 
 
 .job{
-  font-size:12px!important;
+  font-size:13px!important;
   line-height:1.35!important;
 }
 .job .card-main{
@@ -992,27 +992,6 @@ body.dispatch-drawer-lock{overflow:hidden}
 .status-checks label{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:2px 6px;border:1px solid #caa72c;border-radius:4px;background:#fffbe6;cursor:pointer;white-space:nowrap}
 .status-checks input[type="checkbox"]{width:auto;min-width:auto;padding:0;margin:0;cursor:pointer}
 
-/* 卡片底部拖拉把手 */
-.job-resize-handle{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  margin-top:4px;
-  height:14px;
-  cursor:ns-resize;
-  color:#b8970a;
-  font-size:14px;
-  letter-spacing:2px;
-  opacity:0.5;
-  border-top:1px dashed #d4b53a;
-  user-select:none;
-  -webkit-user-select:none;
-}
-.job-resize-handle:hover{
-  opacity:1;
-  background:rgba(210,181,58,.15);
-  border-radius:0 0 4px 4px;
-}
 
 
 /* 暫押派工：尚未正式排日期 */
@@ -1257,7 +1236,7 @@ body.is-admin .admin-only{display:inline-flex!important}
 .mini-table tbody tr:hover{background:#eef6ff;}
 
 /* ===== 權限角色管理 ===== */
-.viewer-mode .edit, .viewer-mode .delete, .viewer-mode .job-resize-handle{display:none!important}
+.viewer-mode .edit, .viewer-mode .delete{display:none!important}
 .role-panel{background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:16px}
 .role-panel h3{margin:0 0 10px;font-size:16px;color:#2f3542}
 .role-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
@@ -4481,74 +4460,6 @@ function showToast(msg, duration=2200){
   }, duration);
 }
 
-// ===== 卡片底部拖拉調整時間 =====
-let resizingJobId = null;
-let resizeStartY = 0;
-let resizeStartEnd = "";
-let resizeRowHeight = 48; // px per 30min slot
-
-function startResizeJob(e, jobId){
-  if(!requireEdit("調整時間")) return;
-  e.preventDefault();
-  e.stopPropagation();
-  resizingJobId = jobId;
-  resizeStartY = e.clientY;
-  const j = jobs.find(x=>x.id===jobId);
-  resizeStartEnd = j ? (j.endTime||j.startTime||j.time) : "";
-  document.body.style.userSelect = "none";
-  document.body.style.cursor = "ns-resize";
-  document.addEventListener("mousemove", onResizeMove);
-  document.addEventListener("mouseup", onResizeUp);
-  // touch
-  document.addEventListener("touchmove", onResizeTouchMove, {passive:false});
-  document.addEventListener("touchend", onResizeTouchUp);
-}
-
-function onResizeTouchMove(e){
-  e.preventDefault();
-  const touch = e.touches[0];
-  doResizeMove(touch.clientY);
-}
-function onResizeTouchUp(e){
-  doResizeUp();
-}
-function onResizeMove(e){ doResizeMove(e.clientY); }
-function onResizeUp(e){ doResizeUp(); }
-
-function doResizeMove(clientY){
-  if(!resizingJobId) return;
-  const j = jobs.find(x=>x.id===resizingJobId);
-  if(!j) return;
-  const dy = clientY - resizeStartY;
-  const slotsDelta = Math.round(dy / resizeRowHeight);
-  const endIdx = timeIndex(resizeStartEnd);
-  if(endIdx < 0) return;
-  const startIdx = timeIndex(j.startTime||j.time);
-  // 最少佔 1 格（含 start 和 end 同一列）
-  const newEndIdx = Math.max(startIdx, Math.min(endIdx + slotsDelta, times.length - 1));
-  const newEnd = times[newEndIdx];
-  if(newEnd !== j.endTime){
-    j.endTime = newEnd;
-    renderSchedule();
-  }
-}
-
-function doResizeUp(){
-  if(!resizingJobId) return;
-  const j=jobs.find(x=>x.id===resizingJobId);
-  if(j) writeLog("resize",{codeName:j.codeName||j.customerName||"",endTime:j.endTime,date:j.date,engineer:j.engineer});
-  saveJobs();
-  renderJobList();
-  resizingJobId = null;
-  document.body.style.userSelect = "";
-  document.body.style.cursor = "";
-  document.removeEventListener("mousemove", onResizeMove);
-  document.removeEventListener("mouseup", onResizeUp);
-  document.removeEventListener("touchmove", onResizeTouchMove);
-  document.removeEventListener("touchend", onResizeTouchUp);
-  showToast("✅ 時間已調整");
-}
-
 function calcSpan(job){
   const s=timeIndex(job.startTime||job.time);
   const e=timeIndex(job.endTime);
@@ -4816,13 +4727,6 @@ function jobCard(j){
     ${j.workItem ? `<div class="card-line card-work">施工項目：${escapeHtml(j.workItem)}</div>` : ""}
     ${j.workContent ? `<div class="card-line">施工內容：${escapeHtml(j.workContent)}</div>` : ""}
     ${statusHtml}
-    <div class="job-resize-handle"
-      onmousedown="startResizeJob(event,${j.id})"
-      ontouchstart="startResizeJob(event,${j.id})"
-      onclick="event.stopPropagation()"
-      title="拖拉調整結束時間">
-      <span>⠿</span>
-    </div>
   </div>`;
 }
 
@@ -8229,7 +8133,7 @@ body.schedule-month-view.compact-schedule table#schedule .time-col{
   font-size:8px !important;
 }
 body.schedule-month-view.compact-schedule .job{
-  font-size:8px !important;
+  font-size:9px !important;
 }
 
 /* 精簡模式（非月檢視）：星期維持原本緊貼在日期後面同一行 */
@@ -8260,7 +8164,7 @@ body.schedule-month-view.compact-schedule table#schedule tr:nth-child(2) th{
 
 /* 卡片本體：極緊湊，只留客編文字 */
 body.compact-schedule .job{
-  font-size:9px !important;
+  font-size:10px !important;
   line-height:1.2 !important;
   padding:1px 2px !important;
   margin-bottom:1px !important;
@@ -8275,7 +8179,7 @@ body.compact-schedule .job{
 
 /* 精簡模式：card-main 顯示兩行，隱藏原本合併文字 */
 body.compact-schedule .job .card-main{
-  font-size:9px !important;
+  font-size:10px !important;
   white-space:normal !important;
   overflow:hidden;
   max-width:100%;
@@ -8286,14 +8190,14 @@ body.compact-schedule .job .card-main{
 body.compact-schedule .job .card-main .compact-hide{ display:none !important; }
 body.compact-schedule .job .card-main .compact-city{
   display:inline !important;
-  font-size:11px !important;
+  font-size:12px !important;
   white-space:nowrap;
   color:#000 !important;
   font-weight:bold !important;
 }
 body.compact-schedule .job .card-main .compact-district{
   display:inline !important;
-  font-size:11px !important;
+  font-size:12px !important;
   white-space:nowrap;
   color:#000 !important;
   font-weight:bold !important;
@@ -8301,7 +8205,7 @@ body.compact-schedule .job .card-main .compact-district{
 body.compact-schedule .job .card-main .compact-code{
   display:block !important;
   font-weight:bold !important;
-  font-size:9px !important;
+  font-size:10px !important;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -8317,12 +8221,6 @@ body.compact-schedule .job .card-line,
 body.compact-schedule .job .status-checks,
 body.compact-schedule .job>div[style*="margin-top"]{
   display:none !important;
-}
-body.compact-schedule .job .job-resize-handle{
-  display:flex !important;
-  height:8px !important;
-  margin-top:0 !important;
-  border-top:none !important;
 }
 
 /* Hold 卡片：灰底區別 */
@@ -8361,7 +8259,6 @@ body.compact-schedule .job.expanded .card-time{ display:block !important; font-s
 body.compact-schedule .job.expanded .card-line{ display:block !important; font-size:12px !important; }
 body.compact-schedule .job.expanded>div[style*="margin-top"]{ display:block !important; }
 body.compact-schedule .job.expanded .status-checks{ display:flex !important; font-size:12px !important; }
-body.compact-schedule .job.expanded .job-resize-handle{ display:flex !important; height:14px !important; margin-top:4px !important; border-top:1px dashed #d4b53a !important; }
 
 /* 展開時背後遮罩（點外側關閉） */
 #compactExpandOverlay{
@@ -10640,7 +10537,7 @@ body:has(#schedulePage.page.active) #scheduleCalendarView > .toolbar{
     var isDown = false, moved = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
 
     function shouldIgnore(target){
-      return target.closest('.job, button, input, select, textarea, a, label, .job-resize-handle');
+      return target.closest('.job, button, input, select, textarea, a, label');
     }
 
     wrap.addEventListener('mousedown', function(e){
