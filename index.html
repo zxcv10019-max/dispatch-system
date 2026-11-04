@@ -2428,7 +2428,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
 
 <script>
-const engineers=["林川閔","陳昱存","陳義強","鄧長益"];
+const engineers=["鄧長益","陳昱存","陳義強","林川閔"];
 const times=["09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 
 // 固定 key，從舊版 key 遷移資料
@@ -4499,12 +4499,12 @@ function getEngineerTripRegion(dateStr, engineer){
   return rec ? String(rec.type||'') : '';
 }
 
-// 假日（星期六、日）只顯示 M（工程代號第一位＝林川閔）這個工程的派工欄位，其他工程師欄位不顯示，省版面。
+// 假日（星期六、日）只顯示 M（林川閔），不受平日工程師排序影響。
 // 平日則維持顯示全部工程師。
 function getEngineersForDate(dateStr){
   const d=parseDateLocal(dateStr);
   const isWeekend = d.getDay()===0 || d.getDay()===6;
-  return isWeekend ? [engineers[0]] : engineers;
+  return isWeekend ? ["林川閔"] : engineers;
 }
 
 // 判斷某天是否落在「目前選擇的月份」之外（整月分週檢視時，第一週/最後一週可能會補到隔壁月份的日期湊滿一整週）
@@ -4526,19 +4526,11 @@ function getMonthWeekBlocks(){
   const daysToSunday = lastDow===0 ? 0 : (7-lastDow);
   const gridEnd=addDays(lastOfMonth, daysToSunday);
 
-  // 只有「正在看本月」時，才把今天之前的日期隱藏起來，從今天開始顯示到月底；
-  // 切到別的月份（上個月／下個月）看，仍然完整顯示整個月，不受影響。
-  const now=new Date();
-  const isCurrentMonth = (year===now.getFullYear() && month===now.getMonth());
-  const todayStr = formatDateLocal(now);
-
+  // 整月一律顯示完整月份，包含今天之前的日期。
   const blocks=[];
   let cursor=new Date(gridStart);
   while(cursor<=gridEnd){
-    let week=Array.from({length:7},(_,i)=>formatDateLocal(addDays(cursor,i)));
-    if(isCurrentMonth){
-      week = week.filter(d => d >= todayStr);
-    }
+    const week=Array.from({length:7},(_,i)=>formatDateLocal(addDays(cursor,i)));
     if(week.length) blocks.push(week);
     cursor=addDays(cursor,7);
   }
@@ -12368,3 +12360,18 @@ document.addEventListener('focusout',e=>{
   }
 });
 </script>
+
+<style id="engineer-header-readable">
+/* 工程師代號與服務地區文字各加大 2px。 */
+#schedule .engineer-head{font-size:15px !important;}
+body.compact-schedule #schedule .engineer-head{font-size:12px !important;}
+body.schedule-month-view.compact-schedule #schedule .engineer-head{font-size:11px !important;}
+#schedule .engineer-head .eng-place{font-size:13px !important;}
+#schedule .date-head, #schedule .weekend-head, #schedule .today-head{font-size:15px !important;}
+body.compact-schedule #schedule .date-head,
+body.compact-schedule #schedule .weekend-head,
+body.compact-schedule #schedule .today-head{font-size:13px !important;}
+body.schedule-month-view.compact-schedule #schedule .date-head,
+body.schedule-month-view.compact-schedule #schedule .weekend-head,
+body.schedule-month-view.compact-schedule #schedule .today-head{font-size:12px !important;}
+</style>
