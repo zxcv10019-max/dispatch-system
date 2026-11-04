@@ -1901,6 +1901,16 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
     <div class="role-panel" style="margin-top:16px;">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h3 style="margin:0;">📋 代工月統計</h3>
+        <label for="statsOutsourceMonth" style="font-size:13px;color:#555;">月份：</label>
+        <input type="month" id="statsOutsourceMonth" style="font-size:13px;padding:5px 8px;" onchange="renderStatsOutsourceSummary()">
+      </div>
+      <div style="font-size:12px;color:#666;margin-bottom:10px;">依代工表的預約日期統計，包含進行中與已完成案件；取消案件不計入件數，未填預約日期的案件不列入月份統計。</div>
+      <div id="statsOutsourceSummary" aria-live="polite"></div>
+    </div>
+
+    <div class="role-panel" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <h3 style="margin:0;">💰 金額統計</h3>
         <label style="font-size:13px;color:#555;">月份：</label>
         <input type="month" id="statsAmountMonth" style="font-size:13px;padding:5px 8px;" onchange="renderCompletionStats('statsAmountMonth','statsCompletionContent')">
@@ -5987,6 +5997,8 @@ function adminMonthNow(){ const d=new Date(); return `${d.getFullYear()}-${Strin
 function getJobText(j){ return [j.customerCode,j.customerName,j.codeName,j.orderNo,j.phone,j.city,j.district,j.address,j.workItem,j.workContent,j.engineer,j.payment].map(x=>String(x||"")).join(" ").toLowerCase(); }
 function renderStatsPage(){
   if(!canEdit()){ return; }
+  startOutsourceSync();
+  renderStatsOutsourceSummary();
   renderAdminTodaySummary();
   renderAdminWorkloadSummary();
   renderStatsHistory();
@@ -11979,6 +11991,7 @@ function osServiceBadge(v){
 }
 function saveOutsourceLocal(){
   try{localStorage.setItem(OUTSOURCE_KEY,JSON.stringify(outsourceRows));}catch(e){}
+  renderStatsOutsourceSummary();
 }
 function outsourceCollection(){
   try{return firebaseDb ? firebaseDb.collection("sharedDispatch").doc("main").collection("outsourceJobs") : null;}catch(e){return null;}
@@ -12374,4 +12387,72 @@ body.compact-schedule #schedule .today-head{font-size:13px !important;}
 body.schedule-month-view.compact-schedule #schedule .date-head,
 body.schedule-month-view.compact-schedule #schedule .weekend-head,
 body.schedule-month-view.compact-schedule #schedule .today-head{font-size:12px !important;}
+</style>
+
+<style id="standard-sticky-time-column">
+/* 標準檢視：時間欄固定在橫向捲動區左側。 */
+body:not(.compact-schedule) #schedule th.time-col,
+body:not(.compact-schedule) #schedule td.time-col{
+  position:sticky !important;
+  left:0 !important;
+  top:auto !important;
+  background:#f4cccc !important;
+  z-index:40 !important;
+  box-shadow:1px 0 0 #aaa;
+}
+body:not(.compact-schedule) #schedule th.time-col{
+  z-index:80 !important;
+}
+</style>
+
+<script>
+function summarizeOutsourceMonth(rows, month){
+  const vendors=new Map();
+  let total=0, completed=0, cancelled=0;
+  for(const row of rows){
+    if(!String(row.date||'').startsWith(month+'-')) continue;
+    if(row.cancelled){ cancelled++; continue; }
+    const vendor=String(row.vendor||'').trim()||'未指定代工';
+    if(!vendors.has(vendor)) vendors.set(vendor,{vendor,total:0,completed:0,active:0});
+    const item=vendors.get(vendor);
+    item.total++; total++;
+    if(row.completed){ item.completed++; completed++; }
+    else item.active++;
+  }
+  return {total,completed,active:total-completed,cancelled,
+    vendors:[...vendors.values()].sort((a,b)=>b.total-a.total||a.vendor.localeCompare(b.vendor,'zh-Hant'))};
+}
+function renderStatsOutsourceSummary(){
+  const box=document.getElementById('statsOutsourceSummary');
+  const input=document.getElementById('statsOutsourceMonth');
+  if(!box || !input || !canEdit()) return;
+  if(!input.value){
+    const now=new Date();
+    input.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  }
+  const stats=summarizeOutsourceMonth(outsourceRows,input.value);
+  const cards=[['總件數',stats.total],['進行中',stats.active],['已完成',stats.completed]];
+  let html='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">'+cards.map(([label,count])=>
+    `<div style="background:#eef4fa;border:1px solid #d8e2ee;border-radius:6px;padding:10px 18px;min-width:110px;"><div style="font-size:12px;color:#555;">${label}</div><strong style="font-size:22px;color:#2f3542;">${count}</strong> <span style="font-size:12px;">件</span></div>`).join('')+'</div>';
+  if(stats.cancelled) html+=`<div style="font-size:12px;color:#888;margin-bottom:8px;">本月另有 ${stats.cancelled} 件已取消。</div>`;
+  if(!stats.total){
+    box.innerHTML=html+'<div class="empty">所選月份沒有代工案件。</div>';
+    return;
+  }
+  html+='<div class="log-table-wrap"><table style="width:100%;min-width:400px;border-collapse:collapse;font-size:13px;"><thead><tr><th>代工</th><th>總件數</th><th>進行中</th><th>已完成</th></tr></thead><tbody>';
+  for(const item of stats.vendors){
+    html+=`<tr><td>${escapeHtml(item.vendor)}</td><td style="text-align:center;font-weight:bold;">${item.total}</td><td style="text-align:center;">${item.active}</td><td style="text-align:center;">${item.completed}</td></tr>`;
+  }
+  html+=`</tbody><tfoot><tr style="background:#eef4fa;font-weight:bold;"><td>合計</td><td style="text-align:center;">${stats.total}</td><td style="text-align:center;">${stats.active}</td><td style="text-align:center;">${stats.completed}</td></tr></tfoot></table></div>`;
+  box.innerHTML=html;
+}
+</script>
+
+<style id="compact-card-no-border">
+/* 精簡派工表：移除文字卡片外框與陰影。 */
+body.compact-schedule #schedule .job:not(.expanded){
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
 </style>
