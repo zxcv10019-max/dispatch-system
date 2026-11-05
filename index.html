@@ -1941,6 +1941,22 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
   <div class="schedule-subtabs">
     <button id="subtabCalendar" class="schedule-subtab-btn active" onclick="switchScheduleSubtab('calendar')">🗓️ 派工行事曆</button>
     <button id="subtabOutsource" class="schedule-subtab-btn" onclick="switchScheduleSubtab('outsource')">📋 代工表</button>
+    <button id="subtabOther" class="schedule-subtab-btn" onclick="switchScheduleSubtab('other')">📝 其它派工</button>
+  </div>
+  <div id="scheduleOtherView" style="display:none;">
+    <div class="role-panel" style="margin:12px;">
+      <h3 style="margin-top:0;">📝 其它派工</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+        <label for="otherDispatchMonth">月份：</label><input type="month" id="otherDispatchMonth" onchange="renderOtherDispatch()">
+        <button type="button" onclick="document.getElementById('otherDispatchMonth').value='';renderOtherDispatch()">全部日期</button>
+        <span id="otherDispatchSyncStatus" role="status" style="font-size:12px;color:#666;"></span>
+      </div>
+      <form id="otherDispatchForm" onsubmit="event.preventDefault();saveOtherDispatch()">
+        <div class="other-dispatch-fields"><label>日期<input id="other_date" type="date" required ></label><label>工程（自行填寫）<input id="other_engineer" type="text" placeholder="自行輸入工程名稱" ></label><label>預約時間<input id="other_time" type="time" ></label><label>客編／客名<input id="other_customer" type="text" ></label><label>電話<input id="other_phone" type="text" ></label><label>地址<input id="other_address" type="text" ></label><label>施工項目<input id="other_workItem" type="text" ></label><label>施工內容<input id="other_content" type="text" ></label></div>
+        <div style="display:flex;gap:8px;margin:10px 0 16px;"><button type="submit" id="otherDispatchSave">新增派工</button><button type="button" onclick="resetOtherDispatchForm()">清空／取消編輯</button></div>
+      </form>
+      <div id="otherDispatchList"></div>
+    </div>
   </div>
   <div id="scheduleCalendarView">
   <div class="toolbar">
@@ -3558,23 +3574,17 @@ document.addEventListener("keydown", function(e){
 });
 
 function switchScheduleSubtab(view){
-  const cal=document.getElementById("scheduleCalendarView");
-  const out=document.getElementById("scheduleOutsourceView");
-  const bC=document.getElementById("subtabCalendar");
-  const bO=document.getElementById("subtabOutsource");
-  if(view==="outsource"){
-    if(cal) cal.style.display="none";
-    if(out) out.style.display="block";
-    if(bC) bC.classList.remove("active");
-    if(bO) bO.classList.add("active");
-    if(typeof startOutsourceSync==='function') startOutsourceSync();
-    if(typeof renderOutsourceTable==='function') renderOutsourceTable();
-  } else {
-    if(cal) cal.style.display="";
-    if(out) out.style.display="none";
-    if(bO) bO.classList.remove("active");
-    if(bC) bC.classList.add("active");
+  const selected=['calendar','outsource','other'].includes(view)?view:'calendar';
+  for(const [key,panelId,buttonId] of [
+    ['calendar','scheduleCalendarView','subtabCalendar'],
+    ['outsource','scheduleOutsourceView','subtabOutsource'],
+    ['other','scheduleOtherView','subtabOther']]){
+    const panel=document.getElementById(panelId), button=document.getElementById(buttonId);
+    if(panel) panel.style.display=key===selected?'':'none';
+    if(button) button.classList.toggle('active',key===selected);
   }
+  if(selected==='outsource'){startOutsourceSync();renderOutsourceTable();}
+  if(selected==='other'){startOtherDispatchSync();renderOtherDispatch();}
 }
 
 function showPage(pageId){
@@ -4509,12 +4519,14 @@ function getEngineerTripRegion(dateStr, engineer){
   return rec ? String(rec.type||'') : '';
 }
 
-// 假日（星期六、日）只顯示 M（林川閔），不受平日工程師排序影響。
-// 平日則維持顯示全部工程師。
+// 週末依當天實際安排顯示工程師；多人出勤時各有一欄，無案件時保留預設欄位。
 function getEngineersForDate(dateStr){
   const d=parseDateLocal(dateStr);
-  const isWeekend = d.getDay()===0 || d.getDay()===6;
-  return isWeekend ? ["林川閔"] : engineers;
+  const isWeekend=d.getDay()===0 || d.getDay()===6;
+  if(!isWeekend) return engineers;
+  const assigned=[...new Set(jobs.filter(j=>j.date===dateStr).map(j=>normalizeEngineerName(j.engineer)).filter(Boolean))];
+  if(!assigned.length) return ['林川閔'];
+  return [...engineers.filter(e=>assigned.includes(e)),...assigned.filter(e=>!engineers.includes(e))];
 }
 
 // 判斷某天是否落在「目前選擇的月份」之外（整月分週檢視時，第一週/最後一週可能會補到隔壁月份的日期湊滿一整週）
@@ -12456,3 +12468,106 @@ body.compact-schedule #schedule .job:not(.expanded){
   box-shadow:none !important;
 }
 </style>
+
+<style>
+.other-dispatch-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+.other-dispatch-fields label{display:flex;flex-direction:column;gap:4px;font-size:13px;}
+.other-date-group{margin:16px 0;border:1px solid #d5dbe3;border-radius:6px;overflow:hidden;}
+.other-date-group h4{margin:0;padding:10px;background:#e8edf3;font-size:14px;}
+.other-engineer-group{padding:10px;border-top:1px solid #ddd;}
+.other-job-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:8px;}
+.other-job-card{padding:10px;background:#fff8e2;border-radius:5px;line-height:1.65;font-size:13px;overflow-wrap:anywhere;}
+</style>
+<script>
+const OTHER_DISPATCH_KEY='paigong_other_dispatch_v1';
+let otherDispatchRows=(()=>{try{const rows=JSON.parse(localStorage.getItem(OTHER_DISPATCH_KEY)||'[]');return Array.isArray(rows)?rows:[];}catch(e){return [];}})();
+let otherDispatchEditingId=null, otherDispatchUnsubscribe=null;
+function otherDispatchCollection(){
+  try{return firebaseDb?firebaseDb.collection('sharedDispatch').doc('main').collection('otherDispatchJobs'):null;}catch(e){return null;}
+}
+function otherDispatchStatus(message){const el=document.getElementById('otherDispatchSyncStatus');if(el)el.textContent=message;}
+function cacheOtherDispatch(){try{localStorage.setItem(OTHER_DISPATCH_KEY,JSON.stringify(otherDispatchRows));}catch(e){otherDispatchStatus('本機儲存空間不足');}}
+function startOtherDispatchSync(){
+  if(otherDispatchUnsubscribe)return;
+  const col=otherDispatchCollection();if(!col){otherDispatchStatus('目前使用本機資料');return;}
+  otherDispatchStatus('同步中…');
+  otherDispatchUnsubscribe=col.onSnapshot(snap=>{
+    otherDispatchRows=[];snap.forEach(doc=>otherDispatchRows.push({...doc.data(),id:doc.id}));
+    cacheOtherDispatch();renderOtherDispatch();otherDispatchStatus('已同步');
+  },err=>{console.warn('其它派工同步失敗',err);otherDispatchStatus('同步失敗，目前顯示本機資料');if(otherDispatchUnsubscribe)otherDispatchUnsubscribe();otherDispatchUnsubscribe=null;});
+}
+function groupOtherDispatch(rows,month){
+  const dates=new Map();
+  for(const row of [...rows].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||'')))){
+    if(!row.date || (month&&!String(row.date).startsWith(month+'-')))continue;
+    if(!dates.has(row.date))dates.set(row.date,new Map());
+    const engineers=dates.get(row.date),name=String(row.engineer||'').trim();
+    if(!engineers.has(name))engineers.set(name,[]);
+    engineers.get(name).push(row);
+  }
+  return dates;
+}
+function renderOtherDispatch(){
+  const box=document.getElementById('otherDispatchList');if(!box)return;
+  document.getElementById('otherDispatchForm').style.display=canEdit()?'':'none';
+  const groups=groupOtherDispatch(otherDispatchRows,document.getElementById('otherDispatchMonth').value);
+  if(!groups.size){box.innerHTML='<div class="empty">目前沒有符合日期的其它派工。</div>';return;}
+  let html='';
+  for(const [date,engineerGroups] of groups){
+    html+=`<section class="other-date-group"><h4>${escapeHtml(date)} ${escapeHtml(getWeekdayName(date))}</h4>`;
+    for(const [name,rows] of engineerGroups){
+      html+=`<div class="other-engineer-group"><strong>工程：${escapeHtml(name||'未填寫')}</strong> <span style="color:#777;">${rows.length} 件</span><div class="other-job-list">`;
+      for(const row of rows){
+        html+=`<article class="other-job-card"><strong>${escapeHtml(row.customer||'未填客戶')}</strong>${[['時間',row.time],['電話',row.phone],['地址',row.address],['施工項目',row.workItem],['施工內容',row.content]].filter(([,value])=>value).map(([label,value])=>`<div>${label}：${escapeHtml(value)}</div>`).join('')}`;
+        if(canEdit())html+=`<div style="display:flex;gap:6px;margin-top:8px;"><button type="button" data-other-edit="${escapeHtml(row.id)}">編輯</button><button type="button" data-other-delete="${escapeHtml(row.id)}" style="background:#b33939;">刪除</button></div>`;
+        html+='</article>';
+      }
+      html+='</div></div>';
+    }
+    html+='</section>';
+  }
+  box.innerHTML=html;
+}
+const otherDispatchFields=['date','engineer','time','customer','phone','address','workItem','content'];
+function resetOtherDispatchForm(){otherDispatchEditingId=null;document.getElementById('otherDispatchForm').reset();document.getElementById('otherDispatchSave').textContent='新增派工';}
+function editOtherDispatch(id){
+  if(!canEdit())return;
+  const row=otherDispatchRows.find(r=>r.id===id);if(!row)return;
+  otherDispatchEditingId=id;
+  for(const key of otherDispatchFields)document.getElementById('other_'+key).value=row[key]||'';
+  document.getElementById('otherDispatchSave').textContent='儲存修改';
+  document.getElementById('otherDispatchForm').scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function saveOtherDispatch(){
+  if(!requireEdit('新增／修改其它派工'))return;
+  const row={};for(const key of otherDispatchFields)row[key]=document.getElementById('other_'+key).value.trim();
+  if(!row.date){alert('請先填寫日期');return;}
+  row.id=otherDispatchEditingId||('other_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
+  row.updatedAt=new Date().toISOString();
+  const button=document.getElementById('otherDispatchSave');button.disabled=true;
+  try{
+    const col=otherDispatchCollection();
+    if(col){await col.doc(row.id).set(row,{merge:true});otherDispatchStatus('已同步');}
+    const index=otherDispatchRows.findIndex(r=>r.id===row.id);
+    if(index<0)otherDispatchRows.push(row);else otherDispatchRows[index]=row;
+    cacheOtherDispatch();
+    const month=document.getElementById('otherDispatchMonth');if(month.value)month.value=row.date.slice(0,7);
+    resetOtherDispatchForm();renderOtherDispatch();
+    if(!col)otherDispatchStatus('已儲存於本機');
+  }catch(err){console.warn('其它派工儲存失敗',err);otherDispatchStatus('儲存失敗，請重試；已保留表單內容');}
+  finally{button.disabled=false;}
+}
+async function deleteOtherDispatch(id){
+  if(!requireEdit('刪除其它派工')||!confirm('確定刪除此筆其它派工？'))return;
+  try{
+    const col=otherDispatchCollection();if(col)await col.doc(id).delete();
+    otherDispatchRows=otherDispatchRows.filter(r=>r.id!==id);cacheOtherDispatch();
+    if(otherDispatchEditingId===id)resetOtherDispatchForm();renderOtherDispatch();
+  }catch(err){console.warn('其它派工刪除失敗',err);otherDispatchStatus('刪除失敗，請重試');}
+}
+document.getElementById('otherDispatchList').addEventListener('click',event=>{
+  const edit=event.target.closest('[data-other-edit]'),remove=event.target.closest('[data-other-delete]');
+  if(edit)editOtherDispatch(edit.dataset.otherEdit);
+  if(remove)deleteOtherDispatch(remove.dataset.otherDelete);
+});
+</script>
