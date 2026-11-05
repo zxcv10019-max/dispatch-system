@@ -2499,7 +2499,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 
 <script>
 const engineers=["鄧長益","陳昱存","陳義強","林川閔"];
-const times=["09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
+const times=["08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"];
 
 // 固定 key，從舊版 key 遷移資料
 const JOBS_KEY = "paigong_jobs_v2_clean"; // 乾淨版：不讀取舊版本機派工資料
@@ -12397,7 +12397,7 @@ async function saveOutsourceQuickField(input){
 }
 function osHalfHourOptions(current=''){
   const value=String(current||'').trim();
-  const slots=Array.from({length:48},(_,i)=>String(Math.floor(i/2)).padStart(2,'0')+':'+(i%2?'30':'00'));
+  const slots=Array.from({length:31},(_,i)=>{const slot=i+17;return String(Math.floor(slot/2)).padStart(2,'0')+':'+(slot%2?'30':'00');});
   const legacy=value&&!slots.includes(value)?`<option value="${osEsc(value)}" selected disabled hidden>${osEsc(value)}（原時間）</option>`:'';
   return `<option value="" ${!value?'selected':''}>選擇時間</option>`+legacy+slots.map(time=>`<option value="${time}" ${time===value?'selected':''}>${time}</option>`).join('');
 }
@@ -13496,4 +13496,203 @@ html.ops-document:has(body.leave-editor-lock),body.ops-shell.leave-editor-lock{o
   });
   renderWorkspace();
 })();
+</script>
+
+<style id="ops-workflow-tools-style">
+.ops-shell .ops-global-search-trigger{display:flex;align-items:center;gap:9px;background:#f4f7fb!important;color:#8193a6!important;border:1px solid #e0e8f1!important;border-radius:7px!important;padding:6px 10px!important;font-size:11px!important;font-weight:400;white-space:nowrap;}
+.ops-global-search-trigger>span:first-child{font-size:20px;line-height:1;}
+.ops-global-search-trigger kbd{font-family:inherit;font-size:9px;border:1px solid #d9e2ec;border-radius:4px;padding:1px 4px;color:#9babbc;}
+.ops-shell .ops-reset-filters{background:#fff!important;border:1px solid #dfe7f0!important;border-radius:7px;color:#7b91a7!important;padding:6px 10px;font-size:11px;white-space:nowrap;}
+.ops-shell .ops-context .ops-today{margin-left:auto;}
+.ops-search-overlay[hidden]{display:none!important;}
+.ops-search-overlay{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:12vh 15px 20px;background:#10243c66;backdrop-filter:blur(3px);z-index:20000;}
+.ops-search-box{width:min(720px,96vw);max-height:78vh;display:flex;flex-direction:column;background:#fff;border:1px solid #e1e8f1;border-radius:14px;box-shadow:0 25px 100px #122d5033;overflow:hidden;}
+.ops-search-heading{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;color:#4e6b87;font-size:13px;}
+.ops-search-heading button{background:transparent!important;color:#96a7b8!important;padding:4px 8px;}
+.ops-search-input-wrap{margin:0 18px 12px;border:1px solid #c9d9e9;border-radius:8px;padding:7px 11px;display:flex;align-items:center;gap:10px;background:#f7fafd;}
+.ops-search-input-wrap>span{font-size:26px;color:#91a6bb;line-height:1;}
+body.ops-shell #opsSearchInput{width:100%;border:0!important;box-shadow:none!important;outline:0;background:transparent;font-size:14px;padding:6px 0;}
+#opsSearchResults{overflow-y:auto;min-height:120px;flex:1;padding:0 10px 12px;}
+.ops-search-count{font-size:11px;color:#8fa0b3;padding:4px 9px 9px;}
+.ops-search-result{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:#fff!important;color:#526c86!important;border-radius:7px;padding:12px 10px!important;border-bottom:1px solid #eff3f7;font-size:12px;}
+.ops-search-result:hover,.ops-search-result:focus-visible{background:#edf4fb!important;}
+.ops-search-type{background:#eaf1f8;border:1px solid #dfe9f3;border-radius:5px;font-size:10px;color:#718ba5;min-width:62px;text-align:center;padding:3px 5px;}
+.ops-search-result-copy{flex:1;min-width:0;}.ops-search-result-copy strong{display:block;font-size:12px;font-weight:600;overflow-wrap:anywhere;}.ops-search-result-copy small{display:block;color:#94a4b6;font-size:11px;margin-top:4px;overflow-wrap:anywhere;}.ops-search-arrow{color:#a1b4c7;}
+.ops-search-empty{text-align:center;padding:40px 15px;color:#7f95aa;font-size:13px;}.ops-search-empty small{display:block;font-size:11px;color:#9cacbc;margin-top:9px;}
+.ops-search-foot{border-top:1px solid #eaf0f6;padding:12px 20px;font-size:10px;color:#9aacbd;background:#fafcfe;}
+html.ops-document:has(body.ops-search-open),body.ops-shell.ops-search-open{overflow:hidden!important;}
+.ops-save-feedback{display:inline-flex;align-items:center;gap:5px;color:#93a1b1;font-size:10px;white-space:nowrap;}
+.ops-save-feedback[data-state=saved]{color:#5b927c;}.ops-save-feedback[data-state=saving],.ops-save-feedback[data-state=waiting]{color:#8197af;}.ops-save-feedback[data-state=error]{color:#b77369;}.ops-save-feedback[data-state=local]{color:#ad966c;}
+body.ops-shell .header .auth-panel #opsSaveRetry{padding:2px 5px!important;font-size:10px!important;background:#fff4ee!important;color:#b0795d!important;border-color:#edd9cb!important;}
+#opsSaveRetry[hidden]{display:none!important;}
+.ops-search-highlight{outline:2px solid #8bb0d3!important;outline-offset:-2px;background:#edf5fd!important;}
+@media(max-width:1250px){.ops-global-search-label{display:none;}.ops-global-search-trigger kbd{display:none;}.ops-shell .ops-global-search-trigger{padding:5px 9px!important;}.ops-shell .ops-workspace-name{display:none;}}
+@media(max-width:850px){.ops-save-feedback{max-width:90px;white-space:normal;text-align:right;line-height:1.3;}.ops-shell .header .auth-status{max-width:170px!important;}.ops-shell .header .auth-panel{gap:5px;}.ops-shell .ops-context{flex-wrap:wrap;}.ops-shell .ops-reset-filters{margin-left:auto;}}
+@media(max-width:520px){.ops-search-overlay{padding:72px 9px 12px;}.ops-search-box{max-height:calc(100dvh - 94px);}.ops-search-type{min-width:48px;font-size:9px;}.ops-shell .header .auth-status{max-width:110px!important;}.ops-save-feedback{font-size:9px;max-width:70px;}.ops-shell .header .auth-panel button{padding:4px 6px!important;}.ops-shell .ops-global-search-trigger{padding:4px 7px!important;}}
+@media print{.ops-search-overlay,.ops-reset-filters{display:none!important;}}
+
+</style>
+<script id="ops-workflow-tools">
+(function(){
+ 'use strict';
+ const byId=id=>document.getElementById(id),activePage=()=>document.querySelector('body>.page.active')?.id||'schedulePage';
+ const allowed=()=>typeof canEdit==='function'&&canEdit()&&!!currentUser;
+ const fields={schedulePage:['viewDate','osSearch','otherDispatchMonth'],customerPage:['customerSearch'],listPage:['listMonth','listStartDate','listEndDate','listHoldFilter','listEngineerFilter','listCustomerFilter'],repairPage:['repairStatusFilter','repairSearch'],repairManagePage:['rtSearch','rtStatusFilter','rtDateFilter'],statsPage:['statsMonth2','statsAmountMonth','statsInstallMonth','statsOutsourceMonth','statsFutureInstallFrom','statsHistoryKeyword'],installFollowupPage:['installFollowupMonth'],leavePage:['leaveWorkspaceMonth','leaveWorkspaceEngineer','lpRegionFilter'],cartridgePage:['cartridgeMonthFilter'],adminPage:['adminFilterEmail','adminFilterType','adminFilterStart','adminFilterEnd']};
+ let preferences={},account='',restoring=false,scrollTimer=null,restoreToken=0;
+ function accountKey(){return 'dispatch_workspace_preferences_v1:'+firebaseConfig.projectId+':'+String(currentUser?.uid||currentUser?.email||'').toLowerCase();}
+ function ensureAccount(){const next=accountKey();if(next===account)return;account=next;try{const saved=JSON.parse(localStorage.getItem(account)||'{}');preferences=saved&&typeof saved==='object'?saved:{};}catch(e){preferences={};}}
+ function persist(){if(!currentUser)return;try{localStorage.setItem(account,JSON.stringify(preferences));}catch(e){}}
+ function snapshot(pageId=activePage()){
+  if(restoring||!allowed())return;ensureAccount();
+  const values={};for(const id of fields[pageId]||[]){const node=byId(id);if(node)values[id]=node.value;}
+  const old=preferences[pageId]||{};const state={...old,values,scrollY:window.scrollY,scrollX:window.scrollX};
+  if(pageId==='schedulePage'){state.range=window.scheduleRangeMode||'week';state.compact=window.scheduleViewMode||'standard';state.subview=byId('scheduleOtherView')?.style.display!=='none'?'other':byId('scheduleOutsourceView')?.style.display!=='none'?'outsource':'calendar';state.outsourceMode=outsourceViewMode;state.otherCompact=typeof otherDispatchCompact==='undefined'?true:otherDispatchCompact;}
+  if(pageId==='installFollowupPage')state.followup=window.installFollowupView||'all';
+  if(pageId==='leavePage')state.leaveView=byId('leaveListMode')?.classList.contains('selected')?'list':'calendar';
+  if(pageId==='cartridgePage')state.cartridgeStatus=typeof cartridgeStatusFilter==='undefined'?'':cartridgeStatusFilter;
+  state.scrolls={};for(const id of ['scheduleWrap','installFollowupList','otherDispatchList']){const node=byId(id);if(node&&node.closest('.page')?.id===pageId)state.scrolls[id]={left:node.scrollLeft,top:node.scrollTop};}
+  for(const node of byId(pageId)?.querySelectorAll('.customer-table,.outsource-wrap')||[]){const key=node.classList.contains('customer-table')?'customer-table':'outsource-wrap';state.scrolls[key]={left:node.scrollLeft,top:node.scrollTop};}
+  preferences[pageId]=state;persist();
+ }
+ function renderPage(id){
+  if(id==='schedulePage'){renderSchedule();if(byId('scheduleOtherView')?.style.display!=='none')renderOtherDispatch();if(byId('scheduleOutsourceView')?.style.display!=='none')renderOutsourceTable();}
+  else if(id==='customerPage')renderCustomers();else if(id==='listPage')renderJobList();else if(id==='repairPage')renderRepairRequests();else if(id==='repairManagePage')renderRepairTicketList();else if(id==='statsPage')renderStatsPage();else if(id==='installFollowupPage')renderInstallFollowup(true);else if(id==='leavePage')renderLeaveListLP();else if(id==='cartridgePage')renderCartridgeTable();else if(id==='adminPage'&&typeof renderAdminLogs==='function')renderAdminLogs();
+ }
+ function restore(pageId,scroll=true){
+  if(!allowed())return;ensureAccount();const state=preferences[pageId];if(!state)return;
+  restoring=true;
+  try{
+   for(const [id,value] of Object.entries(state.values||{})){const node=byId(id);if(node){if(node.tagName==='SELECT'&&![...node.options].some(o=>o.value===value))continue;node.value=value;}}
+   if(pageId==='schedulePage'){
+    if(state.range&&state.range!==(window.scheduleRangeMode||'week'))toggleScheduleRangeMode();
+    if(state.compact&&typeof window.applyScheduleViewModeUI==='function'){window.scheduleViewMode=state.compact;window.applyScheduleViewModeUI();}
+    else if(state.compact){window.scheduleViewMode=state.compact;document.body.classList.toggle('compact-schedule',state.compact==='compact');const button=byId('viewModeToggleBtn');if(button)button.textContent=state.compact==='compact'?'標準檢視':'精簡檢視';}
+    if(state.outsourceMode)outsourceViewMode=state.outsourceMode;if(typeof state.otherCompact==='boolean'&&typeof otherDispatchCompact!=='undefined')otherDispatchCompact=state.otherCompact;
+    switchScheduleSubtab(state.subview||'calendar');
+   }
+   if(pageId==='installFollowupPage')window.installFollowupView=state.followup||'all';
+   if(pageId==='leavePage')setLeaveWorkspaceView(state.leaveView||'calendar');
+   if(pageId==='cartridgePage'&&typeof cartridgeStatusFilter!=='undefined')cartridgeStatusFilter=state.cartridgeStatus||'';
+   renderPage(pageId);
+  }finally{restoring=false;}
+  const token=++restoreToken;
+  if(scroll)requestAnimationFrame(()=>requestAnimationFrame(()=>{if(token!==restoreToken||activePage()!==pageId)return;window.scrollTo({top:Number(state.scrollY)||0,left:0,behavior:'instant'});for(const [id,pos] of Object.entries(state.scrolls||{})){const node=byId(id)||byId(pageId)?.querySelector('.'+id);if(node){node.scrollLeft=Number(pos.left)||0;node.scrollTop=Number(pos.top)||0;}}}));
+ }
+ window.opsRememberFilters=()=>snapshot();
+ const previousShowPage=window.showPage;
+ window.showPage=function(id){const before=activePage();if(id!=='dispatchPage')snapshot(before);const result=previousShowPage.apply(this,arguments);const after=activePage();reset.style.display=allowed()&&fields[after]?'':'none';if(after!==before){if(!restoring)restore(after,true);}return result;};
+ const reset=document.createElement('button');reset.type='button';reset.id='opsResetPageFilters';reset.className='ops-reset-filters';reset.textContent='重設本頁';reset.title='清除本頁記住的篩選與捲動位置';document.querySelector('.ops-context')?.appendChild(reset);
+ reset.onclick=()=>{
+  if(!allowed())return;ensureAccount();const id=activePage(),month=formatDateLocal(new Date()).slice(0,7),today=formatDateLocal(new Date());delete preferences[id];persist();restoring=true;
+  for(const field of fields[id]||[]){const node=byId(field);if(!node)continue;node.value=node.type==='month'?month:field==='viewDate'||field==='statsFutureInstallFrom'?today:field==='listHoldFilter'?'normal':node.tagName==='SELECT'?(node.querySelector('option[value=""]')?'':node.options[0]?.value||''):'';}
+  if(id==='schedulePage'){if((window.scheduleRangeMode||'week')!=='week')toggleScheduleRangeMode();outsourceViewMode='active';window.scheduleViewMode='standard';window.applyScheduleViewModeUI?.();if(typeof otherDispatchCompact!=='undefined')otherDispatchCompact=true;switchScheduleSubtab('calendar');}
+  if(id==='installFollowupPage')window.installFollowupView='all';if(id==='leavePage')setLeaveWorkspaceView('calendar');if(id==='cartridgePage'&&typeof cartridgeStatusFilter!=='undefined')cartridgeStatusFilter='';renderPage(id);restoring=false;++restoreToken;window.scrollTo({top:0,behavior:'instant'});snapshot(id);
+ };
+ const allFields=new Set(Object.values(fields).flat());
+ document.addEventListener('input',event=>{if(allFields.has(event.target.id))snapshot();});document.addEventListener('change',event=>{if(allFields.has(event.target.id))snapshot();});
+ document.addEventListener('click',event=>{if(event.target.closest('.tabs,.ops-global-search-trigger,#opsSearchDialog'))return;setTimeout(()=>snapshot(),0);});
+ window.addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>snapshot(),180);},{passive:true});
+ window.addEventListener('pagehide',()=>snapshot());
+ // Global search uses current in-memory records and existing page/drawer actions.
+ const trigger=document.createElement('button');trigger.type='button';trigger.id='opsGlobalSearchButton';trigger.className='ops-global-search-trigger';trigger.innerHTML='<span aria-hidden="true">⌕</span><span class="ops-global-search-label">搜尋客編、姓名、電話</span><kbd>Ctrl K</kbd>';trigger.setAttribute('aria-label','全站搜尋');document.querySelector('.ops-header-start')?.appendChild(trigger);
+ const modal=document.createElement('div');modal.id='opsSearchDialog';modal.className='ops-search-overlay';modal.hidden=true;modal.innerHTML='<section class="ops-search-box" role="dialog" aria-modal="true" aria-labelledby="opsSearchTitle"><div class="ops-search-heading"><strong id="opsSearchTitle">全站搜尋</strong><button type="button" id="opsSearchClose" aria-label="關閉搜尋">✕</button></div><div class="ops-search-input-wrap"><span aria-hidden="true">⌕</span><input id="opsSearchInput" type="search" autocomplete="off" placeholder="輸入客編、客名、電話、機型或施工內容" aria-label="搜尋所有資料"></div><div id="opsSearchResults" role="region" aria-live="polite"></div><div class="ops-search-foot">包含派工、客戶、報修、回訪、代工及其它派工；資料依目前權限與同步內容顯示。</div></section>';document.body.appendChild(modal);
+ let found=[],searchTimer=null,searchReturn=null;
+ function norm(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s\-()（）]/g,'');}
+ function matches(values,query){const text=norm(values.join('|'));return query.trim().split(/\s+/).every(term=>text.includes(norm(term)));}
+ function addResult(results,kind,label,record,title,detail,values,query){if(matches(values,query))results.push({kind,label,id:String(record.id??record.customerNo??''),title,detail,record});}
+ function search(query){
+  if(!allowed())return [];const q=String(query||'').trim();if(!q||!norm(q))return [];
+  const result=[];
+  for(const row of jobs||[]){if(row.isLeaveJob)continue;addResult(result,'job','派工',row,row.codeName||[row.customerCode,row.customerName].filter(Boolean).join(' ')||'未填客戶',[row.date,normalizeEngineerName(row.engineer),row.workItem].filter(Boolean).join(' · '),[row.customerCode,row.customerName,row.codeName,row.phone,row.address,row.workItem,row.workContent,row.orderNo],q);}
+  for(const row of customers||[])addResult(result,'customer','客戶',row,[row.customerNo,row.fullName||row.shortName||row.personName].filter(Boolean).join(' '),row.deliveryAddress||row.mobile||'',[row.customerNo,row.fullName,row.shortName,row.personName,row.mobile,row.phone,row.deliveryAddress],q);
+  for(const row of typeof repairTickets==='undefined'?[]:repairTickets)addResult(result,'ticket','報修管理',row,[row.customerCode,row.customerName].filter(Boolean).join(' ')||row.model||'報修單',[row.reportDate,row.status,row.model,row.issue].filter(Boolean).join(' · '),[row.customerCode,row.customerName,row.phone,row.address,row.model,row.machineCode,row.issue,row.note],q);
+  for(const row of typeof repairRequests==='undefined'?[]:repairRequests)addResult(result,'request','報修案件',row,row.customerName||row.name||row.model||'報修案件',[row.model,row.status].filter(Boolean).join(' · '),[row.customerCode,row.customerName,row.name,row.phone,row.address,row.model,row.serial,row.machineCode,row.issue,row.issueType,row.location,row.description],q);
+  for(const row of getInstallFollowupRows())addResult(result,'followup','安裝回訪',row,[installCustomerCode(row),row.customerName].filter(Boolean).join(' '),[row.date,installModel(row),row.installFollowupCompleted?'已回訪':'待回訪'].join(' · '),[installCustomerCode(row),row.customerName,row.phone,installModel(row),row.installFollowupNote,row.date],q);
+  for(const row of typeof outsourceRows==='undefined'?[]:outsourceRows)addResult(result,'outsource','代工',row,row.customer||[row.customerCode,row.customerName].filter(Boolean).join(' ')||row.vendor,[row.date,row.vendor,row.completed?'已完成':'進行中'].filter(Boolean).join(' · '),[row.customerCode,row.customerName,row.customer,row.phone,row.address,row.content,row.vendor,row.tracking],q);
+  for(const row of typeof otherDispatchRows==='undefined'?[]:otherDispatchRows){const customer=otherDispatchCustomerParts(row);addResult(result,'other','其它派工',row,[customer.customerCode,customer.customerName].filter(Boolean).join(' ')||'其它派工',[row.date,row.engineer,row.workItem].filter(Boolean).join(' · '),[customer.customerCode,customer.customerName,row.phone,row.address,row.workItem,row.content],q);}
+  return result;
+ }
+ window.opsSearchRecords=search;
+ function renderSearch(){
+  const query=byId('opsSearchInput').value.trim(),box=byId('opsSearchResults');
+  if(!query){found=[];box.innerHTML='<div class="ops-search-empty">輸入關鍵字，快速找到對應資料。<small>也可用 Ctrl／⌘ K 開啟搜尋，Esc 關閉。</small></div>';return;}
+  const results=search(query),limited=[],counts={};for(const row of results){counts[row.kind]=(counts[row.kind]||0)+1;if(counts[row.kind]<=10&&limited.length<70)limited.push(row);}found=limited;
+  box.innerHTML=results.length?'<div class="ops-search-count">找到 '+results.length+' 筆，每類最多顯示 10 筆</div>'+found.map((row,index)=>'<button type="button" class="ops-search-result" data-search-index="'+index+'"><span class="ops-search-type">'+escapeHtml(row.label)+'</span><span class="ops-search-result-copy"><strong>'+escapeHtml(row.title)+'</strong><small>'+escapeHtml(row.detail)+'</small></span><span class="ops-search-arrow" aria-hidden="true">→</span></button>').join(''):'<div class="ops-search-empty">沒有符合的資料。<small>可嘗試客編、電話末幾碼，或確認資料已完成同步。</small></div>';
+ }
+ function closeSearch(){modal.hidden=true;document.body.classList.remove('ops-search-open');if(searchReturn?.isConnected)searchReturn.focus({preventScroll:true});}
+ function openSearch(){
+  if(!allowed())return;searchReturn=document.activeElement;modal.hidden=false;document.body.classList.add('ops-search-open');renderSearch();byId('opsSearchInput').focus();
+  if(firebaseDb){if(typeof loadRepairRequests==='function'&&!repairUnsubscribe)loadRepairRequests();if(typeof loadRepairTickets==='function'&&!repairTicketsUnsubscribe)loadRepairTickets();if(typeof startOutsourceSync==='function')startOutsourceSync();if(typeof startOtherDispatchSync==='function')startOtherDispatchSync();}
+  for(const ms of [600,1800])setTimeout(()=>{if(!modal.hidden&&!document.activeElement?.closest('.ops-search-result'))renderSearch();},ms);
+ }
+ window.openOpsSearch=openSearch;trigger.onclick=openSearch;byId('opsSearchClose').onclick=closeSearch;modal.onclick=event=>{if(event.target===modal)closeSearch();};
+ byId('opsSearchInput').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(renderSearch,140);});
+ function highlight(row){if(!row)return;row.classList.add('ops-search-highlight');row.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>row.classList.remove('ops-search-highlight'),3000);}
+ function goResult(result){
+  if(!allowed())return;closeSearch();if(byId('leaveEditorDrawer')?.classList.contains('open'))closeLeaveEditor();if(byId('dispatchPage')?.classList.contains('open'))closeDispatchDrawer();if(byId('repairTicketDrawer')?.classList.contains('open'))closeRepairTicketDrawer();
+  const row=result.record;
+  if(result.kind==='job'){const current=jobs.find(j=>String(j.id)===result.id);if(current)editJobForm(current.id);return;}
+  if(result.kind==='customer'){showPage('customerPage');byId('customerSearch').value=row.customerNo||row.fullName||'';renderCustomers();}
+  if(result.kind==='ticket'){showPage('repairManagePage');openRepairTicketDrawer(result.id);return;}
+  if(result.kind==='request'){showPage('repairPage');byId('repairStatusFilter').value='全部';byId('repairSearch').value=row.phone||row.customerName||row.name||row.model||'';renderRepairRequests();}
+  if(result.kind==='followup'){showPage('installFollowupPage');byId('installFollowupMonth').value=String(row.date).slice(0,7);window.installFollowupView='all';renderInstallFollowup(true);requestAnimationFrame(()=>highlight([...byId('installFollowupList').querySelectorAll('[data-followup-id]')].find(n=>n.dataset.followupId===String(row.id))));}
+  if(result.kind==='outsource'){showPage('schedulePage');switchScheduleSubtab('outsource');outsourceViewMode=row.completed?'completed':'active';byId('osSearch').value=row.customerCode||row.customer||row.vendor||'';renderOutsourceTable();}
+  if(result.kind==='other'){showPage('schedulePage');switchScheduleSubtab('other');byId('otherDispatchMonth').value=String(row.date).slice(0,7);renderOtherDispatch();editOtherDispatch(row.id);}
+  ++restoreToken;snapshot();
+ }
+ byId('opsSearchResults').onclick=event=>{const button=event.target.closest('[data-search-index]');if(button&&found[Number(button.dataset.searchIndex)])goResult(found[Number(button.dataset.searchIndex)]);};
+ document.addEventListener('keydown',event=>{
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&allowed()){event.preventDefault();openSearch();return;}
+  if(modal.hidden)return;
+  if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeSearch();}
+  if(event.key==='ArrowDown'&&document.activeElement===byId('opsSearchInput')){event.preventDefault();clearTimeout(searchTimer);renderSearch();modal.querySelector('[data-search-index]')?.focus();}
+  if(event.key==='Enter'&&document.activeElement===byId('opsSearchInput')){event.preventDefault();clearTimeout(searchTimer);renderSearch();if(found.length)goResult(found[0]);}
+  if(event.key==='Tab'){const nodes=[...modal.querySelectorAll('input,button')].filter(n=>n.getClientRects().length),first=nodes[0],last=nodes[nodes.length-1];if(event.shiftKey&&document.activeElement===first){last.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first.focus();event.preventDefault();}}
+ },true);
+ // Save feedback tracks confirmed outcomes; local-only writes are never labelled as synced.
+ const feedback=document.createElement('span');feedback.id='opsSaveFeedback';feedback.className='ops-save-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');feedback.innerHTML='<span id="opsSaveFeedbackText">尚無待儲存變更</span><button type="button" id="opsSaveRetry" hidden>重試</button>';document.querySelector('.auth-panel')?.prepend(feedback);
+ const pending=new Map();let directBusy=0;
+ function paint(state,text){feedback.dataset.state=state;byId('opsSaveFeedbackText').textContent=text;byId('opsSaveRetry').hidden=pending.size===0;}
+ function successful(remote){if(pending.size)paint('error','仍有變更儲存失敗');else if(directBusy)paint('saving','儲存中…');else if(localDirty)paint('waiting','已存本機，等待同步…');else paint(remote?'saved':'local',remote?'已同步':'已存本機，尚未同步');}
+ window.opsSaveFeedback=paint;
+ const previousStatus=window.setSyncStatus;window.setSyncStatus=function(text,type){const r=previousStatus.apply(this,arguments);if(type==='err'&&/同步|儲存|上傳/.test(text))paint('error','同步失敗');else if(type==='ok'&&String(text).startsWith('已同步')&&!localDirty&&!savingCloud)successful(true);return r;};
+ const previousQueue=window.queueCloudSave;window.queueCloudSave=function(){if(currentUser&&canEdit()&&!isApplyingRemote)paint(firebaseDb?'waiting':'local',firebaseDb?'已存本機，等待同步…':'已存本機，尚未同步');return previousQueue.apply(this,arguments);};
+ const previousSaveCloud=window.saveCloudNow;window.saveCloudNow=async function(){
+  if(!currentUser||!canEdit())return previousSaveCloud.apply(this,arguments);
+  if(!firebaseDb){paint('local','已存本機，尚未同步');return previousSaveCloud.apply(this,arguments);}
+  paint('saving','同步中…');
+  try{const result=await previousSaveCloud.apply(this,arguments);if(result===true){pending.delete('main');successful(true);}else if(result===false){pending.set('main',()=>window.saveCloudNow());paint('error','同步失敗');}else if(!savingCloud)paint('waiting','等待同步確認…');return result;}
+  catch(error){pending.set('main',()=>window.saveCloudNow());paint('error','同步失敗');throw error;}
+ };
+ const previousQuick=window.saveOutsourceQuickField;window.saveOutsourceQuickField=async function(input){
+  if(input.validity&&!input.validity.valid)return previousQuick.apply(this,arguments);
+  const id=input.dataset.osId,field=input.dataset.osQuick,intended=input.value,row=outsourceRows.find(r=>r.id===id),key='os:'+id+':'+field;if(!row||String(row[field]||'')===intended||!canEdit())return previousQuick.apply(this,arguments);
+  directBusy++;paint('saving','儲存中…');
+  try{await previousQuick.apply(this,arguments);const current=outsourceRows.find(r=>r.id===id);if(current&&String(current[field]||'')===intended){pending.delete(key);}else pending.set(key,()=>window.saveOutsourceQuickField({dataset:{osId:id,osQuick:field},value:intended,validity:{valid:true},disabled:false}));}
+  finally{directBusy--;if(pending.has(key))paint('error','代工修改未儲存');else successful(!!outsourceCollection());}
+ };
+ const previousArchiveSave=window.saveArchivedInstallFollowupField;
+ window.saveArchivedInstallFollowupField=async function(id,field,input,tr){
+  if(input.validity&&!input.validity.valid)return previousArchiveSave.apply(this,arguments);
+  const archiveKey=String(id).startsWith('archive:')?String(id).slice(8):'',old=installFollowupArchive[archiveKey];
+  if(!old||!canEdit())return previousArchiveSave.apply(this,arguments);
+  const intended=field==='installFollowupCompleted'?input.checked:input.value,key='archive:'+archiveKey+':'+field;
+  if(old[field]===intended)return previousArchiveSave.apply(this,arguments);
+  directBusy++;paint('saving','儲存中…');
+  try{await previousArchiveSave.apply(this,arguments);if(installFollowupArchive[archiveKey]?.[field]===intended)pending.delete(key);else pending.set(key,()=>window.saveArchivedInstallFollowupField(id,field,{value:field==='installFollowupCompleted'?'':intended,checked:field==='installFollowupCompleted'?intended:false,validity:{valid:true},disabled:false},{querySelector:()=>({value:''})}));}
+  finally{directBusy--;if(pending.has(key))paint('error','回訪修改未儲存');else successful(!!sharedRootRef());}
+ };
+ const previousPersist=window.persistOutsourceRow;window.persistOutsourceRow=async function(row){
+  const key='os-row:'+row.id;directBusy++;paint('saving','儲存中…');const col=outsourceCollection();
+  try{saveOutsourceLocal();if(col)await col.doc(row.id).set(row,{merge:true});pending.delete(key);}
+  catch(error){pending.set(key,()=>{const latest=outsourceRows.find(r=>r.id===row.id);return latest?window.persistOutsourceRow(latest):Promise.resolve();});console.warn('代工儲存失敗，已保留本機資料',error);}
+  finally{directBusy--;if(pending.has(key))paint('error','代工尚未同步');else successful(!!col);}
+ };
+ byId('opsSaveRetry').onclick=async()=>{if(!allowed())return;const button=byId('opsSaveRetry');button.disabled=true;try{for(const retry of [...pending.values()])await retry();}finally{button.disabled=false;}};
+ window.addEventListener('offline',()=>{if(localDirty)paint('local','離線中，變更已存本機');});window.addEventListener('online',()=>{if(localDirty&&allowed()){paint('waiting','連線已恢復，等待同步…');queueCloudSave();}});
+ const otherStatus=byId('otherDispatchSyncStatus');if(otherStatus)new MutationObserver(()=>{const text=otherStatus.textContent||'';if(/儲存失敗|刪除失敗/.test(text))paint('error','其它派工儲存失敗，請重新儲存');else if(text==='已同步')successful(true);else if(text.includes('已儲存於本機'))successful(false);}).observe(otherStatus,{childList:true,characterData:true,subtree:true});
+ let activated='';const permissionObserver=new MutationObserver(()=>{const yes=allowed();trigger.style.display=yes?'':'none';reset.style.display=yes&&fields[activePage()]?'':'none';feedback.style.display=yes?'':'none';if(!yes){if(!modal.hidden)closeSearch();found=[];byId('opsSearchResults').innerHTML='';activated='';return;}const key=accountKey();if(activated!==key){activated=key;ensureAccount();restore(activePage(),true);}});permissionObserver.observe(document.body,{attributes:true,attributeFilter:['class']});
+ const yes=allowed();trigger.style.display=feedback.style.display=yes?'':'none';reset.style.display=yes&&fields[activePage()]?'':'none';if(yes){activated=accountKey();ensureAccount();restore(activePage(),true);}
+})();
+
 </script>
