@@ -1876,6 +1876,8 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <h3>☎️ 安裝回訪</h3>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <label for="installFollowupMonth">安裝月份：</label><input type="month" id="installFollowupMonth" onchange="renderInstallFollowup()">
+      <button type="button" id="installFollowupImportButton" onclick="document.getElementById('installFollowupExcelInput').click()">匯入回訪 Excel</button>
+      <input type="file" id="installFollowupExcelInput" accept=".xlsx,.xls" style="display:none" onchange="importInstallFollowupExcel(event)">
       <span id="installFollowupStatus" role="status" style="font-size:12px;color:#666;">依已安排的正式安裝派工自動帶入，修改後自動儲存。</span>
     </div>
     <div id="installFollowupList" style="overflow:auto;"></div>
@@ -2376,6 +2378,9 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
       <button id="lpCancelEditBtn" onclick="cancelEditLeaveRecordLP()" style="display:none;background:#95a5a6;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">取消編輯</button>
       <span id="lpEditingHint" style="display:none;font-size:12px;color:#e67e22;font-weight:bold;">✏️ 編輯中，改好後按「更新」即可同步派工表</span>
     </div>
+  </div>
+  <div class="form-card ops-leave-records">
+    <h3>休假與出差紀錄</h3>
     <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
       <label style="font-size:13px;font-weight:bold;color:#333;">🔍 類型篩選：</label>
       <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
@@ -3118,6 +3123,7 @@ async function loadCloudChunks(meta, onlyTypes){
 }
 
 async function applyRemoteData(data){
+  if(typeof applyInstallFollowupArchive==='function')applyInstallFollowupArchive(data.installFollowupArchive);
   const remoteToken = data.clientImportToken || "";
   const now = Date.now();
 
@@ -4598,7 +4604,7 @@ function buildScheduleBlockHtml(dates, today){
     const outside=isOutsideSelectedMonth(dateStr);
     const cls=dateStr===today ? "today-head" : (weekend ? "weekend-head" : "date-head");
     const colCount=getEngineersForDate(dateStr).length;
-    html+=`<th class="${cls}${outside?" outside-month-head":""}" colspan="${colCount}"><span class="head-date">${dateStr}</span><span class="head-weekday">${getWeekdayName(dateStr)}</span></th>`;
+    html+=`<th class="${cls}${outside?" outside-month-head":""}" colspan="${colCount}"><span class="head-date ${weekend?'is-weekend-date':''}" title="${dateStr}"><span class="ops-date-full">${dateStr}</span><span class="ops-date-short">${dateStr.slice(5)}</span></span><span class="head-weekday">${getWeekdayName(dateStr)}</span></th>`;
   });
   html+="</tr><tr>";
   dates.forEach(dateStr=>{
@@ -12816,23 +12822,32 @@ function renderFutureInstallStats(){
   html+=rows.map(j=>`<tr><td>${escapeHtml(j.date)}</td><td>${escapeHtml(installCustomerCode(j))}</td><td>${escapeHtml(normalizeEngineerName(j.engineer)||'未指定')}</td><td>${escapeHtml(installModel(j))}</td></tr>`).join('');
   box.innerHTML=html+'</tbody></table>';
 }
-function renderInstallFollowup(){
-  const box=document.getElementById('installFollowupList'),month=document.getElementById('installFollowupMonth');if(!box||!month||!canEdit())return;
-  if(document.activeElement?.closest?.('#installFollowupList')){box.dataset.refreshPending='1';return;}
-  if(!month.value)month.value=formatDateLocal(new Date()).slice(0,7);
-  const rows=arrangedInstallJobs(jobs||[]).filter(j=>String(j.date).startsWith(month.value+'-'));
-  if(!rows.length){box.innerHTML='<div class="empty">所選月份沒有已安排的安裝件。</div>';return;}
-  const completed=rows.filter(j=>j.installFollowupCompleted===true).length;
-  let html=`<div style="margin-bottom:10px;">共 ${rows.length} 件｜已回訪 ${completed} 件｜待回訪 ${rows.length-completed} 件</div><table class="install-list-table"><thead><tr><th>客代</th><th>機型／施工內容</th><th>安裝日期</th><th>安裝工程</th><th>已回訪</th><th>回訪日期</th><th style="min-width:300px;">備註</th></tr></thead><tbody>`;
-  html+=rows.map(j=>`<tr data-followup-id="${escapeHtml(String(j.id))}"><td>${escapeHtml(installCustomerCode(j))}${j.customerName?`<br><span style="color:#666;">${escapeHtml(j.customerName)}</span>`:''}</td><td>${escapeHtml(installModel(j))}</td><td>${escapeHtml(j.date)}</td><td>${escapeHtml(normalizeEngineerName(j.engineer)||'未指定')}</td><td style="text-align:center;"><input type="checkbox" aria-label="已回訪" data-followup-field="installFollowupCompleted" ${j.installFollowupCompleted?'checked':''}></td><td><input type="date" aria-label="回訪日期" data-followup-field="installFollowupDate" value="${escapeHtml(j.installFollowupDate||'')}"></td><td><textarea aria-label="回訪備註" data-followup-field="installFollowupNote" placeholder="填寫回訪紀錄、客戶回覆與後續處理…">${escapeHtml(j.installFollowupNote||'')}</textarea></td></tr>`).join('');
-  box.innerHTML=html+'</tbody></table>';delete box.dataset.refreshPending;
+function setInstallFollowupView(view){
+  window.installFollowupView=['all','pending','completed'].includes(view)?view:'all';
+  renderInstallFollowup(true);
 }
-function saveInstallFollowupField(input){
+function renderInstallFollowup(force=false){
+  const box=document.getElementById('installFollowupList'),month=document.getElementById('installFollowupMonth');if(!box||!month||!canEdit())return;
+  if(!force&&document.activeElement?.closest?.('#installFollowupList')&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){box.dataset.refreshPending='1';return;}
+  if(!month.value)month.value=formatDateLocal(new Date()).slice(0,7);
+  const allRows=getInstallFollowupRows().filter(j=>String(j.date).startsWith(month.value+'-'));
+  const view=window.installFollowupView||'all';
+  const rows=allRows.filter(j=>view==='all'||(view==='completed'?j.installFollowupCompleted===true:j.installFollowupCompleted!==true));
+  if(!allRows.length){box.innerHTML='<div class="empty">所選月份沒有安裝或歷史回訪紀錄。</div>';return;}
+  const completed=allRows.filter(j=>j.installFollowupCompleted===true).length;
+  let html=`<div class="followup-summary-cards"><div><span>當月安裝</span><strong>${allRows.length}<small> 件</small></strong></div><div><span>待回訪</span><strong>${allRows.length-completed}<small> 件</small></strong></div><div><span>已回訪</span><strong>${completed}<small> 件</small></strong></div></div><div class="followup-status-tabs" role="group" aria-label="回訪狀態篩選">${[['all','全部'],['pending','待回訪'],['completed','已回訪']].map(([key,label])=>`<button type="button" class="${view===key?'selected':''}" aria-pressed="${view===key}" onclick="setInstallFollowupView('${key}')">${label}</button>`).join('')}<span>顯示 ${rows.length} 件</span></div><table class="install-list-table"><thead><tr><th>客代</th><th>機型／施工內容</th><th>安裝日期</th><th>安裝工程</th><th>已回訪</th><th>回訪日期</th><th style="min-width:300px;">備註</th></tr></thead><tbody>`;
+  html+=rows.map(j=>`<tr class="${j.installFollowupCompleted?'followup-done':'followup-pending'}" data-followup-id="${escapeHtml(String(j.id))}"><td>${escapeHtml(installCustomerCode(j))}${j.followupArchiveKey?'<br><small style="color:#8796a8;">'+(j.followupArchiveOnly?'歷史回訪・未對應派工':'Excel 已補登')+'</small>':''}${j.customerName?`<br><span style="color:#666;">${escapeHtml(j.customerName)}</span>`:''}</td><td>${escapeHtml(installModel(j))}</td><td>${escapeHtml(j.date)}</td><td>${escapeHtml(normalizeEngineerName(j.engineer)||'未提供安裝工程')}</td><td style="text-align:center;"><input type="checkbox" aria-label="已回訪" data-followup-field="installFollowupCompleted" ${j.installFollowupCompleted?'checked':''}></td><td><input type="date" aria-label="回訪日期" data-followup-field="installFollowupDate" value="${escapeHtml(j.installFollowupDate||'')}"></td><td><textarea aria-label="回訪備註" data-followup-field="installFollowupNote" placeholder="填寫回訪紀錄、客戶回覆與後續處理…">${escapeHtml(j.installFollowupNote||'')}</textarea></td></tr>`).join('');
+  box.innerHTML=html+'</tbody></table>'+(!rows.length?'<div class="empty">沒有符合此狀態的回訪案件。</div>':'');delete box.dataset.refreshPending;
+}
+async function saveInstallFollowupField(input){
   if(!requireEdit('更新安裝回訪'))return;
   const tr=input.closest('[data-followup-id]'),field=input.dataset.followupField;
   if(!tr||!['installFollowupCompleted','installFollowupDate','installFollowupNote'].includes(field))return;
-  const job=jobs.find(j=>String(j.id)===tr.dataset.followupId);if(!job)return;
+  const job=jobs.find(j=>String(j.id)===tr.dataset.followupId);
+  if(!job){await saveArchivedInstallFollowupField(tr.dataset.followupId,field,input,tr);return;}
   if(input.validity&&!input.validity.valid)return;
+  const shown=getInstallFollowupRows().find(j=>String(j.id)===String(job.id));
+  if(shown)for(const key of ['installFollowupCompleted','installFollowupDate','installFollowupNote'])if(job[key]===undefined)job[key]=shown[key];
   job[field]=field==='installFollowupCompleted'?input.checked:input.value;
   if(field==='installFollowupCompleted'&&input.checked&&!job.installFollowupDate){
     job.installFollowupDate=formatDateLocal(new Date());tr.querySelector('[data-followup-field="installFollowupDate"]').value=job.installFollowupDate;
@@ -13028,7 +13043,7 @@ body.ops-shell>.tabs button:not([style*="display: none"]):not([style*="display:n
     const today=formatDateLocal(new Date()),month=today.slice(0,7);
     const valid=(jobs||[]).filter(j=>!isHoldJob(j)&&isValidJob(j));
     const todays=valid.filter(j=>j.date===today).sort((a,b)=>String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')));
-    const pending=arrangedInstallJobs(jobs||[]).filter(j=>j.date<=today&&!j.installFollowupCompleted).length;
+    const pending=(typeof getInstallFollowupRows==='function'?getInstallFollowupRows():arrangedInstallJobs(jobs||[])).filter(j=>j.date<=today&&!j.installFollowupCompleted).length;
     const outsource=typeof outsourceRows==='undefined'?0:outsourceRows.filter(j=>!j.completed&&!j.cancelled).length;
     const count=valid.filter(j=>String(j.date||'').startsWith(month)).length;
     let html='<div class="ops-overview-grid">'+overviewMetric('今日派工',todays.length,'件正式派工，依時間安排','calendar')+overviewMetric('安裝待回訪',pending,'件已到安裝日期的待回訪案件','phone')+overviewMetric('代工進行中',outsource,'件尚未完成的代工案件','tool')+overviewMetric('本月工作量',count,'件有效派工，不計出差與請假','stats')+'</div>';
@@ -13050,7 +13065,7 @@ body.ops-shell>.tabs button:not([style*="display: none"]):not([style*="display:n
     if(id==='opsOverviewPage'&&lastPage!==id)renderOverview();lastPage=id;
   }
   const originalShowPage=window.showPage;
-  if(typeof originalShowPage==='function')window.showPage=function(pageId){if(pageId==='opsOverviewPage'&&!canEdit())return;const result=originalShowPage.apply(this,arguments);refreshShell();if(pageId==='opsOverviewPage')renderOverview();return result;};
+  if(typeof originalShowPage==='function')window.showPage=function(pageId){if(pageId==='opsOverviewPage'&&!canEdit())return;const previous=document.querySelector('body>.page.active')?.id;const result=originalShowPage.apply(this,arguments);refreshShell();if(pageId==='opsOverviewPage')renderOverview();if(previous!==document.querySelector('body>.page.active')?.id)window.scrollTo({top:0,left:0,behavior:'instant'});return result;};
   dashboard.addEventListener('click',event=>{const button=event.target.closest('[data-ops-page]');if(button)window.showPage(button.dataset.opsPage);});
   let queued=false;function scheduleRefresh(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;refreshShell();});}
   const observer=new MutationObserver(scheduleRefresh);observer.observe(document.body,{attributes:true,attributeFilter:['class']});
@@ -13060,4 +13075,221 @@ body.ops-shell>.tabs button:not([style*="display: none"]):not([style*="display:n
   refreshShell();
 })();
 
+</script>
+
+<script id="install-followup-excel-import">
+const INSTALL_FOLLOWUP_ARCHIVE_KEY='dispatch_install_followup_archive_v1';
+let installFollowupArchive=(()=>{try{const v=JSON.parse(localStorage.getItem(INSTALL_FOLLOWUP_ARCHIVE_KEY)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}catch(e){return {};}})();
+function cacheInstallFollowupArchive(){try{localStorage.setItem(INSTALL_FOLLOWUP_ARCHIVE_KEY,JSON.stringify(installFollowupArchive));}catch(e){console.warn('歷史回訪快取失敗',e);}}
+function applyInstallFollowupArchive(remote){
+  if(!remote||typeof remote!=='object'||Array.isArray(remote))return;
+  for(const [key,value] of Object.entries(remote)){
+    if(!value||typeof value!=='object')continue;
+    const local=installFollowupArchive[key];
+    if(!local||String(value.updatedAt||'')>=String(local.updatedAt||''))installFollowupArchive[key]=value;
+  }
+  cacheInstallFollowupArchive();
+}
+function followupArchiveIdentity(code,date){
+  return String(code||'').trim().toUpperCase()+'|'+String(date||'');
+}
+function followupArchiveKey(code,date){
+  return 'fu_'+Array.from(followupArchiveIdentity(code,date)).map(c=>c.codePointAt(0).toString(16)).join('_');
+}
+function followupExcelDate(value){
+  if(value instanceof Date&&!isNaN(value))return formatDateLocal(value);
+  if(typeof value==='number'&&typeof XLSX!=='undefined'){
+    const p=XLSX.SSF.parse_date_code(value);if(p)return p.y+'-'+String(p.m).padStart(2,'0')+'-'+String(p.d).padStart(2,'0');
+  }
+  const match=String(value||'').match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(!match)return '';
+  const y=Number(match[1]),m=Number(match[2]),d=Number(match[3]);
+  const date=new Date(y,m-1,d);
+  return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d?formatDateLocal(date):'';
+}
+function parseInstallFollowupExcelRows(matrix,sheetName){
+  const headerIndex=matrix.findIndex(row=>row.some(v=>String(v||'').trim()==='客戶代號')&&row.some(v=>String(v||'').trim()==='安裝日期'));
+  if(headerIndex<0)throw new Error('找不到「客戶代號」與「安裝日期」欄位。');
+  const headers=matrix[headerIndex].map(v=>String(v||'').trim());
+  const output=[],skipped=[];
+  for(let index=headerIndex+1;index<matrix.length;index++){
+    const row=matrix[index];if(!row.some(v=>v!==null&&v!==undefined&&String(v).trim()!==''))continue;
+    const raw={};headers.forEach((key,i)=>{if(key)raw[key]=row[i] instanceof Date?formatDateLocal(row[i]):String(row[i]??'').trim();});
+    const get=key=>row[headers.indexOf(key)];
+    const code=String(get('客戶代號')||'').trim().toUpperCase();
+    const date=followupExcelDate(get('安裝日期'));
+    if(!code||!date){skipped.push(index+1);continue;}
+    const stamp=String(get('時間戳記')||'').trim(),followupDate=followupExcelDate(get('時間戳記'));
+    const closure=String(get('結案確認')||'').trim();
+    const completed=!closure.includes('未結案')&&closure.includes('已結案');
+    const noteFields=['方便回訪','另約日期回訪','回訪人員','使用是否有問題','處理方式','是否加入官方LINE@','服務滿意度','不滿意說明','結案確認'];
+    const notes=[`【Excel 回訪紀錄｜${stamp||'未填時間'}】`];
+    for(const field of noteFields){const value=field==='另約日期回訪'?(followupExcelDate(get(field))||raw[field]):raw[field];if(value)notes.push(field+'：'+value);}
+    if(followupDate&&date>followupDate)notes.push('資料待核對：原表安裝日期晚於回訪日期，保留原日期未修改。');
+    output.push({key:followupArchiveKey(code,date),date,customerCode:code,customerName:raw['客戶姓名']||'',phone:raw['連絡電話']||'',model:raw['安裝機種']||'',engineer:'',installFollowupCompleted:completed,installFollowupDate:followupDate,installFollowupNote:notes.join('\n'),sourceTimestamp:stamp,sourceSheet:sheetName,sourceRow:index+1,sourceRaw:raw,sourceSignature:JSON.stringify(raw)});
+  }
+  return {records:output,skipped};
+}
+function mergeFollowupArchive(existing,records){
+  const archive={...existing};let added=0,skipped=0,supplemented=0;
+  for(const source of records){
+    const record={...source};delete record.key;
+    const key=source.key,old=archive[key];
+    if(!old){archive[key]={...record,updatedAt:new Date().toISOString()};added++;continue;}
+    const signatures=old.sourceSignatures||[old.sourceSignature].filter(Boolean);
+    if(signatures.includes(record.sourceSignature)){skipped++;continue;}
+    const merged={...old};
+    for(const field of ['customerName','phone','model','installFollowupDate'])if(!merged[field]&&record[field])merged[field]=record[field];
+    if(merged.installFollowupCompleted===undefined)merged.installFollowupCompleted=record.installFollowupCompleted;
+    merged.installFollowupNote=[old.installFollowupNote,record.installFollowupNote].filter(Boolean).join('\n\n');
+    merged.sourceSignatures=[...signatures,record.sourceSignature];merged.updatedAt=new Date().toISOString();
+    archive[key]=merged;supplemented++;
+  }
+  return {archive,added,skipped,supplemented};
+}
+function getInstallFollowupRows(){
+  const arranged=arrangedInstallJobs(jobs||[]),groups=new Map();
+  for(const job of arranged){const key=followupArchiveIdentity(installCustomerCode(job),job.date);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(job);}
+  const rows=arranged.map(j=>({...j}));
+  for(const [key,history] of Object.entries(installFollowupArchive)){
+    const matches=groups.get(followupArchiveIdentity(history.customerCode,history.date))||[];
+    if(matches.length===1){
+      const displayed=rows.find(j=>String(j.id)===String(matches[0].id));
+      displayed.followupArchiveKey=key;
+      for(const field of ['installFollowupCompleted','installFollowupDate','installFollowupNote'])if(displayed[field]===undefined||displayed[field]===null)displayed[field]=history[field];
+      if(displayed.installFollowupNote&&history.installFollowupNote){
+        const marker=history.installFollowupNote.split('\n')[0];
+        if(!displayed.installFollowupNote.includes(marker))displayed.installFollowupNote+='\n\n'+history.installFollowupNote;
+      }
+      if(!displayed.customerName)displayed.customerName=history.customerName;
+      if(!displayed.workContent&&!displayed.model)displayed.model=history.model;
+    }else{
+      rows.push({...history,id:'archive:'+key,workItem:'安裝新機',workContent:history.model,followupArchiveOnly:true,followupArchiveKey:key,
+        installFollowupNote:history.installFollowupNote+(matches.length>1?'\n資料待核對：同日期與客編有多筆安裝派工，未自動套用。':'')});
+    }
+  }
+  return rows.sort((a,b)=>String(a.date).localeCompare(String(b.date))||compareDispatchEngineers(a.engineer||'',b.engineer||'')||String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')));
+}
+async function importInstallFollowupExcel(event){
+  if(!requireEdit('補登安裝回訪'))return;
+  const input=event.target,file=input.files&&input.files[0];if(!file)return;
+  const button=document.getElementById('installFollowupImportButton'),status=document.getElementById('installFollowupStatus');
+  button.disabled=true;status.textContent='正在讀取回訪 Excel…';
+  try{
+    if(typeof XLSX==='undefined')throw new Error('Excel 讀取元件尚未載入，請稍後重試。');
+    const workbook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    let parsed=null;
+    for(const name of workbook.SheetNames){
+      const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[name],{header:1,defval:'',raw:true});
+      if(matrix.some(row=>row.some(v=>String(v||'').trim()==='客戶代號')&&row.some(v=>String(v||'').trim()==='安裝日期'))){parsed=parseInstallFollowupExcelRows(matrix,name);break;}
+    }
+    if(!parsed||!parsed.records.length)throw new Error('沒有可補登的回訪紀錄，請確認客戶代號與安裝日期。');
+    const root=sharedRootRef();let result;
+    if(root&&firebaseDb){
+      await firebaseDb.runTransaction(async transaction=>{
+        const snapshot=await transaction.get(root),remote=snapshot.exists?(snapshot.data()||{}).installFollowupArchive||{}:{};
+        result=mergeFollowupArchive(remote,parsed.records);
+        const patch={};for(const record of parsed.records)patch[record.key]=result.archive[record.key];
+        transaction.set(root,{installFollowupArchive:patch},{merge:true});
+      });
+    }else result=mergeFollowupArchive(installFollowupArchive,parsed.records);
+    installFollowupArchive=result.archive;cacheInstallFollowupArchive();
+    const latest=[...parsed.records].sort((a,b)=>b.date.localeCompare(a.date))[0].date;
+    document.getElementById('installFollowupMonth').value=latest.slice(0,7);
+    renderInstallFollowup();
+    const mergedRows=getInstallFollowupRows();
+    const matched=parsed.records.filter(r=>mergedRows.some(j=>j.followupArchiveKey===r.key&&!j.followupArchiveOnly)).length;
+    const closed=parsed.records.filter(r=>r.installFollowupCompleted).length;
+    status.textContent=`已補登 ${result.added} 筆、補充 ${result.supplemented} 筆、略過重複 ${result.skipped} 筆；原表已結案 ${closed} 筆、未結案 ${parsed.records.length-closed} 筆。對應派工 ${matched} 筆，其餘保留歷史回訪。${parsed.skipped.length?'另有 '+parsed.skipped.length+' 筆缺少客編／日期，未匯入。':''}${root?'已同步。':'目前儲存在本機。'}`;
+  }catch(error){console.warn('回訪 Excel 補登失敗',error);status.textContent='補登失敗：'+(error.message||error)+'；請重新選取檔案重試。';}
+  finally{button.disabled=false;input.value='';}
+}
+async function saveArchivedInstallFollowupField(id,field,input,tr){
+  if(!String(id).startsWith('archive:'))return;
+  const key=String(id).slice(8),old=installFollowupArchive[key];if(!old)return;
+  if(input.validity&&!input.validity.valid)return;
+  const patch={[field]:field==='installFollowupCompleted'?input.checked:input.value,updatedAt:new Date().toISOString()};
+  if(field==='installFollowupCompleted'&&input.checked&&!old.installFollowupDate)patch.installFollowupDate=formatDateLocal(new Date());
+  input.disabled=true;
+  try{
+    const root=sharedRootRef();if(root)await root.set({installFollowupArchive:{[key]:patch}},{merge:true});
+    installFollowupArchive[key]={...old,...patch};cacheInstallFollowupArchive();
+    if(patch.installFollowupDate)tr.querySelector('[data-followup-field="installFollowupDate"]').value=patch.installFollowupDate;
+    renderInstallFollowup();document.getElementById('installFollowupStatus').textContent=root?'歷史回訪已更新並同步。':'歷史回訪已儲存於本機。';
+  }catch(error){if(field==='installFollowupCompleted')input.checked=!!old[field];else input.value=old[field]||'';document.getElementById('installFollowupStatus').textContent='儲存失敗，已保留原紀錄，請重試。';}
+  finally{input.disabled=false;}
+}
+</script>
+
+<style id="ops-scroll-table-polish">
+/* Page scrolling belongs to the document; horizontal scrolling stays in table containers. */
+html.ops-document{height:auto!important;min-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;}
+body.ops-shell{height:auto!important;min-height:100vh!important;overflow-y:visible!important;}
+body.ops-shell #installFollowupPage.page.active,body.ops-shell #leavePage.page.active{height:auto!important;max-height:none!important;overflow:visible!important;min-height:0!important;}
+body.ops-shell #installFollowupPage>.role-panel{height:auto!important;max-height:none!important;overflow:visible!important;}
+html.ops-document:has(body.dispatch-drawer-lock){overflow-y:hidden!important;}
+body.ops-shell.dispatch-drawer-lock{overflow:hidden!important;}
+/* The same date and weekday type scale in week and month mode. */
+body.ops-shell #schedule .date-head,body.ops-shell #schedule .weekend-head,body.ops-shell #schedule .today-head{font-size:17px!important;line-height:1.25!important;height:48px!important;padding:5px 3px!important;}
+body.ops-shell.compact-schedule #schedule .date-head,body.ops-shell.compact-schedule #schedule .weekend-head,body.ops-shell.compact-schedule #schedule .today-head{font-size:15px!important;line-height:1.25!important;height:44px!important;padding:4px 2px!important;}
+body.ops-shell #schedule .head-date,body.ops-shell #schedule .head-weekday{display:block!important;margin-left:0!important;}
+body.ops-shell #schedule .head-weekday{font-size:.9em!important;font-weight:400;}
+body.ops-shell.compact-schedule #schedule tr:nth-child(2) th{top:44px!important;}
+body.ops-shell.schedule-month-view.compact-schedule #schedule .date-head,
+body.ops-shell.schedule-month-view.compact-schedule #schedule .weekend-head,
+body.ops-shell.schedule-month-view.compact-schedule #schedule .today-head{font-size:15px!important;line-height:1.25!important;height:44px!important;padding:4px 2px!important;}
+body.ops-shell #schedule .head-date{white-space:nowrap!important;line-height:1.25!important;}
+body.ops-shell #schedule .ops-date-short{display:none;}
+body.ops-shell.compact-schedule #schedule .is-weekend-date .ops-date-full{display:none;}
+body.ops-shell.compact-schedule #schedule .is-weekend-date .ops-date-short{display:inline;}
+/* Followups: a compact summary, status filter, and quieter table structure. */
+.followup-summary-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0;}
+.followup-summary-cards>div{background:#f5f8fc;border:1px solid #e4ebf3;border-radius:9px;padding:13px 17px;}
+.followup-summary-cards span{font-size:11px;color:#7a8fa4;display:block;}
+.followup-summary-cards strong{display:block;font-size:24px;color:#3e5e7d;line-height:1.3;margin-top:4px;}
+.followup-summary-cards small{font-size:11px;font-weight:400;color:#8da0b3;}
+.followup-status-tabs{display:flex;align-items:center;gap:5px;padding:4px 0 15px;}
+.followup-status-tabs button{background:#edf2f7!important;color:#698099!important;font-size:12px;border:1px solid transparent;border-radius:6px;padding:6px 12px;}
+.followup-status-tabs button.selected{background:#365b83!important;color:#fff!important;}
+.followup-status-tabs>span{margin-left:auto;font-size:11px;color:#96a3b3;}
+body.ops-shell #installFollowupList{width:100%;max-width:100%;overflow-x:auto!important;height:auto!important;max-height:none!important;border-radius:8px;}
+body.ops-shell #installFollowupList .install-list-table{border-collapse:separate;border-spacing:0;min-width:1060px;table-layout:auto;border:1px solid #e1e8f0;border-radius:8px;overflow:hidden;}
+body.ops-shell #installFollowupList .install-list-table td{border:0!important;border-bottom:1px solid #e8eef4!important;padding:12px!important;}
+body.ops-shell #installFollowupList .install-list-table tr:last-child td{border-bottom:0!important;}
+body.ops-shell #installFollowupList .install-list-table th{border:0!important;padding:12px!important;background:#eaf0f7!important;color:#526d88!important;}
+body.ops-shell #installFollowupList .install-list-table tbody tr{background:#fff;}
+body.ops-shell #installFollowupList .install-list-table tbody tr:nth-child(even){background:#f8fafd;}
+body.ops-shell #installFollowupList .install-list-table tbody tr:hover{background:#f0f6fc;}
+body.ops-shell #installFollowupList .followup-done td:first-child{box-shadow:inset 3px 0 #88b4a4;}
+body.ops-shell #installFollowupList .followup-pending td:first-child{box-shadow:inset 3px 0 #b8cbe0;}
+body.ops-shell #installFollowupList textarea{min-height:95px;min-width:290px;resize:vertical;border-color:#dce5ef;padding:10px;line-height:1.7;border-radius:7px;}
+/* Leave page: a two-column workspace, with statistics across the full width. */
+body.ops-shell #leavePage.page.active{display:grid!important;grid-template-columns:minmax(320px,.9fr) minmax(400px,1.4fr);gap:18px;align-items:start;}
+body.ops-shell #leavePage>.form-card{width:100%!important;max-width:none!important;margin:0!important;}
+body.ops-shell #leavePage>.form-card:nth-child(3){grid-column:1/-1;}
+body.ops-shell #lpList .leave-item{background:#fff;border:1px solid #e4ebf3;border-radius:8px;padding:11px 12px;margin:0 0 8px;gap:9px;box-shadow:none;flex-wrap:wrap;}
+body.ops-shell #lpList .leave-item:hover{border-color:#b6c9dd;background:#f9fbfe;}
+body.ops-shell #lpList .leave-badge{font-size:11px;border-radius:5px;padding:3px 8px;}
+body.ops-shell #lpList .leave-item button{font-size:11px!important;padding:4px 8px!important;border-radius:5px!important;}
+body.ops-shell #lpList .leave-item button[onclick*="edit"]{background:#e7f0fa!important;color:#446d97!important;}
+body.ops-shell #lpList .leave-item button[onclick*="delete"]{background:#fbeeed!important;color:#a86965!important;}
+body.ops-shell #lpDateDisplay{border-color:#d4dce7!important;border-radius:7px!important;}
+body.ops-shell #tripStatsTableWrap{box-shadow:none!important;border-color:#e3eaf2!important;border-radius:8px!important;}
+body.ops-shell #tripStatsTable th{background:#eaf0f7!important;color:#526d88!important;border-color:#e1e8f0!important;font-size:12px!important;}
+body.ops-shell #tripStatsTable td{border-color:#e9eef4!important;font-size:12px!important;padding:12px!important;}
+/* Shared list tables: subtle separators and consistent row spacing. */
+body.ops-shell #customerTable,body.ops-shell #jobListTable{border-collapse:separate;border-spacing:0;}
+body.ops-shell #customerTable td,body.ops-shell #jobListTable td{border:0!important;border-bottom:1px solid #e6edf4!important;padding:11px 9px!important;}
+body.ops-shell #customerTable th,body.ops-shell #jobListTable th{border:0!important;border-bottom:1px solid #d8e3ee!important;padding:12px 9px!important;}
+body.ops-shell #customerTable tr:nth-child(odd) td,body.ops-shell #jobListTable tr:nth-child(odd) td{background:#f8fafd;}
+body.ops-shell #customerTable tr:hover td,body.ops-shell #jobListTable tr:hover td{background:#edf5fc;}
+body.ops-shell .mini-table{border-collapse:separate;border-spacing:0;border:1px solid #e5ebf3;border-radius:8px;overflow:hidden;}
+body.ops-shell .mini-table th,body.ops-shell .mini-table td{border:0!important;border-bottom:1px solid #edf1f6!important;padding:11px!important;font-variant-numeric:tabular-nums;}
+body.ops-shell .mini-table tr:last-child td{border-bottom:0!important;}
+body.ops-shell .mini-table tbody tr:nth-child(even){background:#f7f9fc;}
+@media(max-width:1150px){body.ops-shell #leavePage.page.active{grid-template-columns:1fr;}body.ops-shell #leavePage>.form-card:nth-child(3){grid-column:auto;}}
+@media(max-width:520px){.followup-summary-cards{gap:7px;}.followup-summary-cards>div{padding:10px;}.followup-summary-cards strong{font-size:21px;}.followup-status-tabs button{padding:6px 10px;}}
+</style>
+<script>
+document.documentElement.classList.add('ops-document');
 </script>
