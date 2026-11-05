@@ -12292,19 +12292,12 @@ let _osRenderPending=false;
 function renderOutsourceTable(){
   updateOutsourceCustomerCodeList();
   const table=document.getElementById('outsourceTable'); if(!table)return;
-  // 正在操作新增列（例如時間選單開著）時不重繪，避免選單被銷毀而「卡住」；離開欄位後再補繪
-  const _ae=document.activeElement;
-  if(_ae && _ae!==document.getElementById('osSearch') && _ae.closest && _ae.closest('.os-add-row')){
+  // 新增列保留原本的 DOM；資料同步或搜尋只更新下方資料區。
+  // 原生時間選擇器即使暫時失焦，也不會因重建輸入框而關閉或清空。
+  const active=document.activeElement;
+  if(active && active.closest && active.closest('.os-inline-edit')){
     _osRenderPending=true; return;
   }
-  // 重繪前保存新增列已輸入的內容
-  const _osIds=['osDate','osTime','osCustomerCode','osCustomerName','osCity','osDistrict','osAddress','osVendor','osShipDate','osTracking','osContent','osService'];
-  const _osSaved={}; _osIds.forEach(id=>{const e=document.getElementById(id); if(e) _osSaved[id]=e.value;});
-  const _osChk={}; ['osPrinted','osPhoto','osCompleted'].forEach(id=>{const e=document.getElementById(id); if(e) _osChk[id]=e.checked;});
-  setTimeout(()=>{
-    _osIds.forEach(id=>{const e=document.getElementById(id); if(e && _osSaved[id]) e.value=_osSaved[id];});
-    Object.keys(_osChk).forEach(id=>{const e=document.getElementById(id); if(e) e.checked=_osChk[id];});
-  },0);
   const q=(document.getElementById('osSearch')?.value||'').trim().toLowerCase();
   const activeCount=outsourceRows.filter(r=>!r.completed).length;
   const completedCount=outsourceRows.filter(r=>!!r.completed).length;
@@ -12362,12 +12355,18 @@ function renderOutsourceTable(){
     </tr>`;
   }).join('') : `<tr><td colspan="16" style="text-align:center;color:#999;padding:28px">${outsourceViewMode==='completed'?'目前沒有已完成的代工資料。':'目前沒有進行中的代工資料，可直接在上方黃色列新增。'}</td></tr>`;
 
+  const dataBody=table.querySelector('tbody.os-data-body');
+  if(dataBody && table.dataset.outsourceMode===outsourceViewMode){
+    dataBody.innerHTML=dataRowsHtml;
+    return;
+  }
+  table.dataset.outsourceMode=outsourceViewMode;
   table.innerHTML=`<thead><tr>
     <th class="os-date">日期</th><th class="os-week">星期</th><th class="os-time">預約時間</th><th class="os-customer">客代姓名</th>
     <th class="os-city">縣市</th><th class="os-district">地區</th><th class="os-address">地址</th><th class="os-vendor">代工</th><th class="os-check">印單</th>
     <th class="os-shipdate">寄出日期</th><th class="os-tracking">貨運單</th><th class="os-check">拍單</th><th class="os-check">完成</th>
     <th class="os-service">服務項目</th><th class="os-content">內容</th><th class="os-action">操作</th>
-  </tr></thead><tbody>${addRowHtml}${dataRowsHtml}</tbody>`;
+  </tr></thead><tbody class="os-add-body">${addRowHtml}</tbody><tbody class="os-data-body">${dataRowsHtml}</tbody>`;
 }
 
 </script>
@@ -12376,10 +12375,10 @@ function renderOutsourceTable(){
 
 <script>
 document.addEventListener('focusout',e=>{
-  if(e.target.closest && e.target.closest('.os-add-row') && _osRenderPending){
+  if(e.target.closest && e.target.closest('.os-inline-edit') && _osRenderPending){
     setTimeout(()=>{
       const a=document.activeElement;
-      if(a && a.closest && a.closest('.os-add-row')) return;
+      if(a && a.closest && a.closest('.os-inline-edit')) return;
       _osRenderPending=false; renderOutsourceTable();
     },150);
   }
