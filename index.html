@@ -12300,6 +12300,12 @@ const OS_VENDOR_COLORS={
   '汎澄代工':{row:'#f3f4f5',badge:'#dfe2e4',text:'#50565b'},
   '佳賀代工':{row:'#edf6f8',badge:'#cce3e9',text:'#245d70'}
 };
+function osHalfHourOptions(current=''){
+  const value=String(current||'').trim();
+  const slots=Array.from({length:48},(_,i)=>String(Math.floor(i/2)).padStart(2,'0')+':'+(i%2?'30':'00'));
+  const legacy=value&&!slots.includes(value)?`<option value="${osEsc(value)}" selected disabled hidden>${osEsc(value)}（原時間）</option>`:'';
+  return `<option value="" ${!value?'selected':''}>選擇時間</option>`+legacy+slots.map(time=>`<option value="${time}" ${time===value?'selected':''}>${time}</option>`).join('');
+}
 function osVendorStyle(vendor){
   const color=OS_VENDOR_COLORS[String(vendor||'').trim()];
   return color?`--os-vendor-row:${color.row};--os-vendor-badge:${color.badge};--os-vendor-text:${color.text};`:'';
@@ -12336,7 +12342,7 @@ function renderOutsourceTable(){
   const addRowHtml = outsourceViewMode==='active' ? `
     <tr class="os-add-row">
       <td><input type="date" id="osDate" onchange="osDateChanged()"></td><td class="os-center" id="osWeekPreview"></td>
-      <td><input type="time" id="osTime" step="1800"></td><td><div style="display:flex;gap:4px;align-items:center"><input id="osCustomerCode" list="osCustomerCodeList" placeholder="客代" oninput="fillOutsourceCustomerByCode()" onchange="fillOutsourceCustomerByCode()" style="width:44%"><input id="osCustomerName" placeholder="客名自動帶入" readonly style="width:56%;background:#f1f1f1"></div></td>
+      <td><select id="osTime" aria-label="預約時間（每半小時）">${osHalfHourOptions()}</select></td><td><div style="display:flex;gap:4px;align-items:center"><input id="osCustomerCode" list="osCustomerCodeList" placeholder="客代" oninput="fillOutsourceCustomerByCode()" onchange="fillOutsourceCustomerByCode()" style="width:44%"><input id="osCustomerName" placeholder="客名自動帶入" readonly style="width:56%;background:#f1f1f1"></div></td>
       <td><input id="osCity" placeholder="自動帶入" readonly style="background:#f1f1f1"></td><td><input id="osDistrict" placeholder="自動帶入" readonly style="background:#f1f1f1"></td><td><input id="osAddress" placeholder="輸入客代後自動帶入，可自行修改"></td><td><select id="osVendor">${optionHtml(vendorOptions,'','請選擇代工廠商')}</select></td>
       <td class="os-center"><input type="checkbox" id="osPrinted"></td><td><input type="date" id="osShipDate"></td><td><input id="osTracking" placeholder="貨運單號"></td>
       <td class="os-center"><input type="checkbox" id="osPhoto"></td><td class="os-center"><input type="checkbox" id="osCompleted"></td>
@@ -12350,7 +12356,7 @@ function renderOutsourceTable(){
       return `<tr class="os-inline-edit os-vendor-colored" style="${osVendorStyle(r.vendor)}" id="osEditRow_${osEsc(r.id)}">
         <td><input type="date" id="osEditDate_${osEsc(r.id)}" value="${osEsc(r.date||'')}"></td>
         <td class="os-center">${osEsc(osWeekday(r.date))}</td>
-        <td><input type="time" step="1800" id="osEditTime_${osEsc(r.id)}" value="${osEsc(r.time||'')}"></td>
+        <td><select id="osEditTime_${osEsc(r.id)}" aria-label="預約時間（每半小時）">${osHalfHourOptions(r.time)}</select></td>
         <td><div class="os-inline-customer"><input id="osEditCustomerCode_${osEsc(r.id)}" list="osCustomerCodeList" value="${osEsc(r.customerCode||String(r.customer||'').split(/\s+/)[0]||'')}" oninput="fillOutsourceInlineCustomer('${osEsc(r.id)}')" onchange="fillOutsourceInlineCustomer('${osEsc(r.id)}')"><input id="osEditCustomerName_${osEsc(r.id)}" value="${osEsc(r.customerName||String(r.customer||'').replace(/^\S+\s*/,''))}" readonly style="background:#f1f1f1"></div></td>
         <td><input id="osEditCity_${osEsc(r.id)}" value="${osEsc(r.city||'')}" readonly style="background:#f1f1f1"></td>
         <td><input id="osEditDistrict_${osEsc(r.id)}" value="${osEsc(r.district||'')}" readonly style="background:#f1f1f1"></td>
