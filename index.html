@@ -1952,7 +1952,7 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         <span id="otherDispatchSyncStatus" role="status" style="font-size:12px;color:#666;"></span>
       </div>
       <form id="otherDispatchForm" onsubmit="event.preventDefault();saveOtherDispatch()">
-        <div class="other-dispatch-fields"><label>日期<input id="other_date" type="date" required ></label><label>工程（自行填寫）<input id="other_engineer" type="text" placeholder="自行輸入工程名稱" ></label><label>預約時間<input id="other_time" type="time" ></label><label>客編／客名<input id="other_customer" type="text" ></label><label>電話<input id="other_phone" type="text" ></label><label>地址<input id="other_address" type="text" ></label><label>施工項目<input id="other_workItem" type="text" ></label><label>施工內容<input id="other_content" type="text" ></label></div>
+        <div class="other-dispatch-fields"><label>日期<input id="other_date" type="date" required ></label><label>工程（自行填寫）<input id="other_engineer" type="text" placeholder="自行輸入工程名稱" ></label><label>預約時間<input id="other_time" type="time" ></label><label>結束時間<input id="other_endTime" type="time"></label><label>客編／客名<input id="other_customer" type="text" ></label><label>電話<input id="other_phone" type="text" ></label><label>地址<input id="other_address" type="text" ></label><label>施工項目<input id="other_workItem" type="text" ></label><label>施工內容<input id="other_content" type="text" ></label></div>
         <div style="display:flex;gap:8px;margin:10px 0 16px;"><button type="submit" id="otherDispatchSave">新增派工</button><button type="button" onclick="resetOtherDispatchForm()">清空／取消編輯</button></div>
       </form>
       <div id="otherDispatchList"></div>
@@ -12507,28 +12507,52 @@ function groupOtherDispatch(rows,month){
   }
   return dates;
 }
+let otherDispatchCompact=true;
+function toggleOtherDispatchView(){otherDispatchCompact=!otherDispatchCompact;renderOtherDispatch();}
+function otherDispatchCalendarCard(row){
+  const time=row.time?(row.time+(row.endTime?' ～ '+row.endTime:'')):'未定時間';
+  let html=`<article class="other-calendar-job"><strong class="other-card-title">${escapeHtml(row.customer||'未填客戶')}</strong>`;
+  html+=`<div class="other-card-detail">時間：${escapeHtml(time)}</div>`;
+  for(const [label,value] of [['電話',row.phone],['地址',row.address],['施工項目',row.workItem],['施工內容',row.content]]){
+    if(value)html+=`<div class="other-card-detail">${label}：${escapeHtml(value)}</div>`;
+  }
+  if(canEdit())html+=`<div class="other-card-actions"><button type="button" data-other-edit="${escapeHtml(row.id)}">編輯</button><button type="button" data-other-delete="${escapeHtml(row.id)}" style="background:#b33939;">刪除</button></div>`;
+  return html+'</article>';
+}
 function renderOtherDispatch(){
   const box=document.getElementById('otherDispatchList');if(!box)return;
   document.getElementById('otherDispatchForm').style.display=canEdit()?'':'none';
   const groups=groupOtherDispatch(otherDispatchRows,document.getElementById('otherDispatchMonth').value);
   if(!groups.size){box.innerHTML='<div class="empty">目前沒有符合日期的其它派工。</div>';return;}
-  let html='';
+  const columns=[];let dateHeads='';
+  const today=formatDateLocal(new Date());
   for(const [date,engineerGroups] of groups){
-    html+=`<section class="other-date-group"><h4>${escapeHtml(date)} ${escapeHtml(getWeekdayName(date))}</h4>`;
-    for(const [name,rows] of engineerGroups){
-      html+=`<div class="other-engineer-group"><strong>工程：${escapeHtml(name||'未填寫')}</strong> <span style="color:#777;">${rows.length} 件</span><div class="other-job-list">`;
-      for(const row of rows){
-        html+=`<article class="other-job-card"><strong>${escapeHtml(row.customer||'未填客戶')}</strong>${[['時間',row.time],['電話',row.phone],['地址',row.address],['施工項目',row.workItem],['施工內容',row.content]].filter(([,value])=>value).map(([label,value])=>`<div>${label}：${escapeHtml(value)}</div>`).join('')}`;
-        if(canEdit())html+=`<div style="display:flex;gap:6px;margin-top:8px;"><button type="button" data-other-edit="${escapeHtml(row.id)}">編輯</button><button type="button" data-other-delete="${escapeHtml(row.id)}" style="background:#b33939;">刪除</button></div>`;
-        html+='</article>';
-      }
-      html+='</div></div>';
-    }
-    html+='</section>';
+    const day=parseDateLocal(date).getDay();
+    dateHeads+=`<th class="other-date-head ${date===today?'other-today':(day===0||day===6?'other-weekend':'')}" colspan="${engineerGroups.size}">${escapeHtml(date)}<span>${escapeHtml(getWeekdayName(date))}</span></th>`;
+    for(const [engineer,rows] of engineerGroups)columns.push({date,engineer,rows});
   }
-  box.innerHTML=html;
+  const scoped=columns.flatMap(c=>c.rows);
+  const timeRows=[...new Set([...times,...scoped.flatMap(row=>[row.time,row.endTime]).filter(Boolean)])].sort();
+  if(scoped.some(row=>!row.time))timeRows.push('');
+  let html=`<div style="display:flex;gap:10px;align-items:center;margin:10px 0;"><button type="button" onclick="toggleOtherDispatchView()">${otherDispatchCompact?'切換為標準檢視':'切換為精簡檢視'}</button><span>${scoped.length} 件｜點選空白時段新增派工</span></div>`;
+  html+=`<div class="other-calendar-wrap"><table id="otherDispatchCalendar" class="${otherDispatchCompact?'other-compact':''}" style="min-width:${60+columns.length*(otherDispatchCompact?100:240)}px"><thead><tr><th class="other-time" rowspan="2">時間</th>${dateHeads}</tr><tr>`;
+  for(const col of columns)html+=`<th class="other-engineer">${escapeHtml(col.engineer||'未填寫工程')}</th>`;
+  html+='</tr></thead><tbody>';
+  for(const time of timeRows){
+    html+=`<tr><th class="other-time">${time||'未定時間'}</th>`;
+    for(const col of columns){
+      const active=col.rows.filter(row=>time?row.time&&row.time<=time&&(row.endTime||row.time)>=time:!row.time);
+      const starts=col.rows.filter(row=>(row.time||'')===time);
+      const workClass=active.map(row=>jobWorkColorClass(row)).find(Boolean)||'';
+      const breakTime=time&&((time>='12:00'&&time<='13:00')||time>='18:00');
+      html+=`<td class="other-slot ${active.length?'other-occupied':(breakTime?'other-break':'')} ${workClass}" data-other-date="${escapeHtml(col.date)}" data-other-engineer="${escapeHtml(col.engineer)}" data-other-time="${time}">${starts.map(otherDispatchCalendarCard).join('')}</td>`;
+    }
+    html+='</tr>';
+  }
+  box.innerHTML=html+'</tbody></table></div>';
 }
-const otherDispatchFields=['date','engineer','time','customer','phone','address','workItem','content'];
+
+const otherDispatchFields=['date','engineer','time','endTime','customer','phone','address','workItem','content'];
 function resetOtherDispatchForm(){otherDispatchEditingId=null;document.getElementById('otherDispatchForm').reset();document.getElementById('otherDispatchSave').textContent='新增派工';}
 function editOtherDispatch(id){
   if(!canEdit())return;
@@ -12542,6 +12566,7 @@ async function saveOtherDispatch(){
   if(!requireEdit('新增／修改其它派工'))return;
   const row={};for(const key of otherDispatchFields)row[key]=document.getElementById('other_'+key).value.trim();
   if(!row.date){alert('請先填寫日期');return;}
+  if(row.endTime&&(!row.time||row.endTime<row.time)){alert('結束時間需晚於或等於預約時間');return;}
   row.id=otherDispatchEditingId||('other_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
   row.updatedAt=new Date().toISOString();
   const button=document.getElementById('otherDispatchSave');button.disabled=true;
@@ -12567,7 +12592,43 @@ async function deleteOtherDispatch(id){
 }
 document.getElementById('otherDispatchList').addEventListener('click',event=>{
   const edit=event.target.closest('[data-other-edit]'),remove=event.target.closest('[data-other-delete]');
-  if(edit)editOtherDispatch(edit.dataset.otherEdit);
-  if(remove)deleteOtherDispatch(remove.dataset.otherDelete);
+  if(edit){editOtherDispatch(edit.dataset.otherEdit);return;}
+  if(remove){deleteOtherDispatch(remove.dataset.otherDelete);return;}
+  const slot=event.target.closest('[data-other-date]');
+  if(!slot || event.target.closest('.other-calendar-job') || !canEdit())return;
+  resetOtherDispatchForm();
+  document.getElementById('other_date').value=slot.dataset.otherDate;
+  document.getElementById('other_engineer').value=slot.dataset.otherEngineer;
+  document.getElementById('other_time').value=slot.dataset.otherTime;
+  document.getElementById('otherDispatchForm').scrollIntoView({behavior:'smooth',block:'center'});
 });
 </script>
+
+<style id="other-dispatch-calendar-style">
+#scheduleOtherView .other-calendar-wrap{overflow:auto;max-width:100%;max-height:75vh;border:1px solid #aaa;}
+#otherDispatchCalendar{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;font-size:13px;}
+#otherDispatchCalendar th,#otherDispatchCalendar td{border:0;border-right:1px solid #aaa;border-bottom:1px solid #aaa;padding:3px;box-sizing:border-box;}
+#otherDispatchCalendar .other-date-head{position:sticky;top:0;z-index:4;height:48px;background:#f4cccc;font-size:15px;text-align:center;}
+#otherDispatchCalendar .other-date-head span{display:block;font-size:13px;font-weight:normal;}
+#otherDispatchCalendar .other-weekend{background:#cfe2f3;}
+#otherDispatchCalendar .other-today{background:#ffd966;}
+#otherDispatchCalendar .other-engineer{position:sticky;top:48px;z-index:3;height:34px;background:#e9e9e9;text-align:center;font-size:15px;overflow-wrap:anywhere;}
+#otherDispatchCalendar .other-time{position:sticky;left:0;width:60px;min-width:60px;z-index:2;background:#f4cccc;text-align:center;font-weight:normal;white-space:nowrap;}
+#otherDispatchCalendar thead .other-time{top:0;z-index:6;}
+#otherDispatchCalendar .other-slot{height:44px;background:#fff;vertical-align:top;}
+#otherDispatchCalendar .other-slot.other-occupied{background:#fff2cc;}
+#otherDispatchCalendar .other-slot.other-break{background:#ccccff;}
+#otherDispatchCalendar .other-slot.work-color-remove{background:#dcf5dc;}
+#otherDispatchCalendar .other-slot.work-color-restore{background:#ffe0b3;}
+#otherDispatchCalendar .other-slot.work-color-install{background:#d6e9ff;}
+#otherDispatchCalendar .other-slot.work-color-inspect{background:#ffd9d9;}
+#otherDispatchCalendar .other-slot.work-color-gas{background:#e0e0e0;}
+#otherDispatchCalendar .other-calendar-job{font-size:13px;line-height:1.4;overflow-wrap:anywhere;padding:4px;}
+#otherDispatchCalendar .other-card-title{color:#0066cc;}
+#otherDispatchCalendar .other-card-actions{display:flex;gap:4px;margin-top:5px;}
+#otherDispatchCalendar .other-card-actions button{padding:2px 5px;font-size:11px;}
+#otherDispatchCalendar.other-compact .other-calendar-job{padding:1px;font-size:12px;}
+#otherDispatchCalendar.other-compact .other-card-detail{display:none;}
+#otherDispatchCalendar.other-compact .other-card-actions{margin-top:2px;}
+#otherDispatchCalendar.other-compact .other-card-actions button{font-size:10px;padding:1px 4px;}
+</style>
