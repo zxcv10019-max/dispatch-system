@@ -1867,7 +1867,19 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
   <button id="tabLeave" onclick="showPage('leavePage')">🏖️ 休假管理</button>
   <button id="tabCartridge" onclick="showPage('cartridgePage')">🔄 換芯名單</button>
   <button id="tabStats" onclick="showPage('statsPage')" style="display:none">📊 派工統計</button>
+  <button id="tabInstallFollowup" onclick="showPage('installFollowupPage')" style="display:none">☎️ 安裝回訪</button>
   <button id="adminTab" onclick="showPage('adminPage')" style="background:#1a1a2e;color:#e94560;border-left:3px solid #e94560;">🔒 後台管理</button>
+</div>
+
+<div id="installFollowupPage" class="page">
+  <div class="role-panel" style="margin:12px;">
+    <h3>☎️ 安裝回訪</h3>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <label for="installFollowupMonth">安裝月份：</label><input type="month" id="installFollowupMonth" onchange="renderInstallFollowup()">
+      <span id="installFollowupStatus" role="status" style="font-size:12px;color:#666;">依已安排的正式安裝派工自動帶入，修改後自動儲存。</span>
+    </div>
+    <div id="installFollowupList" style="overflow:auto;"></div>
+  </div>
 </div>
 
 <div id="statsPage" class="page">
@@ -1897,6 +1909,14 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         </div>
         <div id="statsHistoryResult" class="empty">輸入關鍵字後，可查看該客戶或機器過去所有派工紀錄。</div>
       </div>
+    </div>
+
+    <div class="role-panel" style="margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <h3 style="margin:0;">📅 後續已安排安裝件</h3>
+        <label for="statsFutureInstallFrom">日期起：</label><input type="date" id="statsFutureInstallFrom" onchange="renderFutureInstallStats()">
+      </div>
+      <div id="statsFutureInstallList" style="overflow:auto;"></div>
     </div>
 
     <div class="role-panel" style="margin-top:16px;">
@@ -1948,11 +1968,11 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
       <h3 style="margin-top:0;">📝 其它派工</h3>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
         <label for="otherDispatchMonth">月份：</label><input type="month" id="otherDispatchMonth" onchange="renderOtherDispatch()">
-        <button type="button" onclick="document.getElementById('otherDispatchMonth').value='';renderOtherDispatch()">全部日期</button>
+        <button type="button" onclick="moveOtherDispatchMonth(-1)">← 上個月</button><button type="button" onclick="moveOtherDispatchMonth(1)">下個月 →</button>
         <span id="otherDispatchSyncStatus" role="status" style="font-size:12px;color:#666;"></span>
       </div>
       <form id="otherDispatchForm" onsubmit="event.preventDefault();saveOtherDispatch()">
-        <div class="other-dispatch-fields"><label>日期<input id="other_date" type="date" required ></label><label>工程（自行填寫）<input id="other_engineer" type="text" placeholder="自行輸入工程名稱" ></label><label>預約時間<input id="other_time" type="time" ></label><label>結束時間<input id="other_endTime" type="time"></label><label>客編／客名<input id="other_customer" type="text" ></label><label>電話<input id="other_phone" type="text" ></label><label>地址<input id="other_address" type="text" ></label><label>施工項目<input id="other_workItem" type="text" ></label><label>施工內容<input id="other_content" type="text" ></label></div>
+        <div class="other-dispatch-fields"><label>日期<input id="other_date" type="date" required ></label><label>工程（自行填寫）<input id="other_engineer" type="text" placeholder="自行輸入工程名稱" ></label><label>預約時間<select id="other_time" aria-label="預約時間"></select></label><label>結束時間<select id="other_endTime" aria-label="結束時間"></select></label><label>客編<input id="other_customerCode" type="text" list="otherCustomerCodes" oninput="fillOtherDispatchCustomer()" onchange="fillOtherDispatchCustomer()"><datalist id="otherCustomerCodes"></datalist></label><label>客名<input id="other_customerName" type="text"></label><label>電話<input id="other_phone" type="text" ></label><label>地址<input id="other_address" type="text" ></label><label>施工項目<input id="other_workItem" type="text" ></label><label>施工內容<input id="other_content" type="text" ></label></div>
         <div style="display:flex;gap:8px;margin:10px 0 16px;"><button type="submit" id="otherDispatchSave">新增派工</button><button type="button" onclick="resetOtherDispatchForm()">清空／取消編輯</button></div>
       </form>
       <div id="otherDispatchList"></div>
@@ -3234,6 +3254,7 @@ async function applyRemoteData(data){
   try{
     const statsEl = document.getElementById('statsPage');
     if(statsEl && statsEl.classList.contains('active') && typeof renderStatsPage==='function') renderStatsPage();
+    if(document.getElementById('installFollowupPage')?.classList.contains('active')&&typeof renderInstallFollowup==='function')renderInstallFollowup();
     const adminEl = document.getElementById('adminPage');
     if(adminEl && adminEl.classList.contains('active') && typeof renderAdminDashboard==='function') renderAdminDashboard();
   }catch(e){ /* 統計頁重繪失敗不影響主同步流程 */ }
@@ -3364,6 +3385,7 @@ function applyRoleUI(){
   if(adminTab) adminTab.style.display = isAdmin() ? "inline-block" : "none";
   const statsTab=document.getElementById("tabStats");
   if(statsTab) statsTab.style.display = canEdit() ? "inline-block" : "none";
+  const followupTab=document.getElementById("tabInstallFollowup");if(followupTab)followupTab.style.display=canEdit()?"inline-block":"none";
   const leaveTab=document.getElementById("tabLeave");
   if(leaveTab) leaveTab.style.display = canEdit() ? "inline-block" : "none";
   if(!canEdit() && document.getElementById("leavePage")?.classList.contains("active")){
@@ -3584,10 +3606,12 @@ function switchScheduleSubtab(view){
     if(button) button.classList.toggle('active',key===selected);
   }
   if(selected==='outsource'){startOutsourceSync();renderOutsourceTable();}
-  if(selected==='other'){startOtherDispatchSync();renderOtherDispatch();}
+  if(selected==='other'){initOtherDispatchForm();startOtherDispatchSync();renderOtherDispatch();}
 }
 
 function showPage(pageId){
+  if(pageId==='installFollowupPage'&&!canEdit()){alert('你的帳號沒有查看安裝回訪的權限。');return;}
+
   if(pageId==="dispatchPage"){ openDispatchDrawer(); return; }
   if(pageId==="outsourcePage"){ showPage("schedulePage"); switchScheduleSubtab("outsource"); return; }
   document.body.classList.toggle("admin-scroll-mode", pageId==="adminPage" || pageId==="statsPage");
@@ -3656,6 +3680,10 @@ function showPage(pageId){
   }
   if(pageId==="cartridgePage"){const tb=document.getElementById("tabCartridge");if(tb)tb.classList.add("active");renderCartridgeTable();}
   if(pageId==="leavePage"){const tb=document.getElementById("tabLeave");if(tb)tb.classList.add("active");if(typeof lpTypeChange==='function')lpTypeChange();renderLeaveListLP();}
+  if(pageId==='installFollowupPage'){
+    document.getElementById('tabInstallFollowup').classList.add('active');
+    renderInstallFollowup();
+  }
   if(pageId==="statsPage"){
     const tb=document.getElementById("tabStats");
     if(tb) tb.classList.add("active");
@@ -3673,6 +3701,7 @@ function showPage(pageId){
 }
 
 function saveJobs(){
+  if(typeof renderInstallFollowup==='function'&&document.getElementById('installFollowupPage')?.classList.contains('active'))renderInstallFollowup();
   localDirty = true;
   lastLocalJobsCount = (jobs||[]).length;
   // localStorage 有 5MB 限制，超過就略過本機快取，只靠 Firestore
@@ -5665,6 +5694,11 @@ function jumpToJobList(event, el){
   setTimeout(()=>{ document.getElementById("jobListTable").scrollIntoView({behavior:"smooth", block:"start"}); }, 150);
 }
 
+function compareDispatchEngineers(a,b){
+  const left=normalizeEngineerName(a),right=normalizeEngineerName(b);
+  const ai=engineers.indexOf(left),bi=engineers.indexOf(right);
+  return (ai<0?engineers.length:ai)-(bi<0?engineers.length:bi) || left.localeCompare(right,'zh-Hant');
+}
 function renderJobList(){
   const month = document.getElementById("listMonth").value;
   const holdFilter = (document.getElementById("listHoldFilter")||{}).value || "normal";
@@ -5699,7 +5733,9 @@ function renderJobList(){
       const ah=(!!a.isHold || !a.date) ? 0 : 1;
       const bh=(!!b.isHold || !b.date) ? 0 : 1;
       if(ah!==bh) return ah-bh;
-      return (String(a.date)+String(a.startTime||a.time)+String(a.engineer)).localeCompare(String(b.date)+String(b.startTime||b.time)+String(b.engineer));
+      return String(a.date||'').localeCompare(String(b.date||'')) ||
+        compareDispatchEngineers(a.engineer,b.engineer) ||
+        String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||''));
     });
 
   // 顯示篩選提示（不管有沒有篩選條件，都固定顯示目前清單筆數，方便一眼看出本月/本次查詢有幾筆）
@@ -6021,6 +6057,7 @@ function renderStatsPage(){
   renderCompletionStats("statsAmountMonth","statsCompletionContent");
   renderWorkItemStats("statsMonth2","statsWorkItemStatsBody");
   renderStatsInstallSummary();
+  renderFutureInstallStats();
 }
 function renderStatsInstallSummary(){
   const box=document.getElementById("statsInstallSummary"); if(!box) return;
@@ -6087,17 +6124,23 @@ function renderAdminTodaySummary(){
     `<table class="mini-table"><thead><tr><th>工程師</th><th style="text-align:right;">今日件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`;
   ["adminTodaySummary","statsTodaySummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
 }
-function renderAdminWorkloadSummary(){
-  const month=adminMonthNow();
-  const monthJobs=(jobs||[]).filter(j=>String(j.date||"").startsWith(month) && !isHoldJob(j));
-  const byEng={}; engineers.forEach(e=>byEng[e]=0);
-  const byItem={};
-  monthJobs.forEach(j=>{ if(byEng[j.engineer]!=null) byEng[j.engineer]++; const k=j.workItem||"未填施工項目"; byItem[k]=(byItem[k]||0)+1; });
-  const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${v}</td></tr>`).join("");
-  const html=`<table class="mini-table"><thead><tr><th>工程師</th><th style="text-align:right;">${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${byEng[e]||0}</td></tr>`).join("")}</tbody></table>`+
-    `<div style="height:10px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th style="text-align:right;">件數</th></tr></thead><tbody>${itemRows || '<tr><td colspan="2" style="text-align:center;color:#aaa;">本月尚無資料</td></tr>'}</tbody></table>`;
-  ["adminWorkloadSummary","statsWorkloadSummary"].forEach(id=>{ const box=document.getElementById(id); if(box) box.innerHTML=html; });
+function workloadMonthData(allJobs,month){
+  const valid=allJobs.filter(j=>String(j.date||'').startsWith(month+'-')&&!isHoldJob(j)&&isValidJob(j));
+  const counted=valid.filter(j=>['E','C','Y'].includes(displayEngineer(normalizeEngineerName(j.engineer))));
+  const days=new Set(counted.map(j=>j.date)).size;
+  return {valid,total:counted.length,days,average:days?counted.length/days:0};
 }
+function renderAdminWorkloadSummary(){
+  const month=adminMonthNow(),data=workloadMonthData(jobs||[],month);
+  const byEng={};engineers.forEach(e=>byEng[e]=0);
+  const byItem={};
+  data.valid.forEach(j=>{const e=normalizeEngineerName(j.engineer);if(byEng[e]!=null)byEng[e]++;const k=j.workItem||'未填施工項目';byItem[k]=(byItem[k]||0)+1;});
+  const itemRows=Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${v}</td></tr>`).join('');
+  const html=`<table class="mini-table"><thead><tr><th>工程師</th><th style="text-align:right;">${month} 件數</th></tr></thead><tbody>${engineers.map(e=>`<tr><td>${displayEngineer(e)} ${escapeHtml(e)}</td><td style="text-align:right;font-weight:bold;color:#1a5276;">${byEng[e]||0}</td></tr>`).join('')}</tbody><tfoot><tr><th>總件數（E、C、Y）</th><th style="text-align:right;">${data.total}</th></tr><tr><th>平均每日件數</th><th style="text-align:right;">${data.average.toFixed(2)}</th></tr></tfoot></table><div style="font-size:12px;color:#666;margin:6px 0;">總計與平均不含林川閔。平均＝${data.total} 件 ÷ ${data.days} 個有有效派工的日期；不計出差、請假等佔位資料。</div>`+
+    `<div style="height:10px"></div><table class="mini-table"><thead><tr><th>施工項目 TOP 6</th><th style="text-align:right;">件數</th></tr></thead><tbody>${itemRows||'<tr><td colspan="2">本月尚無資料</td></tr>'}</tbody></table>`;
+  ['adminWorkloadSummary','statsWorkloadSummary'].forEach(id=>{const box=document.getElementById(id);if(box)box.innerHTML=html;});
+}
+
 function renderAdminConflicts(){
   const box=document.getElementById("adminConflictSummary"); if(!box) return;
   const alerts=[];
@@ -12300,6 +12343,33 @@ const OS_VENDOR_COLORS={
   '汎澄代工':{row:'#f3f4f5',badge:'#dfe2e4',text:'#50565b'},
   '佳賀代工':{row:'#edf6f8',badge:'#cce3e9',text:'#245d70'}
 };
+function osQuickField(row,field){
+  const value=String(row[field]||'');
+  if(!canEdit())return osEsc(field==='time'?value:osDateText(value));
+  const attrs=`class="os-quick-field" data-os-quick="${field}" data-os-id="${osEsc(row.id)}" aria-label="${field==='date'?'日期':field==='time'?'預約時間':'寄出日期'}"`;
+  return field==='time'?`<select ${attrs} onchange="saveOutsourceQuickField(this)">${osHalfHourOptions(value)}</select>`:
+    `<input type="date" ${attrs} value="${osEsc(value)}" onchange="saveOutsourceQuickField(this)">`;
+}
+async function saveOutsourceQuickField(input){
+  if(!requireEdit('修改代工日期／時間'))return;
+  const id=input.dataset.osId,field=input.dataset.osQuick;
+  if(!['date','time','shipDate'].includes(field))return;
+  const row=outsourceRows.find(r=>r.id===id);if(!row)return;
+  const value=input.value,previous=row[field]||'';
+  if(input.validity&&!input.validity.valid)return;
+  if(field==='time'&&value&&!/^\d{2}:(00|30)$/.test(value))return;
+  if(value===previous)return;
+  input.disabled=true;
+  try{
+    const updated={...row,[field]:value,updatedAt:new Date().toISOString()};
+    const col=outsourceCollection();if(col)await col.doc(id).set(updated,{merge:true});
+    const index=outsourceRows.findIndex(r=>r.id===id);
+    if(index>=0)outsourceRows[index]={...outsourceRows[index],[field]:value,updatedAt:updated.updatedAt};
+    outsourceRows.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||'')));
+    saveOutsourceLocal();renderOutsourceTable();
+  }catch(error){console.warn('代工快速修改失敗',error);input.value=previous;alert('儲存失敗，已保留原資料，請重試。');}
+  finally{input.disabled=false;}
+}
 function osHalfHourOptions(current=''){
   const value=String(current||'').trim();
   const slots=Array.from({length:48},(_,i)=>String(Math.floor(i/2)).padStart(2,'0')+':'+(i%2?'30':'00'));
@@ -12321,7 +12391,7 @@ function renderOutsourceTable(){
   // 新增列保留原本的 DOM；資料同步或搜尋只更新下方資料區。
   // 原生時間選擇器即使暫時失焦，也不會因重建輸入框而關閉或清空。
   const active=document.activeElement;
-  if(active && active.closest && active.closest('.os-inline-edit')){
+  if(active && active.closest && active.closest('.os-inline-edit, .os-quick-field')){
     _osRenderPending=true; return;
   }
   const q=(document.getElementById('osSearch')?.value||'').trim().toLowerCase();
@@ -12373,9 +12443,9 @@ function renderOutsourceTable(){
       </tr>`;
     }
     return `<tr class="os-vendor-colored" style="${osVendorStyle(r.vendor)}">
-      <td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.date))}</td><td class="os-center">${osEsc(osWeekday(r.date))}</td><td class="os-center">${osEsc(r.time||'')}</td><td>${osEsc(r.customerCode ? (r.customerCode + (r.customerName?' '+r.customerName:'')) : (r.customer||''))}</td>
+      <td class="os-center">${osQuickField(r,'date')}</td><td class="os-center">${osEsc(osWeekday(r.date))}</td><td class="os-center">${osQuickField(r,'time')}</td><td>${osEsc(r.customerCode ? (r.customerCode + (r.customerName?' '+r.customerName:'')) : (r.customer||''))}</td>
       <td class="os-center">${osEsc(r.city||'')}</td><td class="os-center">${osEsc(r.district||'')}</td><td>${osEsc(r.address||'')}</td><td class="os-center">${r.vendor?`<span class="os-badge vendor">${osEsc(r.vendor)}</span>`:''}</td>
-      <td class="os-center"><input type="checkbox" ${r.printed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','printed',this.checked)"></td><td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.shipDate))}</td><td>${osEsc(r.tracking||'')}</td><td class="os-center"><input type="checkbox" ${r.photo?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','photo',this.checked)"></td><td class="os-center"><input type="checkbox" ${r.completed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','completed',this.checked)"></td>
+      <td class="os-center"><input type="checkbox" ${r.printed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','printed',this.checked)"></td><td class="os-center">${osQuickField(r,'shipDate')}</td><td>${osEsc(r.tracking||'')}</td><td class="os-center"><input type="checkbox" ${r.photo?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','photo',this.checked)"></td><td class="os-center"><input type="checkbox" ${r.completed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','completed',this.checked)"></td>
       <td class="os-center">${osServiceBadge(r.service||'')}</td><td>${osEsc(r.content||'')}</td>
       <td><div class="os-row-actions"><button onclick="editOutsourceRow('${osEsc(r.id)}')">編輯</button><button class="os-del-btn" onclick="deleteOutsourceRow('${osEsc(r.id)}')">刪除</button></div></td>
     </tr>`;
@@ -12401,10 +12471,10 @@ function renderOutsourceTable(){
 
 <script>
 document.addEventListener('focusout',e=>{
-  if(e.target.closest && e.target.closest('.os-inline-edit') && _osRenderPending){
+  if(e.target.closest && e.target.closest('.os-inline-edit, .os-quick-field') && _osRenderPending){
     setTimeout(()=>{
       const a=document.activeElement;
-      if(a && a.closest && a.closest('.os-inline-edit')) return;
+      if(a && a.closest && a.closest('.os-inline-edit, .os-quick-field')) return;
       _osRenderPending=false; renderOutsourceTable();
     },150);
   }
@@ -12521,6 +12591,34 @@ function startOtherDispatchSync(){
     cacheOtherDispatch();renderOtherDispatch();otherDispatchStatus('已同步');
   },err=>{console.warn('其它派工同步失敗',err);otherDispatchStatus('同步失敗，目前顯示本機資料');if(otherDispatchUnsubscribe)otherDispatchUnsubscribe();otherDispatchUnsubscribe=null;});
 }
+function initOtherDispatchForm(){
+  for(const id of ['other_time','other_endTime']){
+    const input=document.getElementById(id);
+    if(input&&!input.options.length)input.innerHTML=osHalfHourOptions();
+  }
+  const list=document.getElementById('otherCustomerCodes');
+  if(list)list.innerHTML=(customers||[]).map(c=>`<option value="${escapeHtml(c.customerNo||'')}">${escapeHtml(c.fullName||c.shortName||c.personName||'')}</option>`).join('');
+  const month=document.getElementById('otherDispatchMonth');
+  if(!month.value)month.value=formatDateLocal(new Date()).slice(0,7);
+}
+function moveOtherDispatchMonth(step){
+  const input=document.getElementById('otherDispatchMonth');
+  const date=parseDateLocal((input.value||formatDateLocal(new Date()).slice(0,7))+'-01');
+  date.setMonth(date.getMonth()+step);input.value=formatDateLocal(date).slice(0,7);renderOtherDispatch();
+}
+function otherDispatchCustomerParts(row){
+  if(row.customerCode||row.customerName)return {customerCode:row.customerCode||'',customerName:row.customerName||''};
+  const legacy=String(row.customer||'').trim();
+  const match=legacy.match(/^([A-Za-z]+[0-9][A-Za-z0-9-]*)(?:\s+(.*))?$/);
+  return match?{customerCode:match[1],customerName:match[2]||''}:{customerCode:'',customerName:legacy};
+}
+function fillOtherDispatchCustomer(){
+  const code=document.getElementById('other_customerCode').value.trim();
+  const customer=(customers||[]).find(c=>String(c.customerNo||'').trim().toLowerCase()===code.toLowerCase());
+  for(const [field,value] of [['customerName',customer?(customer.fullName||customer.shortName||customer.personName||''):''],['phone',customer?(customer.mobile||customer.phone||''):''],['address',customer?(customer.deliveryAddress||''):'']]){
+    document.getElementById('other_'+field).value=value;
+  }
+}
 function groupOtherDispatch(rows,month){
   const dates=new Map();
   for(const row of [...rows].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||'')))){
@@ -12536,7 +12634,10 @@ let otherDispatchCompact=true;
 function toggleOtherDispatchView(){otherDispatchCompact=!otherDispatchCompact;renderOtherDispatch();}
 function otherDispatchCalendarCard(row){
   const time=row.time?(row.time+(row.endTime?' ～ '+row.endTime:'')):'未定時間';
-  let html=`<article class="other-calendar-job"><strong class="other-card-title">${escapeHtml(row.customer||'未填客戶')}</strong>`;
+  const parts=otherDispatchCustomerParts(row);
+  const parsed=parseTaiwanAddress(row.address||'');
+  const region=String(row.city||parsed.city||'')+String(row.district||parsed.district||'');
+  let html=`<article class="other-calendar-job"><div class="other-card-region">${escapeHtml(region)}</div><strong class="other-card-title">${escapeHtml([parts.customerCode,parts.customerName].filter(Boolean).join(' ')||'未填客戶')}</strong>`;
   html+=`<div class="other-card-detail">時間：${escapeHtml(time)}</div>`;
   for(const [label,value] of [['電話',row.phone],['地址',row.address],['施工項目',row.workItem],['施工內容',row.content]]){
     if(value)html+=`<div class="other-card-detail">${label}：${escapeHtml(value)}</div>`;
@@ -12547,6 +12648,7 @@ function otherDispatchCalendarCard(row){
 function renderOtherDispatch(){
   const box=document.getElementById('otherDispatchList');if(!box)return;
   document.getElementById('otherDispatchForm').style.display=canEdit()?'':'none';
+  initOtherDispatchForm();
   const groups=groupOtherDispatch(otherDispatchRows,document.getElementById('otherDispatchMonth').value);
   if(!groups.size){box.innerHTML='<div class="empty">目前沒有符合日期的其它派工。</div>';return;}
   const columns=[];let dateHeads='';
@@ -12560,7 +12662,7 @@ function renderOtherDispatch(){
   const timeRows=[...new Set([...times,...scoped.flatMap(row=>[row.time,row.endTime]).filter(Boolean)])].sort();
   if(scoped.some(row=>!row.time))timeRows.push('');
   let html=`<div style="display:flex;gap:10px;align-items:center;margin:10px 0;"><button type="button" onclick="toggleOtherDispatchView()">${otherDispatchCompact?'切換為標準檢視':'切換為精簡檢視'}</button><span>${scoped.length} 件｜點選空白時段新增派工</span></div>`;
-  html+=`<div class="other-calendar-wrap"><table id="otherDispatchCalendar" class="${otherDispatchCompact?'other-compact':''}" style="min-width:${60+columns.length*(otherDispatchCompact?100:240)}px"><thead><tr><th class="other-time" rowspan="2">時間</th>${dateHeads}</tr><tr>`;
+  html+=`<div class="other-calendar-wrap"><table id="otherDispatchCalendar" class="${otherDispatchCompact?'other-compact':''}" style="width:${(otherDispatchCompact?36:76)+columns.length*(otherDispatchCompact?56:240)}px;min-width:${(otherDispatchCompact?36:76)+columns.length*(otherDispatchCompact?56:240)}px"><colgroup><col style="width:${otherDispatchCompact?36:76}px">${columns.map(()=>`<col style="width:${otherDispatchCompact?56:240}px">`).join('')}</colgroup><thead><tr><th class="other-time" rowspan="2">時間</th>${dateHeads}</tr><tr>`;
   for(const col of columns)html+=`<th class="other-engineer">${escapeHtml(col.engineer||'未填寫工程')}</th>`;
   html+='</tr></thead><tbody>';
   for(const time of timeRows){
@@ -12577,13 +12679,16 @@ function renderOtherDispatch(){
   box.innerHTML=html+'</tbody></table></div>';
 }
 
-const otherDispatchFields=['date','engineer','time','endTime','customer','phone','address','workItem','content'];
-function resetOtherDispatchForm(){otherDispatchEditingId=null;document.getElementById('otherDispatchForm').reset();document.getElementById('otherDispatchSave').textContent='新增派工';}
+const otherDispatchFields=['date','engineer','time','endTime','customerCode','customerName','phone','address','workItem','content'];
+function resetOtherDispatchForm(){otherDispatchEditingId=null;document.getElementById('otherDispatchForm').reset();for(const id of ['other_time','other_endTime'])document.getElementById(id).innerHTML=osHalfHourOptions();document.getElementById('otherDispatchSave').textContent='新增派工';}
 function editOtherDispatch(id){
   if(!canEdit())return;
   const row=otherDispatchRows.find(r=>r.id===id);if(!row)return;
+  initOtherDispatchForm();
   otherDispatchEditingId=id;
-  for(const key of otherDispatchFields)document.getElementById('other_'+key).value=row[key]||'';
+  const values={...row,...otherDispatchCustomerParts(row)};
+  for(const id of ['time','endTime'])document.getElementById('other_'+id).innerHTML=osHalfHourOptions(row[id]);
+  for(const key of otherDispatchFields)document.getElementById('other_'+key).value=values[key]||'';
   document.getElementById('otherDispatchSave').textContent='儲存修改';
   document.getElementById('otherDispatchForm').scrollIntoView({behavior:'smooth',block:'center'});
 }
@@ -12592,6 +12697,8 @@ async function saveOtherDispatch(){
   const row={};for(const key of otherDispatchFields)row[key]=document.getElementById('other_'+key).value.trim();
   if(!row.date){alert('請先填寫日期');return;}
   if(row.endTime&&(!row.time||row.endTime<row.time)){alert('結束時間需晚於或等於預約時間');return;}
+  row.customer=[row.customerCode,row.customerName].filter(Boolean).join(' ');
+  const region=parseTaiwanAddress(row.address||'');row.city=region.city||'';row.district=region.district||'';
   row.id=otherDispatchEditingId||('other_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
   row.updatedAt=new Date().toISOString();
   const button=document.getElementById('otherDispatchSave');button.disabled=true;
@@ -12671,5 +12778,72 @@ document.addEventListener('change',event=>{
     select.style.backgroundColor=color?color.badge:'';
     select.style.color=color?color.text:'';
   }
+});
+</script>
+
+<style id="dispatch-requested-refinements">
+#otherDispatchCalendar{max-width:none;}
+#otherDispatchCalendar .other-time{width:auto;min-width:0;}
+#otherDispatchCalendar .other-card-region{font-size:12px;color:#222;font-weight:bold;}
+#scheduleOtherView .other-dispatch-fields select{width:100%;min-width:0;}
+#outsourceTable .os-quick-field{min-width:0;width:100%;font-size:12px;padding:3px 2px;}
+</style>
+
+<style id="install-followup-style">
+#installFollowupPage{height:auto!important;max-height:none!important;overflow:visible!important;padding-bottom:30px;}
+.install-list-table{border-collapse:collapse;width:100%;min-width:600px;font-size:13px;}
+.install-list-table th{background:#2f3542;color:white;text-align:left;white-space:nowrap;padding:9px;}
+.install-list-table td{padding:8px;border:1px solid #ddd;vertical-align:middle;}
+.install-list-table tbody tr:nth-child(even){background:#f6f8fa;}
+#installFollowupList .install-list-table{min-width:1150px;}
+#installFollowupList textarea{width:100%;min-width:280px;min-height:95px;box-sizing:border-box;resize:vertical;font-size:13px;}
+#installFollowupList input[type="checkbox"]{width:18px;height:18px;}
+</style>
+<script>
+function arrangedInstallJobs(allJobs){
+  return allJobs.filter(j=>j.date&&!isHoldJob(j)&&!j.isLeaveJob&&!j.cancelled&&isValidJob(j)&&/安裝/.test(String(j.workItem||'')))
+    .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))||compareDispatchEngineers(a.engineer,b.engineer)||String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')));
+}
+function installModel(job){return String(job.model||job.machineModel||job.workContent||'').trim()||'未填機型';}
+function installCustomerCode(job){return String(job.customerCode||'').trim()||String(job.codeName||'').split(/\s+/)[0]||'未填客編';}
+function renderFutureInstallStats(){
+  const box=document.getElementById('statsFutureInstallList'),input=document.getElementById('statsFutureInstallFrom');if(!box||!input||!canEdit())return;
+  if(!input.value)input.value=formatDateLocal(new Date());
+  const rows=arrangedInstallJobs(jobs||[]).filter(j=>j.date>=input.value);
+  let html=`<div style="margin-bottom:8px;font-size:13px;">共 ${rows.length} 件（${escapeHtml(input.value)} 起，含當日）</div>`;
+  if(!rows.length){box.innerHTML=html+'<div class="empty">沒有後續已安排的安裝件。</div>';return;}
+  html+='<table class="install-list-table"><thead><tr><th>日期</th><th>客編</th><th>工程</th><th>機型／施工內容</th></tr></thead><tbody>';
+  html+=rows.map(j=>`<tr><td>${escapeHtml(j.date)}</td><td>${escapeHtml(installCustomerCode(j))}</td><td>${escapeHtml(normalizeEngineerName(j.engineer)||'未指定')}</td><td>${escapeHtml(installModel(j))}</td></tr>`).join('');
+  box.innerHTML=html+'</tbody></table>';
+}
+function renderInstallFollowup(){
+  const box=document.getElementById('installFollowupList'),month=document.getElementById('installFollowupMonth');if(!box||!month||!canEdit())return;
+  if(document.activeElement?.closest?.('#installFollowupList')){box.dataset.refreshPending='1';return;}
+  if(!month.value)month.value=formatDateLocal(new Date()).slice(0,7);
+  const rows=arrangedInstallJobs(jobs||[]).filter(j=>String(j.date).startsWith(month.value+'-'));
+  if(!rows.length){box.innerHTML='<div class="empty">所選月份沒有已安排的安裝件。</div>';return;}
+  const completed=rows.filter(j=>j.installFollowupCompleted===true).length;
+  let html=`<div style="margin-bottom:10px;">共 ${rows.length} 件｜已回訪 ${completed} 件｜待回訪 ${rows.length-completed} 件</div><table class="install-list-table"><thead><tr><th>客代</th><th>機型／施工內容</th><th>安裝日期</th><th>安裝工程</th><th>已回訪</th><th>回訪日期</th><th style="min-width:300px;">備註</th></tr></thead><tbody>`;
+  html+=rows.map(j=>`<tr data-followup-id="${escapeHtml(String(j.id))}"><td>${escapeHtml(installCustomerCode(j))}${j.customerName?`<br><span style="color:#666;">${escapeHtml(j.customerName)}</span>`:''}</td><td>${escapeHtml(installModel(j))}</td><td>${escapeHtml(j.date)}</td><td>${escapeHtml(normalizeEngineerName(j.engineer)||'未指定')}</td><td style="text-align:center;"><input type="checkbox" aria-label="已回訪" data-followup-field="installFollowupCompleted" ${j.installFollowupCompleted?'checked':''}></td><td><input type="date" aria-label="回訪日期" data-followup-field="installFollowupDate" value="${escapeHtml(j.installFollowupDate||'')}"></td><td><textarea aria-label="回訪備註" data-followup-field="installFollowupNote" placeholder="填寫回訪紀錄、客戶回覆與後續處理…">${escapeHtml(j.installFollowupNote||'')}</textarea></td></tr>`).join('');
+  box.innerHTML=html+'</tbody></table>';delete box.dataset.refreshPending;
+}
+function saveInstallFollowupField(input){
+  if(!requireEdit('更新安裝回訪'))return;
+  const tr=input.closest('[data-followup-id]'),field=input.dataset.followupField;
+  if(!tr||!['installFollowupCompleted','installFollowupDate','installFollowupNote'].includes(field))return;
+  const job=jobs.find(j=>String(j.id)===tr.dataset.followupId);if(!job)return;
+  if(input.validity&&!input.validity.valid)return;
+  job[field]=field==='installFollowupCompleted'?input.checked:input.value;
+  if(field==='installFollowupCompleted'&&input.checked&&!job.installFollowupDate){
+    job.installFollowupDate=formatDateLocal(new Date());tr.querySelector('[data-followup-field="installFollowupDate"]').value=job.installFollowupDate;
+  }
+  saveJobs();
+  document.getElementById('installFollowupStatus').textContent='回訪資料已更新，會隨派工資料同步。';
+}
+document.getElementById('installFollowupList').addEventListener('change',event=>{
+  if(event.target.dataset.followupField)saveInstallFollowupField(event.target);
+});
+document.getElementById('installFollowupList').addEventListener('focusout',()=>{
+  setTimeout(()=>{const box=document.getElementById('installFollowupList');if(box.dataset.refreshPending&&!document.activeElement?.closest?.('#installFollowupList'))renderInstallFollowup();},0);
 });
 </script>
