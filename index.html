@@ -12847,3 +12847,217 @@ document.getElementById('installFollowupList').addEventListener('focusout',()=>{
   setTimeout(()=>{const box=document.getElementById('installFollowupList');if(box.dataset.refreshPending&&!document.activeElement?.closest?.('#installFollowupList'))renderInstallFollowup();},0);
 });
 </script>
+
+<style id="ops-unified-workspace">
+/* Unified dispatch workspace. Existing status colors and permission gates remain authoritative. */
+:root{--ops-nav:236px;--ops-ink:#26364b;--ops-muted:#748196;--ops-line:#e3e8ef;--ops-primary:#365b83;--ops-bg:#f3f6fa;--ops-radius:12px;--ops-shadow:0 3px 16px rgba(29,48,74,.045);}
+body.ops-shell{padding:82px 22px 36px calc(var(--ops-nav) + 22px)!important;background:var(--ops-bg)!important;color:var(--ops-ink);font-family:system-ui,-apple-system,"Microsoft JhengHei",sans-serif;font-size:13px;line-height:1.5;overflow-x:hidden!important;min-height:100vh!important;}
+body.ops-shell.ops-nav-collapsed{--ops-nav:76px;}
+body.ops-shell>.header{position:fixed!important;left:var(--ops-nav)!important;right:0;top:0;height:62px;min-height:62px;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between;padding:0 24px!important;background:rgba(255,255,255,.98)!important;color:var(--ops-ink)!important;border-bottom:1px solid var(--ops-line);box-shadow:none;z-index:300;font-size:13px!important;}
+.ops-shell .ops-header-start{display:flex;align-items:center;gap:12px;min-width:0;}
+.ops-shell .ops-menu-toggle{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;padding:0!important;border:1px solid var(--ops-line)!important;background:#fff!important;color:#617086!important;border-radius:8px!important;}
+.ops-shell .ops-menu-toggle svg{width:17px;height:17px;}
+.ops-shell .ops-workspace-name{font-weight:600;color:#56647a;font-size:13px;}
+.ops-shell .header .auth-panel{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;width:auto;gap:10px;}
+.ops-shell .header .auth-status{background:#f4f7fa!important;color:#536577!important;border:1px solid var(--ops-line)!important;font-weight:400;font-size:11px!important;max-width:330px;padding:5px 10px;}
+.ops-shell .header .auth-panel button{background:#fff!important;color:#50617a!important;border:1px solid var(--ops-line)!important;box-shadow:none;padding:5px 10px!important;font-size:12px!important;}
+body.ops-shell>.tabs{position:fixed!important;inset:0 auto 0 0;width:var(--ops-nav)!important;height:100vh!important;display:flex;flex-direction:column;flex-wrap:nowrap;gap:4px;align-items:stretch;padding:21px 14px 16px!important;background:#17283f!important;border:0!important;z-index:350;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:#52637b transparent;}
+.ops-shell .ops-brand{display:flex;align-items:center;gap:10px;color:#fff;min-height:56px;margin:0 9px 14px;flex-shrink:0;}
+.ops-shell .ops-brand-mark{width:34px;height:36px;border-radius:10px;background:#d7e5f4;color:#234663;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ops-shell .ops-brand-mark svg{width:22px;height:22px;}
+.ops-shell .ops-brand-copy strong{display:block;white-space:nowrap;font-size:15px;letter-spacing:.5px;}
+.ops-shell .ops-brand-copy small{display:block;color:#8fa5c0;font-size:10px;margin-top:3px;letter-spacing:1px;}
+.ops-shell .ops-nav-group{font-size:10px!important;letter-spacing:1.5px;color:#8498b2;line-height:1;margin:22px 14px 7px;flex-shrink:0;}
+body.ops-shell>.tabs button{display:flex;align-items:center;gap:11px;flex:0 0 auto;width:100%;min-height:41px;text-align:left;padding:10px 13px!important;background:transparent!important;color:#b8c8da!important;border:0!important;border-radius:8px!important;font-size:12.5px!important;font-weight:500;white-space:nowrap;box-shadow:none;line-height:1.4;transition:background .12s,color .12s;}
+body.ops-shell>.tabs button:hover{background:#243b56!important;color:#fff!important;}
+body.ops-shell>.tabs button.active{background:#d8e6f4!important;color:#1f466a!important;font-weight:650;}
+.ops-shell .ops-nav-icon{width:18px;height:18px;flex:0 0 18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.ops-shell .ops-nav-label{overflow:hidden;text-overflow:ellipsis;}
+.ops-shell .ops-nav-footer{color:#738ba6;border-top:1px solid #2b3e57;margin:24px 8px 0;padding:16px 6px 0;font-size:10px;line-height:1.8;}
+.ops-shell.ops-nav-collapsed .ops-brand-copy,.ops-shell.ops-nav-collapsed .ops-nav-label,.ops-shell.ops-nav-collapsed .ops-nav-group,.ops-shell.ops-nav-collapsed .ops-nav-footer{display:none;}
+body.ops-shell.ops-nav-collapsed>.tabs{padding-left:10px!important;padding-right:10px!important;}
+.ops-shell.ops-nav-collapsed .ops-brand{margin:0 10px 25px;}
+body.ops-shell.ops-nav-collapsed>.tabs button{justify-content:center;padding:11px!important;}
+.ops-shell .ops-context{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 2px 21px;min-height:61px;}
+.ops-shell .ops-breadcrumb{font-size:11px;color:#8b97a8;margin-bottom:5px;letter-spacing:.5px;}
+.ops-shell .ops-context h1{font-size:23px;line-height:1.3;letter-spacing:.3px;color:#24364d;margin:0;font-weight:700;}
+.ops-shell .ops-context p{font-size:12px;color:#8290a2;margin:7px 0 0;}
+.ops-shell .ops-today{font-size:11px;color:#8b97a8;white-space:nowrap;padding-bottom:3px;}
+body.ops-shell>.page{width:100%!important;max-width:100%!important;min-width:0!important;margin:0!important;}
+body.ops-shell .page .table-wrap,body.ops-shell #scheduleWrap,body.ops-shell .outsource-wrap,body.ops-shell .rt-table-wrap,body.ops-shell .log-table-wrap{width:100%!important;max-width:100%!important;box-sizing:border-box;}
+body.ops-shell #scheduleWrap{margin:12px 0 0!important;border:1px solid #d5dee9!important;border-radius:9px;background:#fff!important;}
+body.ops-shell .table-wrap{margin:12px 0!important;border:1px solid var(--ops-line);border-radius:10px;}
+body.ops-shell .outsource-wrap{margin:12px 0!important;border-color:var(--ops-line)!important;border-radius:10px;}
+body.ops-shell .schedule-subtabs{background:transparent!important;border:0!important;margin:0 0 14px!important;padding:0!important;display:flex;gap:6px;}
+body.ops-shell .schedule-subtab-btn{background:#e8eef5!important;border:0!important;color:#6c7b90!important;border-radius:8px!important;padding:9px 16px!important;font-size:12px!important;box-shadow:none;}
+body.ops-shell .schedule-subtab-btn.active{background:#fff!important;color:#294e73!important;box-shadow:0 1px 5px rgba(20,40,65,.1)!important;font-weight:650;}
+body.ops-shell .toolbar,body.ops-shell .outsource-toolbar,body.ops-shell .search-box{background:#fff!important;border:1px solid var(--ops-line)!important;border-radius:10px!important;padding:13px 14px!important;gap:8px!important;box-shadow:var(--ops-shadow);margin:0 0 12px!important;}
+body.ops-shell #scheduleCalendarView>.toolbar{padding:12px 14px!important;gap:7px!important;top:62px!important;z-index:100;}
+body.ops-shell .toolbar button,body.ops-shell .outsource-toolbar button,body.ops-shell .search-box button{padding:7px 11px!important;font-size:12px!important;line-height:1.4;}
+body.ops-shell button{font-family:inherit;border-radius:7px;transition:filter .12s,background .12s;}
+body.ops-shell button:hover{filter:brightness(.96);}
+body.ops-shell button:disabled{cursor:wait;opacity:.55;}
+body.ops-shell button:focus-visible,body.ops-shell a:focus-visible{outline:3px solid #92b9e5;outline-offset:2px;}
+body.ops-shell input,body.ops-shell select,body.ops-shell textarea{font-family:inherit;font-size:13px;border:1px solid #d4dce7;border-radius:6px;color:#34455c;background:#fff;box-shadow:none;}
+body.ops-shell input:focus,body.ops-shell select:focus,body.ops-shell textarea:focus{outline:0;border-color:#759ac0;box-shadow:0 0 0 3px rgba(80,125,171,.1);}
+body.ops-shell input[readonly]{background:#f3f6f9;color:#7a899a;}
+body.ops-shell input[type=checkbox]{accent-color:#426b93;box-shadow:none;}
+body.ops-shell .toolbar button:not(.delete):not(.clear-btn):not(.import-btn):not(.export-btn),body.ops-shell .search-box button{background:#365b83!important;color:#fff!important;border:1px solid transparent;}
+body.ops-shell #scheduleRangeModeBtn,body.ops-shell #scheduleViewModeBtn,body.ops-shell #schedulePrevBtn,body.ops-shell #scheduleNextBtn{background:#eef3f8!important;color:#526982!important;border:1px solid #e0e7ef!important;}
+body.ops-shell .import-btn{background:#39786c!important;color:#fff!important;}
+body.ops-shell .export-btn{background:#5f7090!important;color:#fff!important;}
+body.ops-shell .clear-btn,body.ops-shell button[onclick*="clearAllJobs"]{background:#fff3f2!important;color:#a34c49!important;border:1px solid #efd2d0!important;}
+body.ops-shell .summary,body.ops-shell #scheduleCalendarView>.summary{border:1px solid var(--ops-line)!important;background:#fff!important;border-radius:9px!important;margin:12px 0!important;padding:12px 14px!important;font-size:12px!important;color:#52667c;box-shadow:var(--ops-shadow);}
+body.ops-shell .badge{border:0!important;background:#edf3f8!important;color:#4f6985;padding:4px 10px;font-size:11px;margin:2px 4px;}
+body.ops-shell #schedulePage .engineer-code-note,body.ops-shell #schedulePage .work-color-legend{margin:7px 2px!important;color:#7d8ca1!important;}
+body.ops-shell #schedulePage .work-color-legend{padding-bottom:3px;}
+body.ops-shell .role-panel,body.ops-shell .admin-widget,body.ops-shell .form-card,body.ops-shell .admin-filter,body.ops-shell .admin-stats{border:1px solid var(--ops-line)!important;border-radius:var(--ops-radius)!important;background:#fff;box-shadow:var(--ops-shadow);padding:18px!important;}
+body.ops-shell .admin-widget h3,body.ops-shell .role-panel h3{color:#374c65;font-size:14px!important;margin-top:0;padding-bottom:12px;border-bottom:1px solid #edf1f5;letter-spacing:.2px;}
+body.ops-shell #statsPage>.admin-header{display:none;}
+body.ops-shell .admin-body{padding:0!important;margin:0!important;width:100%!important;max-width:100%!important;}
+body.ops-shell .admin-dashboard-grid{gap:16px;}
+body.ops-shell .page>h2,body.ops-shell .page>h3{font-size:17px;color:#3e5570;}
+body.ops-shell #scheduleOtherView>.role-panel,body.ops-shell #installFollowupPage>.role-panel{margin:0!important;}
+body.ops-shell .page table:not(#schedule):not(#otherDispatchCalendar)>thead>tr>th,body.ops-shell .mini-table thead th,body.ops-shell .install-list-table th{background:#eaf0f6!important;color:#425a73!important;border-color:#dce4ed!important;font-size:12px!important;font-weight:650;padding:11px 9px;}
+body.ops-shell .mini-table td,body.ops-shell .install-list-table td{border-color:#e8edf3!important;font-size:12px!important;padding:10px;}
+body.ops-shell .mini-table tfoot th{background:#edf4fa!important;color:#2e557a;}
+body.ops-shell #jobList th,body.ops-shell #customerTable th{background:#eaf0f6!important;color:#425a73!important;border-color:#dce4ed!important;}
+body.ops-shell #jobList td,body.ops-shell #customerTable td{border-color:#e2e8ef!important;padding:8px!important;}
+body.ops-shell .outsource-table th{background:#eaf0f6!important;color:#425a73!important;border-color:#dce4ed!important;}
+body.ops-shell .outsource-table td{border-color:#dce4ed!important;padding:7px 5px;}
+body.ops-shell .outsource-table .os-add-row td{background:#f5f8fc!important;}
+body.ops-shell .os-view-btn{background:#edf2f7!important;color:#62748a!important;border:1px solid #e0e7ee!important;}
+body.ops-shell .os-view-btn.active{background:#365b83!important;color:#fff!important;border-color:#365b83!important;}
+body.ops-shell .os-quick-field{background:rgba(255,255,255,.65)!important;border-color:transparent!important;}
+body.ops-shell .os-quick-field:hover,body.ops-shell .os-quick-field:focus{border-color:#adc2d7!important;background:#fff!important;}
+body.ops-shell .os-badge{padding:3px 9px;border-radius:6px;font-size:11px;}
+body.ops-shell .dispatch-drawer{border-radius:16px 0 0 16px;box-shadow:-15px 0 60px rgba(22,42,65,.17);border:0;}
+body.ops-shell .dispatch-drawer-header{background:#223d5b!important;color:#fff;padding:19px 22px;}
+body.ops-shell .dispatch-drawer-body{background:#f6f8fb;padding:20px;}
+body.ops-shell .dispatch-drawer-body .field label{font-size:12px;color:#65758c;font-weight:500;}
+body.ops-shell .dispatch-drawer-body input,body.ops-shell .dispatch-drawer-body select{min-height:36px;}
+body.ops-shell .dispatch-drawer-overlay{background:rgba(15,32,53,.32);backdrop-filter:blur(2px);}
+body.ops-shell .empty{padding:28px!important;color:#8996a6!important;text-align:center;background:#f8fafc;border:1px dashed #dfe6ef;border-radius:8px;}
+body.ops-shell .help,body.ops-shell .import-status{border-radius:9px;border-color:#e4eaf2;box-shadow:none;font-size:12px;}
+body.ops-shell .schedule-bottom-scrollbar{left:var(--ops-nav)!important;background:#e5ebf2!important;border-color:#d0dce8!important;}
+body.ops-shell .schedule-bottom-scrollbar-thumb{background:#819bb6!important;}
+.ops-overview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:0 0 20px;}
+.ops-metric{background:#fff;border:1px solid var(--ops-line);border-radius:12px;padding:20px;box-shadow:var(--ops-shadow);}
+.ops-metric-top{display:flex;align-items:center;justify-content:space-between;color:#7b8b9f;font-size:12px;}
+.ops-metric-icon{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:#edf4fb;color:#547b9f;}
+.ops-metric-icon svg{width:18px;height:18px;}
+.ops-metric-number{display:block;font-size:32px;font-weight:700;line-height:1.2;color:#2d4969;margin:15px 0 6px;letter-spacing:-.8px;}
+.ops-metric-foot{font-size:11px;color:#8a97a7;}
+.ops-overview-columns{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;}
+.ops-overview-panel{background:#fff;border:1px solid var(--ops-line);border-radius:12px;box-shadow:var(--ops-shadow);overflow:hidden;}
+.ops-panel-heading{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf1f5;padding:17px 20px;gap:10px;}
+.ops-panel-heading h2{font-size:14px;font-weight:650;margin:0;}
+.ops-panel-heading button{background:#f0f4f8!important;color:#60748b!important;border:0;padding:5px 10px;font-size:11px;}
+.ops-overview-row{display:flex;align-items:center;gap:15px;padding:14px 20px;border-bottom:1px solid #edf1f5;}
+.ops-overview-time{font-size:12px;font-variant-numeric:tabular-nums;color:#7890a9;min-width:48px;}
+.ops-overview-customer{flex:1;min-width:0;}
+.ops-overview-customer strong{font-size:12px;font-weight:600;display:block;color:#39536f;}
+.ops-overview-customer span{font-size:11px;color:#8c99aa;display:block;margin-top:3px;}
+.ops-overview-engineer{font-size:11px;background:#edf2f8;border-radius:5px;padding:3px 7px;color:#617c96;white-space:nowrap;}
+.ops-quicklinks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:18px;}
+.ops-quicklink{background:#f6f8fb!important;color:#506b86!important;border:1px solid #e5ebf2!important;text-align:left;padding:17px 12px;display:flex;align-items:center;gap:9px;font-size:12px;}
+.ops-dashboard-note{padding:0 20px 20px;color:#94a0af;font-size:11px;line-height:1.8;}
+body.ops-shell.login-required,body.ops-shell.no-permission{padding-left:22px!important;padding-top:82px!important;}
+body.ops-shell.login-required>.header,body.ops-shell.no-permission>.header{left:0!important;}
+body.ops-shell.login-required>.tabs,body.ops-shell.no-permission>.tabs,body.ops-shell.login-required .ops-context,body.ops-shell.no-permission .ops-context{display:none!important;}
+body.ops-shell .login-card,body.ops-shell .no-access-card{border:1px solid var(--ops-line);border-radius:18px;box-shadow:0 20px 80px rgba(30,55,85,.1);}
+body.ops-shell .login-card button{background:#365b83;border-radius:8px;}
+@media(max-width:1150px){.ops-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.ops-overview-columns{grid-template-columns:1fr;}}
+@media(max-width:850px){body.ops-shell{--ops-nav:76px;padding:76px 12px 28px calc(var(--ops-nav) + 12px)!important;}body.ops-shell>.tabs{padding:20px 10px!important;}.ops-shell .ops-brand{margin:0 10px 25px;}.ops-shell .ops-brand-copy,.ops-shell .ops-nav-label,.ops-shell .ops-nav-group,.ops-shell .ops-nav-footer{display:none;}body.ops-shell>.tabs button{justify-content:center;padding:11px!important;}.ops-shell .ops-context{margin-bottom:16px;}.ops-shell .ops-context h1{font-size:20px;}.ops-shell .ops-today{display:none;}body.ops-shell>.header{padding:0 13px!important;}.ops-shell .header .auth-status{max-width:230px;font-size:10px!important;}.ops-shell .ops-workspace-name{display:none;}body.ops-shell #scheduleCalendarView>.toolbar{top:62px!important;}body.ops-shell .toolbar input,body.ops-shell .toolbar select,body.ops-shell .toolbar button{width:auto!important;max-width:100%;}body.ops-shell .role-panel,body.ops-shell .admin-widget{padding:13px!important;}}
+@media(max-width:520px){body.ops-shell{--ops-nav:58px;padding-left:calc(var(--ops-nav) + 9px)!important;padding-right:9px!important;}body.ops-shell>.tabs{padding:18px 7px!important;}.ops-shell .ops-brand{margin:0 5px 24px;}.ops-shell .ops-brand-mark{width:30px;height:32px;}body.ops-shell>.tabs button{min-height:39px;padding:9px!important;}.ops-shell .ops-metric{padding:13px;}.ops-metric-number{font-size:26px;}.ops-metric-icon{width:25px;height:25px;}.ops-overview-grid{gap:9px;}.ops-shell .header .auth-status{max-width:170px;}.ops-shell .ops-context p{font-size:11px;}.ops-shell .ops-menu-toggle{display:none;}.ops-overview-row{padding:12px;gap:8px;}}
+@media print{body.ops-shell{padding:0!important;background:#fff!important;}body.ops-shell>.tabs,body.ops-shell>.header,.ops-shell .ops-context,.ops-shell .schedule-bottom-scrollbar{display:none!important;}body.ops-shell>.page.active{width:100%!important;}}
+/* Contain legacy viewport-width panels inside the workspace. */
+body.ops-shell{display:block!important;}
+body.ops-shell>.header{top:0!important;width:calc(100% - var(--ops-nav))!important;max-width:calc(100% - var(--ops-nav))!important;}
+body.ops-shell>.tabs{top:0!important;bottom:0!important;}
+body.ops-shell .customer-table{width:100%!important;max-width:100%!important;overflow:auto;border:1px solid var(--ops-line);border-radius:10px;background:#fff;}
+body.ops-shell #jobListTable th{background:#eaf0f6!important;color:#425a73!important;border-color:#dce4ed!important;}
+body.ops-shell #jobListTable td{border-color:#e2e8ef!important;padding:8px!important;}
+body.ops-shell #adminPage .admin-body,body.ops-shell #statsPage .admin-body{width:100%!important;max-width:100%!important;}
+body.ops-shell #adminPage .role-panel,body.ops-shell #statsPage .role-panel{max-width:100%!important;}
+body.ops-shell #adminPage .log-table-wrap,body.ops-shell #statsPage .log-table-wrap{overflow:auto!important;}
+body.ops-shell #adminPage.page.active,body.ops-shell #statsPage.page.active{min-height:0!important;padding-bottom:35px!important;}
+body.ops-shell #cartridgeTable thead th,body.ops-shell #noChangeTable thead th{background:#eaf0f6!important;color:#425a73!important;border-color:#dce4ed!important;}
+body.ops-shell.login-required>.header,body.ops-shell.no-permission>.header{width:100%!important;max-width:100%!important;}
+@media print{body.ops-shell>.header{display:none!important;}}
+body.ops-shell .dispatch-drawer:not(.open){box-shadow:none;}
+body.ops-shell #dispatchPage.dispatch-drawer:not(.open),body.ops-shell #repairTicketDrawer.dispatch-drawer:not(.open){box-shadow:none!important;}
+body.ops-shell #dispatchPage.dispatch-drawer.open,body.ops-shell #repairTicketDrawer.dispatch-drawer.open{box-shadow:-15px 0 60px rgba(22,42,65,.17)!important;}
+body.ops-shell .install-list-table{table-layout:auto;}
+body.ops-shell #schedule th,body.ops-shell #schedule td{border-color:#cfd9e5!important;}
+body.ops-shell #schedule .date-head{background:#f1e3e5!important;}
+body.ops-shell #schedule .weekend-head{background:#e1edf7!important;}
+body.ops-shell #schedule .today-head{background:#faecc2!important;}
+body.ops-shell #schedule .engineer-head{background:#eef2f7!important;color:#4c627a;}
+body.ops-shell #schedule .time-col{background:#e9eff6!important;color:#58728c;}
+body.ops-shell:not(.compact-schedule) #schedule th.time-col,body.ops-shell:not(.compact-schedule) #schedule td.time-col{background:#e9eff6!important;}
+body.ops-shell #schedule td.slot.break-slot:not(.job-slot-active):not(.hold-slot-active):not(.trip-slot-active):not(.leave-slot-active):not(.noOT-slot-active){background:#eeecfa!important;}
+body.ops-shell>.tabs button:not([style*="display: none"]):not([style*="display:none"]){display:flex!important;}
+
+</style>
+<script id="ops-workspace-behavior">
+(function(){
+  'use strict';
+  const paths={home:'M3 10 12 3l9 7M5 9v12h14V9M9 21v-8h6v8',calendar:'M4 5h16v16H4zM4 10h16M8 3v4m8-4v4M8 14h2m4 0h2M8 17h2',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',list:'M9 5h12M9 12h12M9 19h12M3 5h1m-1 7h1m-1 7h1',tool:'M14.7 6.3a5 5 0 0 0-6.4 6.4L3 18l3 3 5.3-5.3a5 5 0 0 0 6.4-6.4L14 13l-3-3z',ticket:'M8 3h8v4h-8zM8 5H5v16h14V5h-3M9 11h6m-6 4h6',leave:'M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M5.6 18.4 7 17m10-10 1.4-1.4M16 12a4 4 0 1 0-8 0 4 4 0 0 0 8 0',water:'M12 3s-7 8-7 12a7 7 0 0 0 14 0c0-4-7-12-7-12z',stats:'M4 20V10h4v10m4 0V4h4v16m4 0V8h2v12M2 21h21',phone:'M5 3h4l2 5-3 2a15 15 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z',menu:'M4 6h16M4 12h16M4 18h16'};
+  function icon(name){return '<svg class="ops-nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="'+(paths[name]||paths.list)+'"></path></svg>';}
+  const pages={opsOverviewPage:['工作總覽','掌握今日安排與待處理事項','工作台'],schedulePage:['派工管理','行事曆、代工與其它派工，集中安排每一天的工作','派工管理'],customerPage:['客戶資料','管理客戶聯絡資訊與設備資料','客戶服務'],listPage:['派工明細','查詢、篩選與匯出完整派工紀錄','派工管理'],repairPage:['報修案件','追蹤案件進度與維修安排','客戶服務'],repairManagePage:['報修管理','統整客戶需求、附件與處理紀錄','客戶服務'],leavePage:['休假管理','查看與安排工程人員休假','系統管理'],cartridgePage:['換芯名單','追蹤聯絡進度與換芯安排','客戶服務'],statsPage:['派工統計','工作量、代工件數、金額與安裝統計','統計分析'],installFollowupPage:['安裝回訪','追蹤使用狀況，記錄每一次回訪','客戶服務'],adminPage:['後台管理','權限、資料維護與系統設定','系統管理']};
+  const nav=document.querySelector('body > .tabs'),header=document.querySelector('body > .header');
+  if(!nav||!header)return;
+  document.body.classList.add('ops-shell');
+  try{if(localStorage.getItem('dispatchOpsNavCollapsed')==='1')document.body.classList.add('ops-nav-collapsed');}catch(e){}
+  nav.setAttribute('aria-label','主要導覽');nav.setAttribute('role','navigation');
+  const brand=document.createElement('div');brand.className='ops-brand';brand.innerHTML='<span class="ops-brand-mark">'+icon('calendar')+'</span><span class="ops-brand-copy"><strong>派工管理系統</strong><small>工程・客戶・服務</small></span>';nav.prepend(brand);
+  const overview=document.createElement('button');overview.id='opsOverviewButton';overview.type='button';overview.textContent='工作總覽';overview.onclick=function(){if(canEdit())window.showPage('opsOverviewPage');};nav.insertBefore(overview,document.getElementById('tabSchedule'));
+  const navRows=[['opsOverviewButton','home','工作台'],['tabSchedule','calendar','派工管理'],['tabList','list',null],['tabCustomer','users','客戶服務'],['tabRepair','tool',null],['tabRepairManage','ticket',null],['tabInstallFollowup','phone',null],['tabCartridge','water',null],['tabStats','stats','統計分析'],['tabLeave','leave','系統管理'],['adminTab','settings',null]];
+  for(const [id,name,group] of navRows){const button=document.getElementById(id);if(!button)continue;if(group){const label=document.createElement('div');label.className='ops-nav-group';label.textContent=group;label.dataset.forButton=id;nav.appendChild(label);}const span=document.createElement('span');span.className='ops-nav-label';while(button.firstChild)span.appendChild(button.firstChild);const first=span.firstChild;if(first&&first.nodeType===3)first.textContent=first.textContent.replace(/^[^\u3400-\u9fffA-Za-z0-9]+/u,'');button.appendChild(span);button.insertAdjacentHTML('afterbegin',icon(name));button.title=span.textContent.trim();nav.appendChild(button);}
+  const footer=document.createElement('div');footer.className='ops-nav-footer';footer.textContent='讓每一天的服務，都有條不紊。';nav.appendChild(footer);
+  const headerStart=header.firstElementChild;headerStart.classList.add('ops-header-start');headerStart.innerHTML='<button class="ops-menu-toggle" type="button" aria-label="收合或展開導覽" aria-expanded="true">'+icon('menu')+'</button><span class="ops-workspace-name">工程服務工作空間</span>';
+  const menu=headerStart.querySelector('button');function syncMenu(){menu.setAttribute('aria-expanded',String(!document.body.classList.contains('ops-nav-collapsed')));}syncMenu();menu.onclick=function(){document.body.classList.toggle('ops-nav-collapsed');syncMenu();try{localStorage.setItem('dispatchOpsNavCollapsed',document.body.classList.contains('ops-nav-collapsed')?'1':'0');}catch(e){}window.dispatchEvent(new Event('resize'));};
+  const context=document.createElement('div');context.className='ops-context';context.innerHTML='<div><div class="ops-breadcrumb" id="opsBreadcrumb"></div><h1 id="opsPageTitle"></h1><p id="opsPageDescription"></p></div><div class="ops-today" id="opsToday"></div>';nav.after(context);
+  const dashboard=document.createElement('div');dashboard.id='opsOverviewPage';dashboard.className='page';context.after(dashboard);
+  document.getElementById('opsToday').textContent=new Date().toLocaleDateString('zh-TW',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+  function esc(value){return escapeHtml(String(value==null?'':value));}
+  function overviewMetric(label,count,foot,name){return '<div class="ops-metric"><div class="ops-metric-top"><span>'+label+'</span><span class="ops-metric-icon">'+icon(name)+'</span></div><strong class="ops-metric-number">'+count+'</strong><div class="ops-metric-foot">'+foot+'</div></div>';}
+  function renderOverview(){
+    if(!canEdit())return;
+    const today=formatDateLocal(new Date()),month=today.slice(0,7);
+    const valid=(jobs||[]).filter(j=>!isHoldJob(j)&&isValidJob(j));
+    const todays=valid.filter(j=>j.date===today).sort((a,b)=>String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')));
+    const pending=arrangedInstallJobs(jobs||[]).filter(j=>j.date<=today&&!j.installFollowupCompleted).length;
+    const outsource=typeof outsourceRows==='undefined'?0:outsourceRows.filter(j=>!j.completed&&!j.cancelled).length;
+    const count=valid.filter(j=>String(j.date||'').startsWith(month)).length;
+    let html='<div class="ops-overview-grid">'+overviewMetric('今日派工',todays.length,'件正式派工，依時間安排','calendar')+overviewMetric('安裝待回訪',pending,'件已到安裝日期的待回訪案件','phone')+overviewMetric('代工進行中',outsource,'件尚未完成的代工案件','tool')+overviewMetric('本月工作量',count,'件有效派工，不計出差與請假','stats')+'</div>';
+    html+='<div class="ops-overview-columns"><section class="ops-overview-panel"><div class="ops-panel-heading"><h2>今日工作安排</h2><button type="button" data-ops-page="schedulePage">查看行事曆 →</button></div>';
+    html+=todays.length?todays.slice(0,10).map(j=>'<div class="ops-overview-row"><span class="ops-overview-time">'+esc(j.startTime||j.time||'未定')+'</span><div class="ops-overview-customer"><strong>'+esc(j.codeName||[j.customerCode,j.customerName].filter(Boolean).join(' ')||'未填客戶')+'</strong><span>'+esc([j.city,j.district].filter(Boolean).join('')||j.address||j.workItem||'')+'</span></div><span class="ops-overview-engineer">'+esc(displayEngineer(normalizeEngineerName(j.engineer))||'未指定')+'</span></div>').join(''):'<div class="empty" style="margin:18px;">今天沒有已安排的有效派工。</div>';
+    if(todays.length>10)html+='<div class="ops-dashboard-note" style="padding-top:12px;">另有 '+(todays.length-10)+' 件，可在行事曆查看。</div>';
+    html+='</section><section class="ops-overview-panel"><div class="ops-panel-heading"><h2>常用工作</h2></div><div class="ops-quicklinks">';
+    for(const [title,page,name] of [['新增派工','dispatchPage','calendar'],['安裝回訪','installFollowupPage','phone'],['客戶查詢','customerPage','users'],['派工明細','listPage','list'],['派工統計','statsPage','stats'],['代工安排','outsourcePage','tool']])html+='<button class="ops-quicklink" type="button" data-ops-page="'+page+'">'+icon(name)+title+'</button>';
+    html+='</div><div class="ops-dashboard-note">使用左側導覽切換工作。回訪、代工與派工資料皆沿用既有紀錄。</div></section></div>';dashboard.innerHTML=html;
+  }
+  let lastPage='';
+  function refreshShell(){
+    const active=document.querySelector('body > .page.active');const id=active?active.id:'schedulePage';const info=pages[id]||['工作空間','', '工作台'];
+    document.getElementById('opsBreadcrumb').textContent='工作空間 / '+info[2];document.getElementById('opsPageTitle').textContent=info[0];document.getElementById('opsPageDescription').textContent=info[1];
+    const editable=typeof canEdit==='function'&&canEdit();overview.style.display=editable?'':'none';
+    overview.classList.toggle('active',id==='opsOverviewPage');
+    for(const label of nav.querySelectorAll('.ops-nav-group')){let next=label.nextElementSibling,visible=false;while(next&&!next.classList.contains('ops-nav-group')&&!next.classList.contains('ops-nav-footer')){if(next.tagName==='BUTTON'&&next.style.display!=='none')visible=true;next=next.nextElementSibling;}label.style.display=visible?'':'none';}
+    nav.querySelectorAll('button').forEach(b=>{if(b.classList.contains('active'))b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+    if(id==='opsOverviewPage'&&lastPage!==id)renderOverview();lastPage=id;
+  }
+  const originalShowPage=window.showPage;
+  if(typeof originalShowPage==='function')window.showPage=function(pageId){if(pageId==='opsOverviewPage'&&!canEdit())return;const result=originalShowPage.apply(this,arguments);refreshShell();if(pageId==='opsOverviewPage')renderOverview();return result;};
+  dashboard.addEventListener('click',event=>{const button=event.target.closest('[data-ops-page]');if(button)window.showPage(button.dataset.opsPage);});
+  let queued=false;function scheduleRefresh(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;refreshShell();});}
+  const observer=new MutationObserver(scheduleRefresh);observer.observe(document.body,{attributes:true,attributeFilter:['class']});
+  for(const page of document.querySelectorAll('body > .page'))observer.observe(page,{attributes:true,attributeFilter:['class']});
+  for(const id of ['tabStats','tabInstallFollowup','adminTab','tabLeave']){const node=document.getElementById(id);if(node)observer.observe(node,{attributes:true,attributeFilter:['style']});}
+  setInterval(()=>{if(dashboard.classList.contains('active')&&canEdit())renderOverview();},30000);
+  refreshShell();
+})();
+
+</script>
