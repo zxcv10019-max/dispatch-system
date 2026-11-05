@@ -12197,6 +12197,7 @@ function clearOutsourceForm(){
   editingOutsourceId=null;
   ['osDate','osTime','osCustomerCode','osCustomerName','osCity','osDistrict','osAddress','osVendor','osShipDate','osTracking','osContent'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['osPrinted','osPhoto','osCompleted'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});
+  const vendor=document.getElementById('osVendor');if(vendor){vendor.style.backgroundColor='';vendor.style.color='';}
   const s=document.getElementById('osService'); if(s)s.value='換芯';
   const btn=document.getElementById('osAddBtn'); if(btn)btn.textContent='＋ 新增';
   const cancel=document.getElementById('osCancelBtn'); if(cancel)cancel.style.display='none';
@@ -12288,6 +12289,25 @@ async function updateOutsourceCheckbox(id, field, checked){
   renderOutsourceTable(); // 完成後立刻從進行中隱藏；取消完成則立刻回到進行中
   await persistOutsourceRow(r);
 }
+const OS_VENDOR_COLORS={
+  '國際代工':{row:'#fff1f0',badge:'#f8d2ce',text:'#8f241b'},
+  '泉興代工':{row:'#edf8f1',badge:'#cdebdc',text:'#176144'},
+  '饌前行代工':{row:'#eef5fd',badge:'#cfe1f7',text:'#205b96'},
+  '玉山淨水':{row:'#f2faef',badge:'#def0d4',text:'#426b37'},
+  '鑫沅代工':{row:'#f6f0fb',badge:'#e5d5f2',text:'#64388a'},
+  '星汎代工':{row:'#fff9e8',badge:'#f9e9b1',text:'#886616'},
+  '花東淨水':{row:'#eef8f8',badge:'#d2e9ec',text:'#466f78'},
+  '汎澄代工':{row:'#f3f4f5',badge:'#dfe2e4',text:'#50565b'},
+  '佳賀代工':{row:'#edf6f8',badge:'#cce3e9',text:'#245d70'}
+};
+function osVendorStyle(vendor){
+  const color=OS_VENDOR_COLORS[String(vendor||'').trim()];
+  return color?`--os-vendor-row:${color.row};--os-vendor-badge:${color.badge};--os-vendor-text:${color.text};`:'';
+}
+function osVendorSelectStyle(vendor){
+  const color=OS_VENDOR_COLORS[String(vendor||'').trim()];
+  return color?`background:${color.badge};color:${color.text};`:'';
+}
 let _osRenderPending=false;
 function renderOutsourceTable(){
   updateOutsourceCustomerCodeList();
@@ -12310,9 +12330,9 @@ function renderOutsourceTable(){
     const searchOk = !q || [r.customer,r.vendor,r.content,r.tracking,r.city,r.district,r.address,r.service].some(v=>String(v||'').toLowerCase().includes(q));
     return modeOk && searchOk;
   });
-  const vendorOptions=['國際代工','泉興代工','饌前行代工','玉山淨水','鑫沅代工','星汎代工','花東淨水','汎澄代工'];
+  const vendorOptions=Object.keys(OS_VENDOR_COLORS);
   const serviceOptions=['換芯','維修','復機','安裝','其他'];
-  const optionHtml=(arr,current,placeholder='')=>`${placeholder?`<option value="">${osEsc(placeholder)}</option>`:''}${arr.map(v=>`<option value="${osEsc(v)}" ${v===current?'selected':''}>${osEsc(v)}</option>`).join('')}`;
+  const optionHtml=(arr,current,placeholder='')=>`${placeholder?`<option value="">${osEsc(placeholder)}</option>`:''}${arr.map(v=>`<option value="${osEsc(v)}" style="${osVendorSelectStyle(v)}" ${v===current?'selected':''}>${osEsc(v)}</option>`).join('')}`;
   const addRowHtml = outsourceViewMode==='active' ? `
     <tr class="os-add-row">
       <td><input type="date" id="osDate" onchange="osDateChanged()"></td><td class="os-center" id="osWeekPreview"></td>
@@ -12327,7 +12347,7 @@ function renderOutsourceTable(){
 
   const dataRowsHtml=rows.length ? rows.map(r=>{
     if(editingOutsourceId===r.id){
-      return `<tr class="os-inline-edit" id="osEditRow_${osEsc(r.id)}">
+      return `<tr class="os-inline-edit os-vendor-colored" style="${osVendorStyle(r.vendor)}" id="osEditRow_${osEsc(r.id)}">
         <td><input type="date" id="osEditDate_${osEsc(r.id)}" value="${osEsc(r.date||'')}"></td>
         <td class="os-center">${osEsc(osWeekday(r.date))}</td>
         <td><input type="time" step="1800" id="osEditTime_${osEsc(r.id)}" value="${osEsc(r.time||'')}"></td>
@@ -12335,7 +12355,7 @@ function renderOutsourceTable(){
         <td><input id="osEditCity_${osEsc(r.id)}" value="${osEsc(r.city||'')}" readonly style="background:#f1f1f1"></td>
         <td><input id="osEditDistrict_${osEsc(r.id)}" value="${osEsc(r.district||'')}" readonly style="background:#f1f1f1"></td>
         <td><input id="osEditAddress_${osEsc(r.id)}" value="${osEsc(r.address||'')}"></td>
-        <td><select id="osEditVendor_${osEsc(r.id)}">${optionHtml(vendorOptions,r.vendor||'','請選擇代工廠商')}</select></td>
+        <td><select id="osEditVendor_${osEsc(r.id)}" style="${osVendorSelectStyle(r.vendor)}">${optionHtml(vendorOptions,r.vendor||'','請選擇代工廠商')}</select></td>
         <td class="os-center"><input type="checkbox" id="osEditPrinted_${osEsc(r.id)}" ${r.printed?'checked':''}></td>
         <td><input type="date" id="osEditShipDate_${osEsc(r.id)}" value="${osEsc(r.shipDate||'')}"></td>
         <td><input id="osEditTracking_${osEsc(r.id)}" value="${osEsc(r.tracking||'')}"></td>
@@ -12346,7 +12366,7 @@ function renderOutsourceTable(){
         <td><div class="os-row-actions" style="flex-wrap:wrap;gap:6px"><label style="display:flex;align-items:center;gap:4px;font-size:12.5px;color:#b33939;font-weight:600;white-space:nowrap"><input type="checkbox" id="osEditCancelled_${osEsc(r.id)}" ${r.cancelled?'checked':''}> 標記為取消</label><button class="os-inline-save" onclick="saveInlineOutsourceRow('${osEsc(r.id)}')">💾 儲存</button><button class="os-inline-cancel" onclick="cancelInlineOutsourceEdit()">取消編輯</button></div></td>
       </tr>`;
     }
-    return `<tr>
+    return `<tr class="os-vendor-colored" style="${osVendorStyle(r.vendor)}">
       <td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.date))}</td><td class="os-center">${osEsc(osWeekday(r.date))}</td><td class="os-center">${osEsc(r.time||'')}</td><td>${osEsc(r.customerCode ? (r.customerCode + (r.customerName?' '+r.customerName:'')) : (r.customer||''))}</td>
       <td class="os-center">${osEsc(r.city||'')}</td><td class="os-center">${osEsc(r.district||'')}</td><td>${osEsc(r.address||'')}</td><td class="os-center">${r.vendor?`<span class="os-badge vendor">${osEsc(r.vendor)}</span>`:''}</td>
       <td class="os-center"><input type="checkbox" ${r.printed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','printed',this.checked)"></td><td class="os-center">${r.cancelled?'<span class="os-cancelled-tag">取消</span>':osEsc(osDateText(r.shipDate))}</td><td>${osEsc(r.tracking||'')}</td><td class="os-center"><input type="checkbox" ${r.photo?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','photo',this.checked)"></td><td class="os-center"><input type="checkbox" ${r.completed?'checked':''} onchange="updateOutsourceCheckbox('${osEsc(r.id)}','completed',this.checked)"></td>
@@ -12631,3 +12651,19 @@ document.getElementById('otherDispatchList').addEventListener('click',event=>{
 #otherDispatchCalendar.other-compact .other-card-actions{margin-top:2px;}
 #otherDispatchCalendar.other-compact .other-card-actions button{font-size:10px;padding:1px 4px;}
 </style>
+
+<style id="outsource-vendor-colors">
+#outsourceTable tr.os-vendor-colored td,
+#outsourceTable tr.os-vendor-colored:hover td{background:var(--os-vendor-row,#fff) !important;}
+#outsourceTable tr.os-vendor-colored .os-badge.vendor{background:var(--os-vendor-badge,#cfe2f3);color:var(--os-vendor-text,#134f5c);}
+</style>
+<script>
+document.addEventListener('change',event=>{
+  const select=event.target;
+  if(select.id==='osVendor'||select.id.startsWith('osEditVendor_')){
+    const color=OS_VENDOR_COLORS[String(select.value||'').trim()];
+    select.style.backgroundColor=color?color.badge:'';
+    select.style.color=color?color.text:'';
+  }
+});
+</script>
