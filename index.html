@@ -2314,7 +2314,53 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
 </div>
 
 <div id="leavePage" class="page">
+  <div class="leave-workspace-toolbar">
+    <div class="leave-month-controls"><button type="button" onclick="moveLeaveWorkspaceMonth(-1)" aria-label="上個月">‹</button><input type="month" id="leaveWorkspaceMonth" aria-label="安排月份" onchange="renderLeaveListLP()"><button type="button" onclick="moveLeaveWorkspaceMonth(1)" aria-label="下個月">›</button><button type="button" onclick="leaveWorkspaceToday()">本月</button></div>
+    <select id="leaveWorkspaceEngineer" aria-label="篩選工程師" onchange="renderLeaveListLP()"><option value="">全部工程師</option></select>
+    <span id="leaveWorkspaceTypeHost"></span>
+    <div class="leave-view-switch" role="group" aria-label="檢視方式"><button type="button" id="leaveCalendarMode" onclick="setLeaveWorkspaceView('calendar')">月曆</button><button type="button" id="leaveListMode" onclick="setLeaveWorkspaceView('list')">清單</button></div>
+    <button type="button" class="leave-primary" onclick="openLeaveEditor()">＋ 新增安排</button>
+  </div>
+  <div id="leaveWorkspaceSummary" class="leave-workspace-summary"></div>
+  <div class="form-card ops-leave-records">
+    <h3>休假與出差紀錄</h3>
+    <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
+      <label style="font-size:13px;font-weight:bold;color:#333;">🔍 類型篩選：</label>
+      <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
+        <option value="">全部（不篩選）</option>
+        <option value="北部">🚗 只看北部出差</option>
+        <option value="南部">🚗 只看南部出差</option>
+        <option value="__OTHER__">🗂️ 只看其他（請假／休假等非出差）</option>
+      </select>
+      <label style="font-size:13px;font-weight:bold;color:#333;margin-left:8px;">📅 月份篩選：</label>
+      <select id="lpMonthFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
+        <option value="">全部月份</option>
+      </select>
+    </div>
+    <div id="leaveWorkspaceCalendar"></div>
+    <div id="lpList"></div>
+  </div>
+
   <div class="form-card" style="max-width:700px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <h3 style="margin:0;">📊 工程師出差統計（北部／南部）</h3>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:13px;font-weight:bold;color:#555;">📅 月份篩選：</label>
+        <select id="tripStatsMonth" onchange="renderTripStatsTable()" style="padding:6px 10px;font-size:13px;border:1px solid #cbd5e0;border-radius:6px;background:#fff;color:#333;">
+          <option value="">全部月份</option>
+        </select>
+      </div>
+    </div>
+    <div id="tripStatsTableWrap" style="border-radius:12px;overflow-x:auto;overflow-y:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);border:1px solid #e5e9f0;">
+      <table id="tripStatsTable" style="border-collapse:collapse;width:100%;min-width:560px;font-size:14px;"></table>
+    </div>
+  </div>
+</div>
+
+<div id="leaveEditorOverlay" class="leave-editor-overlay" onclick="closeLeaveEditor()"></div>
+<aside id="leaveEditorDrawer" class="leave-editor-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="leaveEditorTitle" inert>
+  <div class="leave-editor-heading"><div><small>工程人員安排</small><h2 id="leaveEditorTitle">新增安排</h2></div><button type="button" onclick="closeLeaveEditor()" aria-label="關閉安排面板">✕</button></div>
+  <div class="leave-editor-body">  <div class="form-card" style="max-width:700px">
     <h3>🏖️ 工程師休假管理</h3>
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;">
       <div>
@@ -2375,43 +2421,16 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
         <div style="padding:7px 10px;font-size:13px;background:#f4f4f4;border:1px solid #ccc;border-radius:4px;color:#555;white-space:nowrap;">⏰ 下午 06:00 ～ 下午 09:00（固定）</div>
       </div>
       <button id="lpAddBtn" onclick="addLeaveRecordLP()" style="background:#218c74;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">新增</button>
-      <button id="lpCancelEditBtn" onclick="cancelEditLeaveRecordLP()" style="display:none;background:#95a5a6;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">取消編輯</button>
+      <button id="lpCancelEditBtn" onclick="cancelEditLeaveRecordLP();closeLeaveEditor()" style="display:none;background:#95a5a6;padding:8px 18px;font-size:13px;border-radius:6px;color:#fff;border:none;cursor:pointer">取消編輯</button>
       <span id="lpEditingHint" style="display:none;font-size:12px;color:#e67e22;font-weight:bold;">✏️ 編輯中，改好後按「更新」即可同步派工表</span>
     </div>
   </div>
-  <div class="form-card ops-leave-records">
-    <h3>休假與出差紀錄</h3>
-    <div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;padding-top:8px;border-top:1px solid #eee;flex-wrap:wrap;">
-      <label style="font-size:13px;font-weight:bold;color:#333;">🔍 類型篩選：</label>
-      <select id="lpRegionFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
-        <option value="">全部（不篩選）</option>
-        <option value="北部">🚗 只看北部出差</option>
-        <option value="南部">🚗 只看南部出差</option>
-        <option value="__OTHER__">🗂️ 只看其他（請假／休假等非出差）</option>
-      </select>
-      <label style="font-size:13px;font-weight:bold;color:#333;margin-left:8px;">📅 月份篩選：</label>
-      <select id="lpMonthFilter" onchange="renderLeaveListLP()" style="padding:6px 10px;font-size:13px;border:1px solid #aaa;border-radius:4px;">
-        <option value="">全部月份</option>
-      </select>
-    </div>
-    <div id="lpList"></div>
-  </div>
 
-  <div class="form-card" style="max-width:700px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-      <h3 style="margin:0;">📊 工程師出差統計（北部／南部）</h3>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <label style="font-size:13px;font-weight:bold;color:#555;">📅 月份篩選：</label>
-        <select id="tripStatsMonth" onchange="renderTripStatsTable()" style="padding:6px 10px;font-size:13px;border:1px solid #cbd5e0;border-radius:6px;background:#fff;color:#333;">
-          <option value="">全部月份</option>
-        </select>
-      </div>
-    </div>
-    <div id="tripStatsTableWrap" style="border-radius:12px;overflow-x:auto;overflow-y:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);border:1px solid #e5e9f0;">
-      <table id="tripStatsTable" style="border-collapse:collapse;width:100%;min-width:560px;font-size:14px;"></table>
-    </div>
+    <details id="leaveRepeatControls" class="leave-repeat-controls"><summary>依每週固定星期批次選日期</summary><div class="leave-repeat-range"><label>日期起<input type="date" id="leaveRepeatStart"></label><label>日期迄<input type="date" id="leaveRepeatEnd"></label></div><div class="leave-repeat-weekdays"><label><input type="checkbox" data-leave-repeat-day="0">週日</label><label><input type="checkbox" data-leave-repeat-day="1">週一</label><label><input type="checkbox" data-leave-repeat-day="2">週二</label><label><input type="checkbox" data-leave-repeat-day="3">週三</label><label><input type="checkbox" data-leave-repeat-day="4">週四</label><label><input type="checkbox" data-leave-repeat-day="5">週五</label><label><input type="checkbox" data-leave-repeat-day="6">週六</label></div><button type="button" onclick="applyLeaveRepeatDates()">套用選取日期</button><small>先產生日期清單，確認後再按上方「新增」儲存。</small></details>
+    <div id="leaveWorkspaceConflicts" aria-live="polite"></div>
+    <div class="leave-editor-tip">同一工程師同一天已有安排時，儲存會更新原紀錄，並同步派工行事曆。</div>
   </div>
-</div>
+</aside>
 
 <div id="customerPage" class="page">
   <div class="help">
@@ -7366,8 +7385,8 @@ function editLeaveRecordLP(id){
   const cancelBtn = document.getElementById('lpCancelEditBtn'); if(cancelBtn) cancelBtn.style.display = 'inline-block';
   const hint = document.getElementById('lpEditingHint'); if(hint) hint.style.display = 'inline';
 
-  const card = document.querySelector('#leavePage .form-card');
-  if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+  const card = document.querySelector('#leaveEditorDrawer .form-card')||document.querySelector('#leavePage .form-card');
+  if(card&&!card.closest('#leaveEditorDrawer')) card.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function cancelEditLeaveRecordLP(){
@@ -7458,7 +7477,7 @@ function renderTripStatsTable(){
     }).join('');
     if(months.indexOf(prevVal) > -1) monthSel.value = prevVal;
   }
-  const selMonth = monthSel ? monthSel.value : '';
+  const selMonth = document.getElementById('leaveWorkspaceMonth')?.value || (monthSel ? monthSel.value : '');
 
   const engList = (typeof engineers!=='undefined' && Array.isArray(engineers) && engineers.length)
     ? engineers : ['林川閔','陳昱存','陳義強','鄧長益'];
@@ -13292,4 +13311,189 @@ body.ops-shell .mini-table tbody tr:nth-child(even){background:#f7f9fc;}
 </style>
 <script>
 document.documentElement.classList.add('ops-document');
+</script>
+
+<style id="leave-calendar-workspace-style">
+body.ops-shell #leavePage.page.active{display:block!important;}
+body.ops-shell #leavePage>.form-card{margin:0 0 18px!important;}
+body.ops-shell #leavePage>.ops-leave-records>h3{display:none;}
+body.ops-shell #leavePage>.ops-leave-records>div:has(>#lpRegionFilter){display:none!important;}
+.leave-workspace-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#fff;border:1px solid #e1e8f1;border-radius:10px;padding:13px 15px;margin-bottom:15px;}
+.leave-month-controls{display:flex;align-items:center;gap:5px;}
+.leave-workspace-toolbar button{background:#edf2f7;color:#5c7790;padding:7px 11px;font-size:12px;}
+.leave-workspace-toolbar select,.leave-workspace-toolbar input{padding:7px 9px!important;min-height:34px;}
+.leave-workspace-toolbar .leave-primary{background:#365b83;color:#fff;}
+.leave-view-switch{display:flex;margin-left:auto;background:#edf2f7;border-radius:7px;padding:3px;gap:2px;}
+.leave-view-switch button{padding:5px 13px;background:transparent;}
+.leave-view-switch button.selected{background:#fff;color:#365b83;box-shadow:0 1px 4px #19395812;}
+.leave-workspace-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:17px;}
+.leave-workspace-summary>div{background:#fff;border:1px solid #e2eaf2;border-radius:10px;padding:14px 16px;}
+.leave-workspace-summary span{display:block;font-size:11px;color:#8093a7;}
+.leave-workspace-summary strong{font-size:24px;color:#3e5d7c;font-weight:650;}
+.leave-workspace-summary small{font-size:11px;color:#97a6b6;margin-left:5px;}
+.leave-month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-left:1px solid #dfe7f0;border-top:1px solid #dfe7f0;border-radius:9px;overflow:hidden;}
+.leave-weekday{background:#edf2f8;text-align:center;font-size:12px;color:#6f859c;padding:10px;border-right:1px solid #dfe7f0;border-bottom:1px solid #dfe7f0;}
+.leave-month-cell{min-height:135px;background:#fff;border-right:1px solid #dfe7f0;border-bottom:1px solid #dfe7f0;padding:7px;}
+.leave-month-cell.weekend{background:#f9fbfd;}
+.leave-month-cell.outside{background:#f3f6fa;color:#b3bfcd;}
+.leave-cell-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.leave-day-button{background:transparent!important;color:#6b8299!important;padding:2px 6px!important;font-size:12px!important;border-radius:6px!important;}
+.leave-month-cell.today .leave-day-button{background:#365b83!important;color:#fff!important;font-weight:650;}
+.leave-cell-plus{opacity:0;color:#849db5;font-size:13px;transition:opacity .1s;}
+.leave-month-cell:hover .leave-cell-plus,.leave-month-cell:focus-within .leave-cell-plus{opacity:1;}
+.leave-event{display:block;width:100%;text-align:left;border:0;border-left:3px solid var(--leave-color,#a2b7cc);background:var(--leave-bg,#eef3f8)!important;color:var(--leave-ink,#526f8b)!important;padding:6px 7px!important;margin-bottom:5px;font-size:11px!important;border-radius:5px!important;line-height:1.5;white-space:normal;overflow-wrap:anywhere;}
+.leave-event strong{font-size:11px;font-weight:600;display:block;}
+.leave-event small{display:block;font-size:10px;opacity:.8;}
+.leave-month-footer{font-size:11px;color:#8c9fb1;padding:13px 2px 0;display:flex;gap:14px;flex-wrap:wrap;}
+.leave-legend-dot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;}
+.leave-date-heading{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px;font-size:13px;color:#4b6781;}
+.leave-date-heading small{font-size:11px;color:#91a3b4;font-weight:400;}
+body.ops-shell #lpList .leave-item{display:flex;align-items:center;padding:12px 14px;}
+body.ops-shell #lpList .leave-item .leave-list-person{min-width:70px;font-size:12px;font-weight:600;color:#425f7a;}
+body.ops-shell #lpList .leave-item .leave-list-time{font-size:11px;color:#8b9bae;}
+.leave-editor-overlay{display:none;position:fixed;inset:0;background:#10243c55;backdrop-filter:blur(2px);z-index:1000;}
+.leave-editor-overlay.open{display:block;}
+.leave-editor-drawer{position:fixed;right:0;top:0;bottom:0;width:min(500px,96vw);z-index:1001;background:#f6f8fb;transform:translateX(103%);transition:transform .2s;display:flex;flex-direction:column;visibility:hidden;border-radius:14px 0 0 14px;}
+.leave-editor-drawer.open{transform:translateX(0);visibility:visible;box-shadow:-15px 0 60px #10243c33;}
+.leave-editor-heading{display:flex;align-items:center;justify-content:space-between;padding:20px 23px;background:#233f5c;color:#fff;border-radius:14px 0 0;}
+.leave-editor-heading small{font-size:11px;color:#b2c5d9;}
+.leave-editor-heading h2{font-size:19px;margin:4px 0 0;}
+.leave-editor-heading button{background:transparent;color:#cfdeed;font-size:19px;}
+.leave-editor-body{padding:20px;overflow-y:auto;min-height:0;flex:1;}
+body.ops-shell #leaveEditorDrawer .form-card{max-width:none!important;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none;background:transparent;}
+#leaveEditorDrawer .form-card>h3{display:none;}
+#leaveEditorDrawer .form-card>div{display:flex!important;flex-direction:column;align-items:stretch!important;gap:15px!important;}
+#leaveEditorDrawer .form-card>div>div{width:100%;}
+#leaveEditorDrawer #lpDateDisplay{max-width:none!important;min-height:39px!important;}
+#leaveEditorDrawer select,#leaveEditorDrawer input{min-height:38px;}
+#leaveEditorDrawer #lpEngineer,#leaveEditorDrawer #lpType,#leaveEditorDrawer #lpTripRegion{width:100%;}
+#leaveEditorDrawer #lpAddBtn{background:#365b83!important;width:100%;padding:11px!important;}
+#leaveEditorDrawer #lpCancelEditBtn{width:100%;}
+#leaveEditorDrawer #lpDatePickerPop{width:280px!important;}
+.leave-repeat-controls{margin-top:15px;border:1px solid #dce6f0;border-radius:8px;padding:12px;background:#fff;}
+.leave-repeat-controls summary{font-size:12px;color:#57748f;cursor:pointer;}
+.leave-repeat-range{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;}
+.leave-repeat-range label{font-size:11px;color:#7d91a6;}
+.leave-repeat-range input{display:block;width:100%;margin-top:5px;}
+.leave-repeat-weekdays{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;font-size:12px;color:#57718a;}
+.leave-repeat-weekdays input{min-height:0!important;width:auto;vertical-align:middle;}
+.leave-repeat-controls button{font-size:12px;background:#eaf1f8;color:#4f7395;}
+.leave-repeat-controls>small{display:block;margin-top:9px;color:#8b9db0;font-size:11px;}
+.leave-editor-tip{font-size:11px;color:#8d9eb0;line-height:1.8;margin-top:16px;}
+.leave-conflict-box{background:#fff5e9;border:1px solid #efdbc0;border-radius:8px;padding:13px;margin-top:15px;font-size:12px;color:#99723f;}
+.leave-conflict-box ul{margin:8px 0 0;padding-left:18px;line-height:1.8;}
+html.ops-document:has(body.leave-editor-lock),body.ops-shell.leave-editor-lock{overflow:hidden!important;}
+@media(max-width:1050px){.leave-month-cell{min-height:112px;padding:5px;}.leave-event{padding:4px!important;font-size:10px!important;}.leave-event strong{font-size:10px;}.leave-workspace-summary{gap:9px;}.leave-workspace-summary>div{padding:12px;}}
+@media(max-width:700px){#leaveWorkspaceCalendar{overflow-x:auto;}.leave-month-grid{min-width:630px;}.leave-workspace-toolbar{gap:7px;padding:10px;}.leave-view-switch{margin-left:0;}.leave-workspace-summary{grid-template-columns:repeat(2,minmax(0,1fr));}.leave-month-cell{min-height:108px;}.leave-cell-plus{opacity:1;}body.ops-shell #lpList .leave-item{gap:7px;}.leave-editor-body{padding:16px;}}
+</style>
+<script id="leave-calendar-workspace-behavior">
+(function(){
+  'use strict';
+  const page=document.getElementById('leavePage'),drawer=document.getElementById('leaveEditorDrawer');
+  if(!page||!drawer)return;
+  let view='calendar',lastFocus=null;
+  const monthInput=document.getElementById('leaveWorkspaceMonth');monthInput.value=formatDateLocal(new Date()).slice(0,7);
+  const engineerFilter=document.getElementById('leaveWorkspaceEngineer');
+  engineerFilter.innerHTML='<option value="">全部工程師</option>'+engineers.map(e=>`<option value="${escapeHtml(e)}">${displayEngineer(e)} ${escapeHtml(e)}</option>`).join('');
+  const typeFilter=document.getElementById('lpRegionFilter');typeFilter.parentElement.style.setProperty('display','none','important');document.getElementById('leaveWorkspaceTypeHost').appendChild(typeFilter);typeFilter.setAttribute('aria-label','篩選安排類型');
+  const statsSelect=document.getElementById('tripStatsMonth');if(statsSelect)statsSelect.parentElement.style.display='none';
+  const previousEngineer=document.getElementById('lpEngineer').value;
+  document.getElementById('lpEngineer').innerHTML=engineers.map(e=>`<option value="${escapeHtml(e)}">${displayEngineer(e)} ${escapeHtml(e)}</option>`).join('');document.getElementById('lpEngineer').value=previousEngineer;
+  function palette(type){if(String(type).startsWith('出差（北部'))return ['#edf8f6','#75b7a7','#3c7d6e'];if(String(type).startsWith('出差'))return ['#f1edf9','#a08ac5','#766093'];if(type==='不加班')return ['#edf2f8','#93abc5','#536f8d'];return ['#fff3e4','#dfb77d','#a67b43'];}
+  function isPartial(rec){return !String(rec.type||'').startsWith('出差')&&rec.type!=='不加班'&&rec.startTime&&rec.endTime&&(rec.startTime!=='09:30'||rec.endTime!=='18:00');}
+  function filteredRecords(){
+    const month=monthInput.value,eng=engineerFilter.value,type=typeFilter.value;
+    return (leaveRecords||[]).filter(r=>String(r.date||'').startsWith(month+'-')&&(!eng||normalizeEngineerName(r.engineer)===eng)&&(!type||(type==='__OTHER__'?!String(r.type||'').startsWith('出差'):String(r.type||'').includes('出差（'+type+'）'))))
+      .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))||compareDispatchEngineers(a.engineer,b.engineer)||String(a.startTime||'').localeCompare(String(b.startTime||'')));
+  }
+  function timeLabel(rec){return rec.startTime&&rec.endTime?rec.startTime+'–'+rec.endTime:'全天';}
+  function openDrawer(){lastFocus=document.activeElement;drawer.inert=false;drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');document.getElementById('leaveEditorOverlay').classList.add('open');document.body.classList.add('leave-editor-lock');requestAnimationFrame(()=>document.getElementById('lpEngineer').focus({preventScroll:true}));}
+  window.closeLeaveEditor=function(){toggleLpDatePicker(false);drawer.classList.remove('open');drawer.inert=true;drawer.setAttribute('aria-hidden','true');document.getElementById('leaveEditorOverlay').classList.remove('open');document.body.classList.remove('leave-editor-lock');if(lastFocus?.isConnected)lastFocus.focus({preventScroll:true});};
+  window.openLeaveEditor=function(date){
+    if(!requireEdit('新增工程安排'))return;
+    cancelEditLeaveRecordLP();
+    document.getElementById('lpType').value='請假';document.getElementById('lpStartTime').value='09:30';document.getElementById('lpEndTime').value='18:00';lpTypeChange();
+    if(engineerFilter.value)document.getElementById('lpEngineer').value=engineerFilter.value;
+    if(date){lpSelectedDates=[date];const d=parseDateLocal(date);lpCalendarYear=d.getFullYear();lpCalendarMonth=d.getMonth();}
+    else{lpSelectedDates=[];const d=parseDateLocal(monthInput.value+'-01');lpCalendarYear=d.getFullYear();lpCalendarMonth=d.getMonth();}
+    renderLpDateDisplay();renderLpCalendar();
+    const start=parseDateLocal(monthInput.value+'-01');document.getElementById('leaveRepeatStart').value=formatDateLocal(start);document.getElementById('leaveRepeatEnd').value=formatDateLocal(new Date(start.getFullYear(),start.getMonth()+1,0));
+    drawer.querySelectorAll('[data-leave-repeat-day]').forEach(c=>c.checked=false);document.getElementById('leaveRepeatControls').hidden=false;document.getElementById('leaveEditorTitle').textContent='新增安排';
+    openDrawer();renderConflicts();
+  };
+  const originalEdit=window.editLeaveRecordLP;window.editLeaveRecordLP=function(id){if(!requireEdit('修改工程安排'))return;openDrawer();originalEdit(id);document.getElementById('leaveRepeatControls').hidden=true;document.getElementById('leaveEditorTitle').textContent='修改安排';renderConflicts();};
+  function renderConflicts(){
+    const box=document.getElementById('leaveWorkspaceConflicts');if(!box)return;
+    const eng=normalizeEngineerName(document.getElementById('lpEngineer').value),type=document.getElementById('lpType').value;
+    const start=type==='不加班'?'18:00':type==='請假'?(document.getElementById('lpStartTime').value||'09:30'):'09:30';
+    const end=type==='不加班'?'21:00':type==='請假'?(document.getElementById('lpEndTime').value||'18:00'):'18:00';
+    const conflicts=(jobs||[]).filter(j=>!j.isLeaveJob&&!isHoldJob(j)&&normalizeEngineerName(j.engineer)===eng&&lpSelectedDates.includes(j.date)&&String(j.startTime||j.time||'09:30')<=end&&String(j.endTime||j.startTime||j.time||'21:00')>=start);
+    box.innerHTML=conflicts.length?`<div class="leave-conflict-box"><strong>此時段已有 ${conflicts.length} 筆派工</strong><ul>${conflicts.slice(0,6).map(j=>`<li>${escapeHtml(j.date)} ${escapeHtml(j.startTime||j.time||'')} ${escapeHtml(j.codeName||j.customerCode||'')}</li>`).join('')}</ul><div>儲存後仍會保留原派工，請另外確認是否需要調整。</div></div>`:'';
+  }
+  const originalDateDisplay=window.renderLpDateDisplay;window.renderLpDateDisplay=function(){const r=originalDateDisplay.apply(this,arguments);renderConflicts();return r;};
+  drawer.addEventListener('change',renderConflicts);drawer.addEventListener('input',renderConflicts);
+  window.applyLeaveRepeatDates=function(){
+    const start=document.getElementById('leaveRepeatStart').value,end=document.getElementById('leaveRepeatEnd').value;
+    const days=[...drawer.querySelectorAll('[data-leave-repeat-day]:checked')].map(c=>Number(c.dataset.leaveRepeatDay));
+    if(!start||!end||end<start||!days.length){alert('請選擇日期範圍與至少一個星期。');return;}
+    const dates=[];let d=parseDateLocal(start);let count=0;
+    while(formatDateLocal(d)<=end&&count<367){if(days.includes(d.getDay()))dates.push(formatDateLocal(d));d.setDate(d.getDate()+1);count++;}
+    if(formatDateLocal(d)<=end){alert('請將單次日期範圍設定在一年內。');return;}
+    if(!dates.length){alert('此範圍沒有符合的日期。');return;}
+    lpSelectedDates=dates;lpCalendarYear=Number(start.slice(0,4));lpCalendarMonth=Number(start.slice(5,7))-1;renderLpDateDisplay();renderLpCalendar();toggleLpDatePicker(false);
+  };
+  const originalAdd=window.addLeaveRecordLP;window.addLeaveRecordLP=function(){
+    if(!requireEdit('新增／更新工程安排'))return;
+    if(!lpSelectedDates.length){alert('請選擇休假日期');return;}
+    if(!document.getElementById('lpEngineer').value){alert('請選擇工程師');return;}
+    if(document.getElementById('lpType').value==='請假'){
+      const start=document.getElementById('lpStartTime').value,end=document.getElementById('lpEndTime').value;
+      if((start&&!end)||(!start&&end)||(start&&end&&end<=start)){alert('請填寫完整且結束晚於開始的請假時段，或同時留空表示全天。');return;}
+    }
+    const first=lpSelectedDates[0];originalAdd.apply(this,arguments);
+    if(!lpEditingId&&!lpSelectedDates.length){monthInput.value=first.slice(0,7);closeLeaveEditor();renderWorkspace();}
+  };
+  window.moveLeaveWorkspaceMonth=function(step){const date=parseDateLocal(monthInput.value+'-01');date.setMonth(date.getMonth()+step);monthInput.value=formatDateLocal(date).slice(0,7);renderWorkspace();};
+  window.leaveWorkspaceToday=function(){monthInput.value=formatDateLocal(new Date()).slice(0,7);renderWorkspace();};
+  window.setLeaveWorkspaceView=function(value){view=value==='list'?'list':'calendar';renderWorkspace();};
+  function renderWorkspace(){
+    if(!monthInput.value)monthInput.value=formatDateLocal(new Date()).slice(0,7);
+    const rows=filteredRecords(),month=monthInput.value,today=formatDateLocal(new Date());
+    const trips=rows.filter(r=>String(r.type).startsWith('出差')).length,noOT=rows.filter(r=>r.type==='不加班').length,partial=rows.filter(isPartial).length,full=rows.length-trips-noOT-partial;
+    document.getElementById('leaveWorkspaceSummary').innerHTML=[['全天休假',full,'人日'],['部分時段請假',partial,'筆'],['出差安排',trips,'人日'],['不加班',noOT,'次']].map(([label,value,unit])=>`<div><span>${label}</span><strong>${value}</strong><small>${unit}</small></div>`).join('');
+    document.getElementById('leaveCalendarMode').classList.toggle('selected',view==='calendar');document.getElementById('leaveCalendarMode').setAttribute('aria-pressed',String(view==='calendar'));
+    document.getElementById('leaveListMode').classList.toggle('selected',view==='list');document.getElementById('leaveListMode').setAttribute('aria-pressed',String(view==='list'));
+    const calendar=document.getElementById('leaveWorkspaceCalendar'),list=document.getElementById('lpList');calendar.style.display=view==='calendar'?'':'none';list.style.display=view==='list'?'':'none';
+    const groups=new Map();rows.forEach(r=>{if(!groups.has(r.date))groups.set(r.date,[]);groups.get(r.date).push(r);});
+    const first=parseDateLocal(month+'-01'),offset=(first.getDay()+6)%7,start=new Date(first);start.setDate(1-offset);
+    const cells=Math.ceil((offset+new Date(first.getFullYear(),first.getMonth()+1,0).getDate())/7)*7;
+    let html='<div class="leave-month-grid" role="group" aria-label="'+escapeHtml(month)+' 工程安排月曆">'+['一','二','三','四','五','六','日'].map(day=>'<div class="leave-weekday">週'+day+'</div>').join('');
+    for(let i=0;i<cells;i++){
+      const date=addDays(start,i),dateStr=formatDateLocal(date),outside=dateStr.slice(0,7)!==month,dayRows=outside?[]:(groups.get(dateStr)||[]);
+      html+=`<div class="leave-month-cell ${outside?'outside':''} ${date.getDay()===0||date.getDay()===6?'weekend':''} ${dateStr===today?'today':''}" data-leave-date="${dateStr}"><div class="leave-cell-heading"><button type="button" class="leave-day-button" aria-label="新增 ${dateStr} 安排">${date.getDate()}</button><span class="leave-cell-plus" aria-hidden="true">＋</span></div>`;
+      for(const record of dayRows){const [bg,color,ink]=palette(record.type);html+=`<button type="button" class="leave-event" data-leave-edit="${escapeHtml(String(record.id))}" style="--leave-bg:${bg};--leave-color:${color};--leave-ink:${ink};" aria-label="修改 ${escapeHtml(record.date+' '+record.engineer+' '+record.type)}"><strong>${escapeHtml(record.engineer)} · ${escapeHtml(record.type)}</strong><small>${escapeHtml(timeLabel(record))}</small></button>`;}
+      html+='</div>';
+    }
+    calendar.innerHTML=html+'</div><div class="leave-month-footer"><span><i class="leave-legend-dot" style="background:#dfb77d"></i>休假／請假／補休</span><span><i class="leave-legend-dot" style="background:#75b7a7"></i>北部出差</span><span><i class="leave-legend-dot" style="background:#a08ac5"></i>南部出差</span><span><i class="leave-legend-dot" style="background:#93abc5"></i>不加班</span><span>點日期新增，點安排修改。</span></div>';
+    let listHtml='';for(const [date,records] of groups){listHtml+=`<h4 class="leave-date-heading">${escapeHtml(date)} ${escapeHtml(getWeekdayName(date))}<small>${records.length} 筆安排</small></h4>`;for(const record of records){const [bg,color,ink]=palette(record.type);listHtml+=`<div class="leave-item"><span class="leave-badge" style="background:${bg};color:${ink}">${escapeHtml(record.type)}</span><span class="leave-list-person">${escapeHtml(record.engineer)}</span><span class="leave-list-time">${escapeHtml(timeLabel(record))}</span><button type="button" data-leave-edit="${escapeHtml(String(record.id))}" style="margin-left:auto;">編輯</button><button type="button" data-leave-delete="${escapeHtml(String(record.id))}">刪除</button></div>`;}}
+    list.innerHTML=listHtml||'<div class="empty">此月份沒有符合條件的安排。</div>';
+    renderTripStatsTable();
+  }
+  window.renderLeaveListLP=renderWorkspace;
+  page.addEventListener('click',event=>{
+    const edit=event.target.closest('[data-leave-edit]'),remove=event.target.closest('[data-leave-delete]'),date=event.target.closest('[data-leave-date]');
+    if(edit){window.editLeaveRecordLP(Number(edit.dataset.leaveEdit));return;}
+    if(remove){deleteLeaveRecordLP(Number(remove.dataset.leaveDelete));return;}
+    if(date)window.openLeaveEditor(date.dataset.leaveDate);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&drawer.classList.contains('open')){closeLeaveEditor();event.preventDefault();}
+    if(event.key==='Tab'&&drawer.classList.contains('open')){
+      const focusable=[...drawer.querySelectorAll('button,input,select,summary,[tabindex="0"]')].filter(n=>!n.disabled&&n.getClientRects().length);
+      const first=focusable[0],last=focusable[focusable.length-1];
+      if(event.shiftKey&&document.activeElement===first){last?.focus();event.preventDefault();}else if(!event.shiftKey&&document.activeElement===last){first?.focus();event.preventDefault();}
+    }
+  });
+  renderWorkspace();
+})();
 </script>
