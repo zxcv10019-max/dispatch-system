@@ -2052,14 +2052,15 @@ body.force-admin-scroll #statsPage .log-table-wrap th{
     <button style="background:#218c74" onclick="openRepairTicketDrawer()">＋新增報修</button>
     <button onclick="document.getElementById('rtExcelFile').click()" style="background:#2980b9">📥 一鍵匯入</button>
     <input type="file" id="rtExcelFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importRepairTicketExcel(event)">
-    <input id="rtSearch" placeholder="🔍 搜尋客編／姓名／電話／機碼" style="min-width:220px" oninput="renderRepairTicketList()">
-    <select id="rtStatusFilter" onchange="renderRepairTicketList()" title="狀態篩選">
+    <input id="rtSearch" placeholder="🔍 搜尋客編／姓名／電話／機碼" style="min-width:220px" oninput="queueRepairTicketList()">
+    <select id="rtStatusFilter" hidden aria-hidden="true" tabindex="-1" onchange="renderRepairTicketList()" title="狀態篩選">
       <option value="全部">未完成案件</option>
       <option>⚫ 已完成</option>
       <option>🔵 已派工</option>
       <option>🟣 送修中</option>
       <option>🟢 待復機</option>
     </select>
+    <button type="button" id="rtIncompleteTab" onclick="setRepairCompletionView(false)" aria-pressed="true">未完成</button><button type="button" id="rtCompleteTab" onclick="setRepairCompletionView(true)" aria-pressed="false">已完成</button>
     <input type="date" id="rtDateFilter" onchange="renderRepairTicketList()" title="報修日期篩選">
     <button style="background:#888" onclick="document.getElementById('rtDateFilter').value='';renderRepairTicketList()">清除日期</button>
     <button onclick="loadRepairTickets()">重新整理</button>
@@ -3140,6 +3141,7 @@ async function loadCloudChunks(meta, onlyTypes){
   };
 }
 
+let lastAppliedCloudPayload="",lastAppliedCloudScope="";
 async function applyRemoteData(data){
   if(typeof applyInstallFollowupArchive==='function')applyInstallFollowupArchive(data.installFollowupArchive);
   const remoteToken = data.clientImportToken || "";
@@ -3157,6 +3159,9 @@ async function applyRemoteData(data){
     return;
   }
 
+  const payloadScope=String(currentUser?.uid||currentUser?.email||'');
+  let payloadKey='';try{payloadKey=JSON.stringify(data);}catch(e){}
+  if(payloadKey&&!localDirty&&!importProtectActive&&payloadScope===lastAppliedCloudScope&&payloadKey===lastAppliedCloudPayload)return;
   let remoteJobs = Array.isArray(data.jobs) ? data.jobs : null;
   let remoteCustomers = Array.isArray(data.customers) ? data.customers : null;
   let remoteLeaveRecords = Array.isArray(data.leaveRecords) ? data.leaveRecords : null;
@@ -3264,14 +3269,13 @@ async function applyRemoteData(data){
   try{ localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers || [])); }catch(e){ try{localStorage.removeItem(CUSTOMERS_KEY);}catch(_){} }
   try{ localStorage.setItem(LEAVE_KEY, JSON.stringify(leaveRecords || [])); }catch(e){ try{localStorage.removeItem(LEAVE_KEY);}catch(_){} }
   try{ localStorage.setItem(CARTRIDGE_KEY, JSON.stringify(cartridgeData || [])); }catch(e){ try{localStorage.removeItem(CARTRIDGE_KEY);}catch(_){} }
-  updateCustomerCodeList();
-  renderSchedule();
-  renderCustomers();
-  renderJobList();
-  renderAvailableSlots();
-  renderLeaveList();
-  renderLeaveListLP();
-  if(typeof renderCartridgeTable==='function') renderCartridgeTable();
+  if(remoteCustomers)updateCustomerCodeList();
+  const visiblePage=id=>document.getElementById(id)?.classList.contains('active');
+  if(visiblePage('schedulePage')){renderSchedule();renderAvailableSlots();}
+  if(visiblePage('customerPage'))renderCustomers();
+  if(visiblePage('listPage'))renderJobList();
+  if(visiblePage('leavePage')){renderLeaveList();renderLeaveListLP();}
+  if(visiblePage('cartridgePage')&&typeof renderCartridgeTable==='function')renderCartridgeTable();
   // 派工統計／後台管理儀表板不會因為切分頁以外的事件自動重繪，
   // 若使用者目前正停留在這兩頁，雲端資料一到就要立刻同步更新，
   // 否則會停留在資料還沒同步完成時的舊數字（甚至是 0）。
@@ -3294,6 +3298,7 @@ async function applyRemoteData(data){
     };
   }catch(e){ /* 基準值更新失敗不影響主流程，頂多下次多重寫一種類型 */ }
   isApplyingRemote = false;
+  if(payloadKey&&!localDirty&&!savingCloud&&!importProtectActive){lastAppliedCloudPayload=payloadKey;lastAppliedCloudScope=payloadScope;}
   applyRoleUI();
 }
 
@@ -3353,7 +3358,7 @@ function startCloudSync(){
   // 安全網：每 20 秒額外主動拉一次雲端資料，避免極少數情況下 onSnapshot 連線中斷卻沒有報錯
   if(typeof cloudFallbackPollTimer !== 'undefined' && cloudFallbackPollTimer) clearInterval(cloudFallbackPollTimer);
   cloudFallbackPollTimer = setInterval(async function(){
-    if(!currentUser || !firebaseDb || savingCloud || isApplyingRemote) return;
+    if(document.hidden || !currentUser || !firebaseDb || savingCloud || isApplyingRemote) return;
     try{
       const snap = await ref.get();
       if(snap.exists) await applyRemoteData(snap.data() || {});
@@ -6671,7 +6676,8 @@ document.addEventListener("click", function(e){
   function syncAdminScrollMode(){
     var admin = document.getElementById("adminPage");
     var stats = document.getElementById("statsPage");
-    document.body.classList.toggle("admin-scroll-mode", !!((admin && admin.classList.contains("active")) || (stats && stats.classList.contains("active"))));
+    const enabled=!!((admin && admin.classList.contains("active")) || (stats && stats.classList.contains("active")));
+    if(document.body.classList.contains("admin-scroll-mode")!==enabled)document.body.classList.toggle("admin-scroll-mode",enabled);
   }
   document.addEventListener("DOMContentLoaded", syncAdminScrollMode);
   setInterval(syncAdminScrollMode, 500);
@@ -6683,8 +6689,8 @@ document.addEventListener("click", function(e){
 (function(){
   function forceAdminScroll(){
     var isAdmin = location.search.indexOf("admin") >= 0 || (document.getElementById("adminPage") && document.getElementById("adminPage").classList.contains("active"));
-    document.documentElement.classList.toggle("force-admin-scroll", !!isAdmin);
-    document.body.classList.toggle("force-admin-scroll", !!isAdmin);
+    if(document.documentElement.classList.contains("force-admin-scroll")!==!!isAdmin)document.documentElement.classList.toggle("force-admin-scroll", !!isAdmin);
+    if(document.body.classList.contains("force-admin-scroll")!==!!isAdmin)document.body.classList.toggle("force-admin-scroll", !!isAdmin);
     if(isAdmin){
       document.documentElement.style.height = "auto";
       document.documentElement.style.overflowY = "auto";
@@ -10775,7 +10781,7 @@ function updateRepairPendingBadge(){
 }
 
 // 每分鐘重新渲染一次，讓「上傳中」逾時警示能即時反映經過的時間，不必等 Firestore 有新資料才更新
-setInterval(() => { if(repairRequests.length) renderRepairRequests(); }, 60000);
+setInterval(() => { if(!document.hidden&&document.getElementById('repairPage')?.classList.contains('active')&&repairRequests.length) renderRepairRequests(); }, 60000);
 
 
 function normalizeRepairFiles(items, urls){
@@ -11668,7 +11674,14 @@ function rtFilterByStat(status){
   renderRepairTicketList();
 }
 
+let repairListSearchTimer=null;
+function queueRepairTicketList(){clearTimeout(repairListSearchTimer);repairListSearchTimer=setTimeout(renderRepairTicketList,160);}
+function setRepairCompletionView(done){document.getElementById('rtStatusFilter').value=done?'⚫ 已完成':'全部';renderRepairTicketList();}
 function renderRepairTicketList(){
+  clearTimeout(repairListSearchTimer);
+  const statusSelect=document.getElementById('rtStatusFilter');if(statusSelect&&statusSelect.value!=='⚫ 已完成')statusSelect.value='全部';
+  const completed=statusSelect?.value==='⚫ 已完成';for(const [id,active] of [['rtIncompleteTab',!completed],['rtCompleteTab',completed]]){const button=document.getElementById(id);if(button){button.setAttribute('aria-pressed',String(active));button.classList.toggle('rt-completion-active',active);}}
+
   const q = ((document.getElementById("rtSearch")||{}).value || "").trim().toLowerCase();
   const statusFilter = (document.getElementById("rtStatusFilter")||{}).value || "全部";
   const dateFilter = (document.getElementById("rtDateFilter")||{}).value || "";
@@ -11693,8 +11706,8 @@ function renderRepairTicketList(){
   const summary = document.getElementById("rtSummary");
   if(summary) summary.textContent = `目前顯示 ${list.length} 件｜全部 ${repairTickets.length} 件`;
 
-  renderRepairTicketTable(list);
-  renderRepairTicketCards(list);
+  if(window.innerWidth>1100||!document.getElementById('rtFastAddBody'))renderRepairTicketTable(list);
+  if(window.innerWidth<=1100)renderRepairTicketCards(list);
 }
 
 // ===== 狀態直接在列表點選修改，不用開查看視窗 =====
@@ -13908,7 +13921,7 @@ const showBefore=showPage;showPage=function(id){if(['opsTaskPage','opsActivityPa
 window.opsStatsCases=function(month,engineer,item,excludeM=false){if(!allowed())return;const list=jobs.filter(j=>!isHoldJob(j)&&isValidJob(j)&&String(j.date||'').startsWith(month)&&(!engineer||normalizeEngineerName(j.engineer)===normalizeEngineerName(engineer))&&(!item||String(j.workItem||'未填施工項目')===item)&&(!excludeM||['E','C','Y'].includes(displayEngineer(normalizeEngineerName(j.engineer)))));const daily=new Map();for(const j of list)daily.set(j.date,(daily.get(j.date)||0)+1);open('統計核對明細',`<p>${esc(month)} · ${esc(engineer||item||'E、C、Y 合計')}<br>共 ${list.length} 件，${daily.size} 個有有效派工的日期；平均每日 ${daily.size?(list.length/daily.size).toFixed(2):'0.00'} 件。${excludeM?'不含林川閔。':''}</p><details><summary>查看每日件數</summary>${table(['日期','件數'],[...daily].sort().map(([d,n])=>`<tr><td>${esc(d)}</td><td>${n}</td></tr>`))}</details>${jobTable(list.sort((a,b)=>String(a.date).localeCompare(String(b.date))))}`);};
 const workloadBefore=renderAdminWorkloadSummary;renderAdminWorkloadSummary=function(){const result=workloadBefore.apply(this,arguments),month=adminMonthNow();for(const id of ['adminWorkloadSummary','statsWorkloadSummary']){const box=$(id);if(!box)continue;const tables=box.querySelectorAll('table');[...(tables[0]?.tBodies[0]?.rows||[])].forEach((row,i)=>{const c=row.cells[1],e=engineers[i];if(c&&e){const n=c.textContent;c.innerHTML='<button class="ops-case-link" type="button">'+esc(n)+'</button>';c.firstChild.onclick=()=>opsStatsCases(month,e,'',false);}});for(const row of tables[0]?.tFoot?.rows||[]){const c=row.cells[1],n=c.textContent;c.innerHTML='<button class="ops-case-link" type="button">'+esc(n)+'</button>';c.firstChild.onclick=()=>opsStatsCases(month,'','',true);}for(const row of tables[1]?.tBodies[0]?.rows||[]){if(row.cells.length!==2)continue;const item=row.cells[0].textContent,c=row.cells[1],n=c.textContent;c.innerHTML='<button class="ops-case-link" type="button">'+esc(n)+'</button>';c.firstChild.onclick=()=>opsStatsCases(month,'',item,false);}}return result;};
 const amountBefore=renderCompletionStats;renderCompletionStats=function(monthId,target){const result=amountBefore.apply(this,arguments),box=$(target||'adminCompletionContent');if(box){const button=document.createElement('button');button.type='button';button.className='ops-case-link';button.textContent='核對金額明細';button.onclick=()=>{const month=$(monthId||'statsMonth')?.value||adminMonthNow(),list=jobs.filter(j=>String(j.date||'').startsWith(month)&&!isHoldJob(j)&&isValidJob(j)),parse=v=>String(v??'').replace(/,/g,'').trim(),amountRows=list.filter(j=>parse(j.amount)!==''&&Number.isFinite(Number(parse(j.amount)))),sum=amountRows.reduce((n,j)=>n+Number(parse(j.amount)),0);open('本月金額核對',`<p>${esc(month)} · ${list.length} 件有效派工，${amountRows.length} 件已填金額，${list.length-amountRows.length} 件未填有效金額。<br>總金額 ${sum.toLocaleString('zh-TW')} 元；金額統計包含林川閔，工作量合計另依 E、C、Y 計算。</p>${jobTable(amountRows)}`);};box.prepend(button);}return result;};
-const permission=()=>{const yes=allowed();$('opsActivityPageTab').style.display=yes?'':'none';$('opsBatchToolbar').style.display=yes?'':'none';if(!yes){if(modal.open)close();$('opsTaskResults').innerHTML='';$('opsActivityResults').innerHTML='';selected.clear();}else baseline=clone(jobs);};new MutationObserver(permission).observe(document.body,{attributes:true,attributeFilter:['class']});permission();
+let lastPermissionScope=null;const permission=()=>{const yes=allowed(),scope=String(currentUser?.uid||currentUser?.email||'')+':'+yes;if(scope===lastPermissionScope)return;lastPermissionScope=scope;$('opsActivityPageTab').style.display=yes?'':'none';$('opsBatchToolbar').style.display=yes?'':'none';if(!yes){if(modal.open)close();$('opsTaskResults').innerHTML='';$('opsActivityResults').innerHTML='';selected.clear();}else baseline=clone(jobs);};new MutationObserver(permission).observe(document.body,{attributes:true,attributeFilter:['class']});permission();
 })();
 
 </script>
@@ -14086,3 +14099,7 @@ body.ops-shell .rt-note-inline{display:flex;align-items:flex-start;gap:6px;min-w
 <style>#salesRepairPage .sales-person-inline{margin-top:7px;font-size:14px}</style>
 
 <style>#salesRepairPage button.sales-delete{margin-top:8px;color:#ad3d3d;background:#fff6f6;border-color:#edd3d3}</style>
+
+<script id="repair-layout-refresh">(()=>{let desktop=window.innerWidth>1100;window.addEventListener('resize',()=>{const next=window.innerWidth>1100;if(next===desktop)return;desktop=next;if(document.getElementById('repairManagePage')?.classList.contains('active'))renderRepairTicketList();},{passive:true});})();</script>
+
+<style id="repair-completion-tabs">#repairManagePage #rtStatusFilter,#repairManagePage #rtStats{display:none!important}body.ops-shell #rtIncompleteTab,body.ops-shell #rtCompleteTab{background:#fff!important;color:#365d86!important;border:1px solid #d1dfec!important}body.ops-shell #rtIncompleteTab.rt-completion-active,body.ops-shell #rtCompleteTab.rt-completion-active{background:#365d86!important;color:#fff!important;border-color:#365d86!important}</style>
