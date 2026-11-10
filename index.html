@@ -7687,6 +7687,7 @@ if(typeof showAdminPage === 'function'){
   function displayEng(e){ try{return displayEngineer(e)}catch(x){return e} }
 
   window.refreshAdminV2 = function(){
+    if(document.hidden||!document.getElementById('adminPage')?.classList.contains('active'))return;
     const js=safeJobs(); const cs=safeCustomers();
     const today=todayStr(); const month=monthStr();
     const normal=js.filter(j=>!isHold(j));
@@ -7780,6 +7781,7 @@ if(typeof showAdminPage === 'function'){
   if(oldSaveJobs){ window.saveJobs = function(){ const r=oldSaveJobs.apply(this,arguments); setTimeout(window.refreshAdminV2,30); return r; }; }
 
   window.addReminderButtons = function(){
+    if(document.hidden||!document.getElementById('schedulePage')?.classList.contains('active'))return;
     document.querySelectorAll('.job').forEach(card=>{
       if(card.querySelector('.reminder-btn')) return;
       const drag=card.getAttribute('ondragstart')||'';
@@ -11056,9 +11058,7 @@ function loadRepairTickets(){
     .onSnapshot(snapshot => {
       repairTickets = snapshot.docs.map(doc => ({id:doc.id, ...doc.data()}));
       window.rtInspectionTicketsReady=true;
-      renderRepairTicketStats();
-      renderRepairTicketList();
-      updateRepairTicketPendingBadge();
+      scheduleRepairTicketRefresh();
       // 若目前正開著某筆報修單的抽屜，雲端資料剛好更新（例如連結了新派工），同步刷新顯示
       if(editingRepairTicketId){
         const t = repairTickets.find(x => x.id === editingRepairTicketId);
@@ -11674,7 +11674,17 @@ function rtFilterByStat(status){
   renderRepairTicketList();
 }
 
-let repairListSearchTimer=null;
+let repairListSearchTimer=null,repairRefreshFrame=0,repairRefreshPending=false;
+function scheduleRepairTicketRefresh(){
+ repairRefreshPending=true;if(repairRefreshFrame)return;
+ repairRefreshFrame=requestAnimationFrame(()=>{repairRefreshFrame=0;if(document.hidden)return;const editing=document.activeElement?.closest?.('#rtTable input,#rtTable textarea,#rtTable select,#rtCards input,#rtCards textarea,#rtCards select');if(editing)return;if(document.getElementById('rtFastAddBody')&&!document.getElementById('repairManagePage')?.classList.contains('active'))return;repairRefreshPending=false;renderRepairTicketList();});
+}
+document.addEventListener('focusout',()=>{if(repairRefreshPending)setTimeout(scheduleRepairTicketRefresh,0);});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&repairRefreshPending)scheduleRepairTicketRefresh();});
+let repairListPage=0,repairListPageSize=50,repairListFilterKey='';
+function changeRepairListPage(delta){repairListPage+=delta;renderRepairTicketList();}
+function changeRepairListSize(value){repairListPageSize=Number(value);repairListPage=0;renderRepairTicketList();}
+
 function queueRepairTicketList(){clearTimeout(repairListSearchTimer);repairListSearchTimer=setTimeout(renderRepairTicketList,160);}
 function setRepairCompletionView(done){document.getElementById('rtStatusFilter').value=done?'⚫ 已完成':'全部';renderRepairTicketList();}
 function renderRepairTicketList(){
@@ -11706,8 +11716,13 @@ function renderRepairTicketList(){
   const summary = document.getElementById("rtSummary");
   if(summary) summary.textContent = `目前顯示 ${list.length} 件｜全部 ${repairTickets.length} 件`;
 
-  if(window.innerWidth>1100||!document.getElementById('rtFastAddBody'))renderRepairTicketTable(list);
-  if(window.innerWidth<=1100)renderRepairTicketCards(list);
+  const filterKey=JSON.stringify([q,statusFilter,dateFilter]);if(filterKey!==repairListFilterKey){repairListPage=0;repairListFilterKey=filterKey;}
+  const pageCount=Math.max(1,Math.ceil(list.length/repairListPageSize));repairListPage=Math.max(0,Math.min(repairListPage,pageCount-1));
+  const start=repairListPage*repairListPageSize,visible=list.slice(start,start+repairListPageSize);
+  let pager=document.getElementById('rtListPager');if(!pager){pager=document.createElement('div');pager.id='rtListPager';pager.className='rt-list-pager';document.getElementById('rtSummary')?.after(pager);}
+  pager.innerHTML='<span>顯示 '+(list.length?start+1:0)+'–'+(start+visible.length)+'／'+list.length+' 件</span><select aria-label="每頁筆數" onchange="changeRepairListSize(this.value)">'+[50,100].map(size=>'<option value="'+size+'" '+(size===repairListPageSize?'selected':'')+'>每頁 '+size+' 筆</option>').join('')+'</select><button onclick="changeRepairListPage(-1)" '+(!repairListPage?'disabled':'')+'>上一頁</button><span>'+(repairListPage+1)+'／'+pageCount+'</span><button onclick="changeRepairListPage(1)" '+(repairListPage>=pageCount-1?'disabled':'')+'>下一頁</button>';
+  if(window.innerWidth>1100||!document.getElementById('rtFastAddBody'))renderRepairTicketTable(visible);
+  if(window.innerWidth<=1100)renderRepairTicketCards(visible);
 }
 
 // ===== 狀態直接在列表點選修改，不用開查看視窗 =====
@@ -12578,22 +12593,19 @@ function patchFor(ticket,index){
 window.RepairInspectionAppointments={buildIndex,candidate,patchFor};
 let running=false,lastSignature='',retryAfter=0;
 async function sync(){
- if(running||Date.now()<retryAfter||!window.rtInspectionJobsReady||!window.rtInspectionTicketsReady||!currentUser||!firebaseDb||!canEdit()||isApplyingRemote||localDirty)return;
+ if(document.hidden||running||Date.now()<retryAfter||!window.rtInspectionJobsReady||!window.rtInspectionTicketsReady||!currentUser||!firebaseDb||!canEdit()||isApplyingRemote||localDirty)return;
  const index=buildIndex(jobs),scope=currentUser.uid||currentUser.email;
  const signature=JSON.stringify([scope,[...index].map(([k,v])=>[k,v.map(j=>[String(j.id),j.date])]),repairTickets.map(t=>[t.id,t.customerCode,t.reportDate,t.appointmentDate,t.appointmentDateOrigin,t.appointmentDispatchId,t.completeDate,t.returnDate,t.status])]);
  if(signature===lastSignature)return;
  const pending=repairTickets.filter(t=>patchFor(t,index));running=true;let failed=false;
  try{
-  for(let i=0;i<pending.length;i+=5){if(!currentUser||(currentUser.uid||currentUser.email)!==scope||!canEdit()||localDirty)break;
-   const results=await Promise.allSettled(pending.slice(i,i+5).map(async t=>{
-    await firebaseDb.runTransaction(async tx=>{
-     if(!currentUser||(currentUser.uid||currentUser.email)!==scope||!canEdit()||localDirty)return;
-     const ref=firebaseDb.collection('repairTickets').doc(t.id),snap=await tx.get(ref);if(!snap.exists)return;
-     // Re-evaluate the latest cloud fields to preserve manual edits made during synchronization.
-     const patch=patchFor(snap.data(),buildIndex(jobs));if(!patch)return;
-     tx.update(ref,{...patch,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-    });
-   }));if(results.some(r=>r.status==='rejected'))failed=true;
+  for(let i=0;i<pending.length;i+=20){
+   if(!currentUser||(currentUser.uid||currentUser.email)!==scope||!canEdit()||localDirty){failed=true;break;}
+   await firebaseDb.runTransaction(async tx=>{
+    if(!currentUser||(currentUser.uid||currentUser.email)!==scope||!canEdit()||localDirty)throw Error('同步環境已變更');
+    const part=pending.slice(i,i+20),refs=part.map(t=>firebaseDb.collection('repairTickets').doc(t.id)),snaps=await Promise.all(refs.map(ref=>tx.get(ref))),currentIndex=buildIndex(jobs);
+    snaps.forEach((snap,k)=>{if(!snap.exists)return;const patch=patchFor(snap.data(),currentIndex);if(patch)tx.update(refs[k],{...patch,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});});
+   });
   }
   if(!failed)lastSignature=signature;
  }catch(error){failed=true;}finally{running=false;retryAfter=failed?Date.now()+30000:0;}
@@ -13680,7 +13692,7 @@ body.ops-shell .header .auth-panel #opsSaveRetry{padding:2px 5px!important;font-
   if(pageId==='cartridgePage')state.cartridgeStatus=typeof cartridgeStatusFilter==='undefined'?'':cartridgeStatusFilter;
   state.scrolls={};for(const id of ['scheduleWrap','installFollowupList','otherDispatchList']){const node=byId(id);if(node&&node.closest('.page')?.id===pageId)state.scrolls[id]={left:node.scrollLeft,top:node.scrollTop};}
   for(const node of byId(pageId)?.querySelectorAll('.customer-table,.outsource-wrap')||[]){const key=node.classList.contains('customer-table')?'customer-table':'outsource-wrap';state.scrolls[key]={left:node.scrollLeft,top:node.scrollTop};}
-  preferences[pageId]=state;persist();
+  if(JSON.stringify(old)===JSON.stringify(state))return;preferences[pageId]=state;persist();
  }
  function renderPage(id){
   if(id==='schedulePage'){renderSchedule();if(byId('scheduleOtherView')?.style.display!=='none')renderOtherDispatch();if(byId('scheduleOutsourceView')?.style.display!=='none')renderOutsourceTable();}
@@ -14024,7 +14036,7 @@ const sources=['業務聯繫室','桑春雨','張宇誠','林川閔','工程','�
 const state={rows:[],loaded:false,error:'',scope:'',unsubscribe:null,tab:'active',query:'',page:0,busy:false,retry:null};
 const allowed=()=>!!currentUser&&canEdit()&&!document.body.classList.contains('no-permission')&&!document.body.classList.contains('login-required');
 function validDate(v){return !v||/^\d{4}-\d{2}-\d{2}$/.test(v)&&Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v;}
-function filtered(rows,tab,query){const q=String(query||'').trim().toLowerCase();return rows.filter(r=>!r.deleted&&(tab==='done'?r.status==='處理完畢':r.status!=='處理完畢')&&(!q||[r.message,r.source,r.salesperson,r.dealer,r.date,r.remark,r.status,r.contactDate].join(' ').toLowerCase().includes(q))).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));}
+function filtered(rows,tab,query){const q=String(query||'').trim().toLowerCase();return rows.filter(r=>!r.deleted&&(q||(tab==='done'?r.status==='處理完畢':r.status!=='處理完畢'))&&(!q||[r.message,r.source,r.salesperson,r.dealer,r.date,r.remark,r.status,r.contactDate].join(' ').toLowerCase().includes(q))).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));}
 window.SalesRepair={filtered,validDate,sources,statuses};
 const host=document.createElement('div');host.id='salesRepairPage';host.className='page';$('repairManagePage').after(host);
 host.innerHTML='<section class="sales-box"><h2>新增業務報修</h2><form id="salesRepairForm" class="sales-create"><label class="sales-message">業務訊息<textarea id="salesRepairMessage" placeholder="直接貼上業務提供的完整內容" required></textarea></label><label>填寫日期<input id="salesRepairDate" type="date" required></label><label>來源<select id="salesRepairSource">'+sources.map(s=>'<option>'+s+'</option>').join('')+'</select></label><label>業務<input id="salesRepairSalesperson" placeholder="填寫業務姓名"></label><label>經銷商<input id="salesRepairDealer" placeholder="填寫經銷商"></label><button type="submit" class="sales-primary">＋ 新增報修</button></form><p id="salesCreateStatus" class="sales-message-status" role="status"></p></section><section class="sales-box"><div class="sales-toolbar"><button type="button" id="salesActiveTab" class="active">待處理</button><button type="button" id="salesDoneTab">處理完畢</button><button type="button" id="salesRepairImport">匯入業務報修 Excel</button><input id="salesRepairImportFile" type="file" accept=".xlsx,.xls" hidden><input id="salesRepairSearch" type="search" placeholder="搜尋業務訊息、來源、業務、經銷商、備註、日期" aria-label="搜尋業務報修"></div><p id="salesRepairStatus" class="sales-hint" role="status"></p><p class="sales-hint">備註、聯絡狀態與聯絡日期可直接修改，離開欄位自動儲存。</p><table class="sales-table"><colgroup><col style="width:13%"><col style="width:37%"><col style="width:25%"><col style="width:12%"><col style="width:13%"></colgroup><thead><tr><th>填寫日期／來源</th><th>業務訊息</th><th>備註</th><th>聯絡狀態</th><th>聯絡日期</th></tr></thead><tbody id="salesRepairRows"></tbody></table><div id="salesRepairPager" class="sales-pager"></div></section>';
@@ -14032,8 +14044,8 @@ $('salesRepairDate').value=formatDateLocal(new Date());
 const nav=document.createElement('button');nav.id='tabSalesRepair';nav.type='button';nav.innerHTML=($('tabRepairManage').querySelector('svg')?.outerHTML||'')+'<span class="ops-nav-label">業務報修</span>';$('tabRepairManage').after(nav);nav.onclick=()=>showPage('salesRepairPage');
 function render(){
  const rows=filtered(state.rows,state.tab,state.query),pages=Math.max(1,Math.ceil(rows.length/50));state.page=Math.min(state.page,pages-1);const list=rows.slice(state.page*50,state.page*50+50);
- $('salesActiveTab').classList.toggle('active',state.tab==='active');$('salesDoneTab').classList.toggle('active',state.tab==='done');$('salesActiveTab').setAttribute('aria-pressed',String(state.tab==='active'));$('salesDoneTab').setAttribute('aria-pressed',String(state.tab==='done'));
- $('salesRepairStatus').textContent=state.error||(!state.loaded?'正在讀取…':'顯示 '+rows.length+' 筆｜待處理 '+state.rows.filter(r=>r.status!=='處理完畢').length+' 筆｜處理完畢 '+state.rows.filter(r=>r.status==='處理完畢').length+' 筆');
+ const searching=!!state.query.trim();$('salesActiveTab').classList.toggle('active',!searching&&state.tab==='active');$('salesDoneTab').classList.toggle('active',!searching&&state.tab==='done');$('salesActiveTab').setAttribute('aria-pressed',String(!searching&&state.tab==='active'));$('salesDoneTab').setAttribute('aria-pressed',String(!searching&&state.tab==='done'));
+ $('salesRepairStatus').textContent=state.error||(!state.loaded?'正在讀取…':(searching?'跨全部狀態搜尋｜':'')+'顯示 '+rows.length+' 筆｜待處理 '+state.rows.filter(r=>r.status!=='處理完畢').length+' 筆｜處理完畢 '+state.rows.filter(r=>r.status==='處理完畢').length+' 筆');
  $('salesRepairRows').innerHTML=list.length?list.map(r=>'<tr data-sales-id="'+esc(r.id)+'"><td data-label="填寫日期／來源"><div>'+esc(r.date||'原表未提供日期')+'</div><div class="sales-hint">'+esc(r.source)+'</div><label class="sales-person-inline">業務<input data-sales-field="salesperson" aria-label="業務姓名" placeholder="業務姓名" value="'+esc(r.salesperson||'')+'"></label><label class="sales-person-inline">經銷商<input data-sales-field="dealer" aria-label="經銷商" placeholder="經銷商" value="'+esc(r.dealer||'')+'"></label><button type="button" data-sales-delete class="sales-delete">刪除</button></td><td class="sales-content" data-label="業務訊息">'+esc(r.message)+'</td><td data-label="備註"><textarea data-sales-field="remark" aria-label="'+esc(r.date+' '+r.source+' 備註')+'">'+esc(r.remark||'')+'</textarea></td><td data-label="聯絡狀態"><select data-sales-field="status" aria-label="聯絡狀態">'+statuses.map(s=>'<option '+(r.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></td><td data-label="聯絡日期"><input type="date" data-sales-field="contactDate" aria-label="聯絡日期" value="'+esc(r.contactDate||'')+'"></td></tr>').join(''):'<tr><td colspan="5">'+(state.loaded?'目前沒有符合條件的業務報修。':'正在讀取…')+'</td></tr>';
  $('salesRepairPager').innerHTML='<button data-page="prev" '+(!state.page?'disabled':'')+'>上一頁</button><span>'+(state.page+1)+'／'+pages+'</span><button data-page="next" '+(state.page>=pages-1?'disabled':'')+'>下一頁</button>';
 }
@@ -14103,3 +14115,5 @@ body.ops-shell .rt-note-inline{display:flex;align-items:flex-start;gap:6px;min-w
 <script id="repair-layout-refresh">(()=>{let desktop=window.innerWidth>1100;window.addEventListener('resize',()=>{const next=window.innerWidth>1100;if(next===desktop)return;desktop=next;if(document.getElementById('repairManagePage')?.classList.contains('active'))renderRepairTicketList();},{passive:true});})();</script>
 
 <style id="repair-completion-tabs">#repairManagePage #rtStatusFilter,#repairManagePage #rtStats{display:none!important}body.ops-shell #rtIncompleteTab,body.ops-shell #rtCompleteTab{background:#fff!important;color:#365d86!important;border:1px solid #d1dfec!important}body.ops-shell #rtIncompleteTab.rt-completion-active,body.ops-shell #rtCompleteTab.rt-completion-active{background:#365d86!important;color:#fff!important;border-color:#365d86!important}</style>
+
+<style id="repair-pager-style">body.ops-shell #rtListPager{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 12px;color:#5f7894;font-size:14px}body.ops-shell #rtListPager select,body.ops-shell #rtListPager button{font:inherit;padding:5px 9px;border:1px solid #d2dfed;border-radius:6px;background:#fff;color:#365d86}body.ops-shell #rtListPager :disabled{opacity:.4;cursor:default}</style>
