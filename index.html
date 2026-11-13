@@ -12147,6 +12147,7 @@ function osServiceBadge(v){
 function saveOutsourceLocal(){
   try{localStorage.setItem(OUTSOURCE_KEY,JSON.stringify(outsourceRows));}catch(e){}
   renderStatsOutsourceSummary();
+  window.SalesRepair?.refreshDispatchDates?.();
 }
 function outsourceCollection(){
   try{return firebaseDb ? firebaseDb.collection("sharedDispatch").doc("main").collection("outsourceJobs") : null;}catch(e){return null;}
@@ -12158,7 +12159,7 @@ function startOutsourceSync(){
   try{
     outsourceUnsubscribe=col.orderBy("date","asc").onSnapshot(snap=>{
       const rows=[]; snap.forEach(doc=>rows.push({...doc.data(),id:doc.id}));
-      outsourceRows=rows; saveOutsourceLocal(); renderOutsourceTable();
+      outsourceRows=rows;window.salesOutsourceReady=true; saveOutsourceLocal(); renderOutsourceTable();window.SalesRepair?.refreshDispatchDates?.();
     },err=>{console.warn("代工表雲端同步失敗，改用本機資料",err);});
   }catch(e){console.warn("代工表同步初始化失敗",e);}
 }
@@ -12749,14 +12750,14 @@ function otherDispatchCollection(){
   try{return firebaseDb?firebaseDb.collection('sharedDispatch').doc('main').collection('otherDispatchJobs'):null;}catch(e){return null;}
 }
 function otherDispatchStatus(message){const el=document.getElementById('otherDispatchSyncStatus');if(el)el.textContent=message;}
-function cacheOtherDispatch(){try{localStorage.setItem(OTHER_DISPATCH_KEY,JSON.stringify(otherDispatchRows));}catch(e){otherDispatchStatus('本機儲存空間不足');}}
+function cacheOtherDispatch(){window.SalesRepair?.refreshDispatchDates?.();try{localStorage.setItem(OTHER_DISPATCH_KEY,JSON.stringify(otherDispatchRows));}catch(e){otherDispatchStatus('本機儲存空間不足');}}
 function startOtherDispatchSync(){
   if(otherDispatchUnsubscribe)return;
   const col=otherDispatchCollection();if(!col){otherDispatchStatus('目前使用本機資料');return;}
   otherDispatchStatus('同步中…');
   otherDispatchUnsubscribe=col.onSnapshot(snap=>{
     otherDispatchRows=[];snap.forEach(doc=>otherDispatchRows.push({...doc.data(),id:doc.id}));
-    cacheOtherDispatch();renderOtherDispatch();otherDispatchStatus('已同步');
+    window.salesOtherReady=true;cacheOtherDispatch();renderOtherDispatch();otherDispatchStatus('已同步');window.SalesRepair?.refreshDispatchDates?.();
   },err=>{console.warn('其它派工同步失敗',err);otherDispatchStatus('同步失敗，目前顯示本機資料');if(otherDispatchUnsubscribe)otherDispatchUnsubscribe();otherDispatchUnsubscribe=null;});
 }
 function initOtherDispatchForm(){
@@ -14058,30 +14059,22 @@ function salesPhoneNumbers(value){
  const matches=String(value||'').match(/(?:\+?886[\s-]?9|09)(?:[\s-]*\d){8}|0[2-8](?:[\s-]*\d){7,9}/g)||[];
  return [...new Set(matches.map(v=>{let n=v.replace(/\D/g,'');return n.startsWith('886')?'0'+n.slice(3):n;}))];
 }
-function findSalesDispatch(row,dispatches=jobs){
- if(!row.date||!validDate(row.date))return {missingDate:true};
- let explicit=salesCustomerCode(row);
- if(!explicit&&row.sourceData){try{const raw=JSON.parse(row.sourceData);if(Array.isArray(raw))explicit=String(raw[3]||'').trim().toUpperCase();}catch(e){}}
- if(!explicit){const match=String(row.message||'').match(/(?:客編|客戶代號|客戶編號)\s*[：:]\s*([A-Z]+\d+(?:-\d+)?)/i);explicit=match?.[1]?.toUpperCase()||'';}
- const phones=salesPhoneNumbers(row.phone||row.customerPhone||'').concat(salesPhoneNumbers(row.message));
- const customerMatches=!explicit&&phones.length?(customers||[]).filter(c=>salesPhoneNumbers([c.mobile,c.phone,c.tel].filter(Boolean).join(' ')).some(p=>phones.includes(p))):[];
- const inferred=[...new Set(customerMatches.map(c=>String(c.customerNo||'').trim().toUpperCase()).filter(Boolean))];
- const code=explicit||(inferred.length===1?inferred[0]:'');
- const candidates=(dispatches||[]).filter(j=>{
-  if(!j||!j.date||!validDate(j.date)||row.date&&j.date<row.date||isHoldJob(j)||!isValidJob(j)||j.cancelled||j.canceled||j.deleted||j.archived||/取消|作廢/.test([j.workflowStatus,j.status].join(' ')))return false;
-  const jobCode=String(j.customerCode||'').trim().toUpperCase();
-  if(explicit)return jobCode===explicit;
-  if(code)return jobCode===code;
-  return phones.length>0&&salesPhoneNumbers([j.phone,j.customerPhone,j.mobile].filter(Boolean).join(' ')).some(p=>phones.includes(p));
- }).sort((a,b)=>a.date.localeCompare(b.date)||String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||'')));
- // A shared phone without an exact customer code must not pick another customer's job.
- if(!code&&new Set(candidates.map(j=>String(j.customerCode||j.customerName||'').trim()).filter(Boolean)).size>1)return {ambiguous:true};
- return candidates[0]||null;
+function findSalesDispatch(row,dispatches=jobs,outsourced=outsourceRows,others=otherDispatchRows){
+ const reportDate=row.reportDate||row.date;
+ if(!reportDate||!validDate(reportDate))return {missingDate:true};
+ let code=salesCustomerCode(row);
+ if(!code&&row.sourceData){try{const raw=JSON.parse(row.sourceData);if(Array.isArray(raw))code=String(raw[3]||'').trim().toUpperCase();}catch(e){}}
+ if(!code){const match=String(row.message||'').match(/(?:客編|客戶代號|客戶編號)\s*[：:]\s*([A-Z]+\d+(?:-\d+)?)/i);code=match?.[1]?.toUpperCase()||'';}
+ if(!code)return {missingCode:true};
+ function recordCode(record){const explicit=String(record.customerCode||'').trim().toUpperCase();if(explicit)return explicit;const legacy=String(record.customer||'').trim().match(/^([A-Z]+[0-9][A-Z0-9-]*)(?:\s|$)/i);return legacy?.[1]?.toUpperCase()||'';}
+ const merged=[...(dispatches||[]).map(r=>({...r,dispatchSource:'派工'})),...(outsourced||[]).map(r=>({...r,dispatchSource:'代工表'})),...(others||[]).map(r=>({...r,dispatchSource:'其它派工'}))];
+ return merged.filter(j=>j&&validDate(j.date)&&j.date>reportDate&&recordCode(j)===code&&!isHoldJob(j)&&isValidJob(j)&&!j.cancelled&&!j.canceled&&!j.deleted&&!j.archived&&!/取消|作廢/.test([j.workflowStatus,j.status].join(' ')))
+ .sort((a,b)=>a.date.localeCompare(b.date)||String(a.startTime||a.time||'').localeCompare(String(b.startTime||b.time||''))||a.dispatchSource.localeCompare(b.dispatchSource))[0]||null;
 }
 function salesDispatchDateHtml(row){
- if(!window.rtInspectionJobsReady)return '<div class="sales-dispatch-date"><span class="sales-hint">派工日期</span><span>等待派工資料同步</span></div>';
+ if(!window.rtInspectionJobsReady||!window.salesOutsourceReady||!window.salesOtherReady)return '<div class="sales-dispatch-date"><span class="sales-hint">派工日期</span><span>等待三份派工資料同步</span></div>';
  const job=findSalesDispatch(row);
- return '<div class="sales-dispatch-date"><span class="sales-hint">派工日期</span><strong>'+esc(job?.missingDate?'缺填寫日期，待確認':job?.ambiguous?'同電話多位客戶，待確認':job?job.date:'尚無符合的派工')+'</strong>'+(job&&!job.ambiguous&&!job.missingDate?'<span class="sales-hint">'+esc([job.engineer,job.customerCode].filter(Boolean).join(' · '))+'</span>':'')+'</div>';
+ return '<div class="sales-dispatch-date"><span class="sales-hint">派工日期（報修日後）</span><strong>'+esc(job?.missingDate?'缺報修日期，待確認':job?.missingCode?'請填寫客編':job?job.date:'尚無符合的派工')+'</strong>'+(job&&!job.missingCode&&!job.missingDate?'<span class="sales-hint">'+esc([job.dispatchSource,job.vendor||job.engineer].filter(Boolean).join(' · '))+'</span>':'')+'</div>';
 }
 let dispatchRefreshQueued=false,dispatchRefreshPending=false;
 function refreshDispatchDates(){
@@ -14150,7 +14143,7 @@ async function importExcel(file){
 }
 $('salesRepairImport').onclick=()=>$('salesRepairImportFile').click();$('salesRepairImportFile').onchange=async e=>{const file=e.target.files[0];if(file)await importExcel(file);e.target.value='';};
 
-const previous=window.showPage;window.showPage=function(id){if(id==='salesRepairPage'&&!allowed())return;const result=previous.apply(this,arguments);nav.classList.toggle('active',id==='salesRepairPage');if(id==='salesRepairPage')render();return result;};
+const previous=window.showPage;window.showPage=function(id){if(id==='salesRepairPage'&&!allowed())return;const result=previous.apply(this,arguments);nav.classList.toggle('active',id==='salesRepairPage');if(id==='salesRepairPage'){startOutsourceSync();startOtherDispatchSync();render();}return result;};
 const dispatchSaveBefore=window.saveJobs;if(typeof dispatchSaveBefore==='function')window.saveJobs=function(){const result=dispatchSaveBefore.apply(this,arguments);refreshDispatchDates();return result;};
 const dispatchRemoteBefore=window.applyRemoteData;if(typeof dispatchRemoteBefore==='function')window.applyRemoteData=async function(){const result=await dispatchRemoteBefore.apply(this,arguments);refreshDispatchDates();return result;};
 $('salesRepairRows').addEventListener('focusout',()=>{if(dispatchRefreshPending)setTimeout(refreshDispatchDates,0);});
