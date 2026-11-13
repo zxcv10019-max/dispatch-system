@@ -11821,6 +11821,7 @@ async function updateRepairTicketDateInline(ticketId,key,input){
     const patch={[key]:value,status,...(key==='appointmentDate'?{appointmentDateOrigin:value?'manual':'',appointmentDispatchId:''}:{})};
     await firebaseDb.collection('repairTickets').doc(ticketId).update({...patch,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
     Object.assign(ticket,patch);
+    if(key==='appointmentDate'&&window.SalesRepair?.repairTicketDateUpdated)window.SalesRepair.repairTicketDateUpdated(ticket).catch(error=>console.error('LINE notification failed',error));
     renderRepairTicketStats();renderRepairTicketList();updateRepairTicketPendingBadge();
     showToast('✅ 日期已儲存，狀態已同步更新');
   }catch(error){input.value=previous;alert('日期儲存失敗：'+error.message);}
@@ -12608,6 +12609,7 @@ async function sync(){
     const part=pending.slice(i,i+20),refs=part.map(t=>firebaseDb.collection('repairTickets').doc(t.id)),snaps=await Promise.all(refs.map(ref=>tx.get(ref))),currentIndex=buildIndex(jobs);
     snaps.forEach((snap,k)=>{if(!snap.exists)return;const patch=patchFor(snap.data(),currentIndex);if(patch)tx.update(refs[k],{...patch,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});});
    });
+   for(const ticket of pending.slice(i,i+20)){const patch=patchFor(ticket,index);if(patch&&patch.appointmentDate!==ticket.appointmentDate){Object.assign(ticket,patch);if(window.SalesRepair?.repairTicketDateUpdated)window.SalesRepair.repairTicketDateUpdated(ticket).catch(error=>console.error('LINE notification failed',error));}}
   }
   if(!failed)lastSignature=signature;
  }catch(error){failed=true;}finally{running=false;retryAfter=failed?Date.now()+30000:0;}
@@ -14052,8 +14054,14 @@ function render(){
  $('salesRepairPager').innerHTML='<button data-page="prev" '+(!state.page?'disabled':'')+'>上一頁</button><span>'+(state.page+1)+'／'+pages+'</span><button data-page="next" '+(state.page>=pages-1?'disabled':'')+'>下一頁</button>';
 }
 async function saveField(input){const id=input.closest('[data-sales-id]')?.dataset.salesId,key=input.dataset.salesField,row=state.rows.find(r=>r.id===id);if(!row||!['dealer','salesperson','remark','status','contactDate'].includes(key))return;const value=input.value.trim(),before=input.dataset.original??String(row[key]||'');if(value===before||input.dataset.saving)return;if(!allowed()||!state.loaded){input.value=before;return;}if(key==='contactDate'&&(!validDate(value)||!input.validity.valid)){input.value=before;showToast('請輸入完整有效日期');return;}if(key==='status'&&!statuses.includes(value))return;input.dataset.saving='1';input.disabled=true;
- try{await firebaseDb.runTransaction(async tx=>{const ref=chunksColRef().doc('sales_'+id),snap=await tx.get(ref);if(!snap.exists)throw Error('這筆紀錄已不存在。');const old=snap.data().record;if(old.deleted)throw Error('這筆紀錄已刪除。');if(String(old[key]||'')!==before)throw Error('此欄位已由其他使用者修改，請重新讀取後再修改。');tx.update(ref,{['record.'+key]:value,'record.updatedAt':new Date().toISOString(),'record.updatedBy':currentUser.email||''});});showToast(value==='處理完畢'?'已移至「處理完畢」頁面':'✅ 已儲存');}
+ try{await firebaseDb.runTransaction(async tx=>{const ref=chunksColRef().doc('sales_'+id),snap=await tx.get(ref);if(!snap.exists)throw Error('這筆紀錄已不存在。');const old=snap.data().record;if(old.deleted)throw Error('這筆紀錄已刪除。');if(String(old[key]||'')!==before)throw Error('此欄位已由其他使用者修改，請重新讀取後再修改。');tx.update(ref,{['record.'+key]:value,'record.updatedAt':new Date().toISOString(),'record.updatedBy':currentUser.email||''});});row[key]=value;showToast(value==='處理完畢'?'已移至「處理完畢」頁面':'✅ 已儲存');if(key==='status'&&row.status==='已聯絡'){try{await notifyRepairContactUpdate(row);}catch(notifyError){console.error('LINE dispatch notification failed',notifyError);showToast('資料已儲存，但 LINE 通知失敗，請聯絡管理員');}}}
  catch(error){input.value=before;alert('儲存失敗：'+error.message);}finally{input.disabled=false;delete input.dataset.saving;delete input.dataset.original;if(!$('salesRepairRows').contains(document.activeElement))render();}}
+function normalizeRepairPhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('886'))digits='0'+digits.slice(3);return digits;}
+function repairPhoneInMessage(message){const match=String(message||'').match(/(?:\+?886[\s-]?)?0?9[\d\s-]{8,12}|0[2-8][\d\s-]{7,10}/);return normalizeRepairPhone(match?.[0]||'');}
+function findLinkedRepairTicket(row){const phone=normalizeRepairPhone(row.phone)||repairPhoneInMessage(row.message),name=String(row.customerName||'').trim();let matches=(repairTickets||[]).filter(ticket=>phone?normalizeRepairPhone(ticket.phone)===phone:name&&String(ticket.customerName||'').trim()===name);if(!matches.length)return null;const after=matches.filter(ticket=>!row.date||!ticket.reportDate||String(ticket.reportDate)>=String(row.date));const pool=after.length?after:matches;pool.sort((a,b)=>String(a.reportDate||'').localeCompare(String(b.reportDate||'')));return pool[0]||null;}
+async function notifyRepairContactUpdate(row,ticket=findLinkedRepairTicket(row)){const idToken=await currentUser.getIdToken();const result=await fetch('https://line-repair-sync.zxcv10019.workers.dev/dispatch-notify',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idToken},body:JSON.stringify({caseId:row.id,status:row.status,scheduledDate:ticket?.appointmentDate||'',customerName:row.customerName||'',dealer:row.dealer||''})});const body=await result.json().catch(()=>({}));if(!result.ok||!body.ok)throw new Error(body.error||'HTTP '+result.status);}
+async function repairTicketDateUpdated(ticket){const phone=normalizeRepairPhone(ticket.phone),name=String(ticket.customerName||'').trim();if(!phone&&!name)return;const matches=state.rows.filter(row=>row.status==='已聯絡'&&(phone?repairPhoneInMessage(row.message)===phone:String(row.customerName||'').trim()===name)&&(!ticket.reportDate||!row.date||String(row.date)<=String(ticket.reportDate))).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));if(matches[0])await notifyRepairContactUpdate(matches[0],ticket);}
+window.SalesRepair={filtered,validDate,sources,statuses,repairTicketDateUpdated};
 $('salesRepairRows').addEventListener('click',async e=>{const button=e.target.closest('[data-sales-delete]');if(!button||!allowed())return;const id=button.closest('[data-sales-id]')?.dataset.salesId,row=state.rows.find(r=>r.id===id);if(!row||!confirm('確定刪除這筆業務報修？\n'+row.date+' '+row.source+'\n'+String(row.message||'').slice(0,100)))return;button.disabled=true;try{await firebaseDb.runTransaction(async tx=>{const ref=chunksColRef().doc('sales_'+id),snap=await tx.get(ref);if(!snap.exists)return;const latest=snap.data().record;if(latest.deleted)return;if((latest.updatedAt||latest.createdAt)!==(row.updatedAt||row.createdAt))throw Error('這筆紀錄剛被修改，請重新確認後再刪除。');tx.update(ref,{'record.deleted':true,'record.deletedAt':new Date().toISOString(),'record.deletedBy':currentUser.email||''});});state.rows=state.rows.filter(r=>r.id!==id);render();showToast('已刪除業務報修');}catch(error){alert('刪除失敗：'+error.message);}finally{button.disabled=false;}});
 $('salesRepairRows').addEventListener('focusin',e=>{const key=e.target.dataset.salesField,id=e.target.closest('[data-sales-id]')?.dataset.salesId,row=state.rows.find(r=>r.id===id);if(row&&key)e.target.dataset.original=String(row[key]||'');});
 $('salesRepairRows').addEventListener('change',e=>{if(e.target.dataset.salesField==='status')saveField(e.target);});$('salesRepairRows').addEventListener('focusout',e=>{if(e.target.dataset.salesField&&e.target.dataset.salesField!=='status')saveField(e.target);});
@@ -14119,3 +14127,12 @@ body.ops-shell .rt-note-inline{display:flex;align-items:flex-start;gap:6px;min-w
 <style id="repair-completion-tabs">#repairManagePage #rtStatusFilter,#repairManagePage #rtStats{display:none!important}body.ops-shell #rtIncompleteTab,body.ops-shell #rtCompleteTab{background:#fff!important;color:#365d86!important;border:1px solid #d1dfec!important}body.ops-shell #rtIncompleteTab.rt-completion-active,body.ops-shell #rtCompleteTab.rt-completion-active{background:#365d86!important;color:#fff!important;border-color:#365d86!important}</style>
 
 <style id="repair-pager-style">body.ops-shell #rtListPager{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 12px;color:#5f7894;font-size:14px}body.ops-shell #rtListPager select,body.ops-shell #rtListPager button{font:inherit;padding:5px 9px;border:1px solid #d2dfed;border-radius:6px;background:#fff;color:#365d86}body.ops-shell #rtListPager :disabled{opacity:.4;cursor:default}</style>
+
+
+
+
+
+
+
+
+
