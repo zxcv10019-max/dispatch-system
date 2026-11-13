@@ -4652,6 +4652,8 @@ function buildScheduleBlockHtml(dates, today){
   html+="</tr>";
 
   times.forEach((time,idx)=>{
+    // The calendar starts at 09:30; retain an early row only when a real appointment needs it.
+    if(time<'09:30'&&!jobs.some(j=>dates.includes(j.date)&&isValidJob(j)&&(j.startTime||j.time)===time))return;
     // 午休(12:00~13:00)、晚上18:00以後：時段格子預設底色改成較淺的紫色（見對應 CSS，只當最下層的底色用）
     const isBreakOrEveningRow = (time>="12:00" && time<="13:00") || time>="18:00";
     const breakRowCls = isBreakOrEveningRow ? " break-slot" : "";
