@@ -14196,3 +14196,34 @@ body.ops-shell .rt-note-inline{display:flex;align-items:flex-start;gap:6px;min-w
 
 <style>#salesRepairPage .sales-dispatch-date{display:flex;flex-direction:column;gap:4px;margin-bottom:4px;padding:8px;background:#f0f5fb;border:1px solid #dbe5f0;border-radius:6px;font-size:13px}#salesRepairPage .sales-dispatch-date strong{color:#31577c;font-weight:600;overflow-wrap:anywhere}#salesRepairPage .sales-manual-dispatch{font-size:12px}#salesRepairPage .sales-contact-dates{margin:0}</style>
 <style id="sales-contact-date-style">#salesRepairPage .sales-contact-label{font-size:12px;color:#70859c;margin:5px 0}#salesRepairPage .sales-contact-dates{display:flex;flex-direction:column;gap:7px}#salesRepairPage .sales-contact-dates input{min-height:36px}#salesRepairPage button.sales-contact-add{padding:6px 8px;color:#315f8a;background:#f5f9fd;border-color:#d5e2ef;white-space:nowrap}#salesRepairPage .sales-contact-dates button:disabled{opacity:.6}</style>
+<style id="sales-repair-mobile-tune">
+@media(max-width:700px){
+ body.ops-shell{--ops-nav:64px!important;padding:72px 10px 24px calc(var(--ops-nav) + 10px)!important}
+ body.ops-shell.ops-nav-collapsed{--ops-nav:64px!important}
+ body.ops-shell>.tabs{width:var(--ops-nav)!important;padding:12px 7px!important}
+ body.ops-shell>.tabs .ops-brand{justify-content:center;margin:0 0 14px;min-height:42px}
+ body.ops-shell>.tabs .ops-brand-copy,body.ops-shell>.tabs .ops-nav-label,body.ops-shell>.tabs .ops-nav-group,body.ops-shell>.tabs .ops-nav-footer{display:none!important}
+ body.ops-shell>.tabs button{justify-content:center;padding:10px 7px!important;min-height:42px}
+ body.ops-shell>.header{left:var(--ops-nav)!important;height:56px;min-height:56px;padding:0 8px!important;gap:5px}
+ body.ops-shell>.header .ops-header-start{gap:5px}
+ body.ops-shell>.header .ops-menu-toggle{width:30px;height:30px}
+ body.ops-shell>.header .auth-panel{gap:4px;min-width:0}
+ body.ops-shell>.header .auth-status{max-width:95px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 5px!important;font-size:9px!important}
+ body.ops-shell>.header .auth-panel button{padding:4px 6px!important;font-size:10px!important;white-space:nowrap}
+ body.ops-shell .ops-context{display:block;margin:0 2px 14px;min-height:0}
+ body.ops-shell .ops-context h1{font-size:21px}
+ #salesRepairPage .sales-box{padding:12px;border-radius:10px}
+ #salesRepairPage .sales-create{grid-template-columns:minmax(0,1fr);gap:10px}
+ #salesRepairPage .sales-message{grid-column:auto}
+ #salesRepairPage .sales-message textarea{min-height:115px;font-size:15px}
+ #salesRepairPage .sales-primary{width:100%;min-height:42px}
+ #salesRepairPage .sales-toolbar{gap:6px}
+ #salesRepairPage .sales-toolbar button{flex:1 1 auto;padding:7px 8px;font-size:12px}
+ #salesRepairPage .sales-toolbar #salesRepairImport{flex-basis:100%}
+ #salesRepairPage .sales-toolbar input[type=search]{flex:1 1 100%;width:100%;font-size:14px}
+ #salesRepairPage .sales-content{font-size:14px;line-height:1.55;max-height:250px;overflow:auto}
+ #salesRepairPage .sales-dispatch-date{margin-bottom:6px}
+ #salesRepairPage .sales-pager{justify-content:center}
+}
+@media(max-width:390px){body.ops-shell{padding-right:7px!important;padding-left:calc(var(--ops-nav) + 7px)!important}#salesRepairPage .sales-box{padding:10px}#salesRepairPage .sales-toolbar button{font-size:11px;padding:6px}body.ops-shell>.header .auth-status{max-width:72px!important}}
+</style>
